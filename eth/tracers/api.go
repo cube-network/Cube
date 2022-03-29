@@ -79,16 +79,21 @@ type Backend interface {
 	// so this method should be called with the parent.
 	StateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, checkLive, preferDisk bool) (*state.StateDB, error)
 	StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error)
+	ChainHeaderReader() consensus.ChainHeaderReader
 }
 
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
 type API struct {
 	backend Backend
+
+	isPoSA bool
+	posa   consensus.PoSA
 }
 
 // NewAPI creates a new API definition for the tracing methods of the Ethereum service.
 func NewAPI(backend Backend) *API {
-	return &API{backend: backend}
+	posa, isPoSA := backend.Engine().(consensus.PoSA)
+	return &API{backend: backend, isPoSA: isPoSA, posa: posa}
 }
 
 type chainContext struct {
@@ -214,8 +219,9 @@ type blockTraceResult struct {
 // txTraceTask represents a single transaction trace task when an entire block
 // is being traced.
 type txTraceTask struct {
-	statedb *state.StateDB // Intermediate state prepped for tracing
-	index   int            // Transaction offset in the block
+	statedb              *state.StateDB // Intermediate state prepped for tracing
+	index                int            // Transaction offset in the block
+	isDoubleSignPunishTx bool           // Is posa punish double sign transaction
 }
 
 // TraceChain returns the structured logs created during the execution of EVM
@@ -271,7 +277,11 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 			// Fetch and execute the next block trace tasks
 			for task := range tasks {
 				signer := types.MakeSigner(api.backend.ChainConfig(), task.block.Number())
-				blockCtx := core.NewEVMBlockContext(task.block.Header(), api.chainContext(localctx), nil)
+				header := task.block.Header()
+				blockCtx := core.NewEVMBlockContext(header, api.chainContext(localctx), nil)
+				if api.isPoSA {
+					_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
+				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
 					msg, _ := tx.AsMessage(signer, task.block.BaseFee())
@@ -280,7 +290,19 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 						TxIndex:   i,
 						TxHash:    tx.Hash(),
 					}
-					res, err := api.traceTx(localctx, msg, txctx, blockCtx, task.statedb, config)
+					var (
+						res                  interface{}
+						err                  error
+						isDoubleSignPunishTx bool
+					)
+					if api.isPoSA {
+						isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+					}
+					if isDoubleSignPunishTx {
+						res, err = api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					} else {
+						res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+					}
 					if err != nil {
 						task.results[i] = &txTraceResult{Error: err.Error()}
 						log.Warn("Tracing failed", "hash", tx.Hash(), "block", task.block.NumberU64(), "err", err)
@@ -586,12 +608,17 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 
 		pend = new(sync.WaitGroup)
 		jobs = make(chan *txTraceTask, len(txs))
+
+		header = block.Header()
 	)
 	threads := runtime.NumCPU()
 	if threads > len(txs) {
 		threads = len(txs)
 	}
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
+	if api.isPoSA {
+		_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+	}
 	blockHash := block.Hash()
 	for th := 0; th < threads; th++ {
 		pend.Add(1)
@@ -605,7 +632,14 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					TxIndex:   task.index,
 					TxHash:    txs[task.index].Hash(),
 				}
-				res, err := api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+				var res interface{}
+				var err error
+				if task.isDoubleSignPunishTx {
+					tx := txs[task.index]
+					res, err = api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+				} else {
+					res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
+				}
 				if err != nil {
 					results[task.index] = &txTraceResult{Error: err.Error()}
 					continue
@@ -617,13 +651,25 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	// Feed the transactions into the tracers and return
 	var failed error
 	for i, tx := range txs {
+		var isDoubleSignPunishTx bool
+		if api.isPoSA {
+			sender, _ := types.Sender(signer, tx)
+			isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(sender, tx, header)
+		}
 		// Send the trace task over for execution
-		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i}
+		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i, isDoubleSignPunishTx: isDoubleSignPunishTx}
 
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
-		statedb.Prepare(tx.Hash(), i)
 		vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, api.backend.ChainConfig(), vm.Config{})
+		if isDoubleSignPunishTx {
+			if _, _, err := api.posa.ApplyDoubleSignPunishTx(vmenv, statedb, i, msg.From(), tx); err != nil {
+				failed = err
+				break
+			}
+			continue
+		}
+		statedb.Prepare(tx.Hash(), i)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
 			failed = err
 			break
@@ -685,7 +731,12 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		chainConfig = api.backend.ChainConfig()
 		vmctx       = core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 		canon       = true
+		header      = block.Header()
 	)
+	if api.isPoSA {
+		_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+	}
+
 	// Check if there are any overrides: the caller may wish to enable a future
 	// fork when executing this block. Note, such overrides are only applicable to the
 	// actual specified block, not any preceding blocks that we have to go through
@@ -736,8 +787,16 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		}
 		// Execute the transaction and flush any traces to disk
 		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf)
-		statedb.Prepare(tx.Hash(), i)
-		_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+		var isDoubleSignPunishTx bool
+		if api.isPoSA {
+			isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+		}
+		if isDoubleSignPunishTx {
+			_, _, err = api.posa.ApplyDoubleSignPunishTx(vmenv, statedb, i, msg.From(), tx)
+		} else {
+			statedb.Prepare(tx.Hash(), i)
+			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+		}
 		if writer != nil {
 			writer.Flush()
 		}
@@ -799,6 +858,12 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		TxIndex:   int(index),
 		TxHash:    hash,
 	}
+	if api.isPoSA {
+		tx := block.Transactions()[int(index)]
+		if ok, _ := api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, block.Header()); ok {
+			return api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, vmctx, statedb, config)
+		}
+	}
 	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
 }
 
@@ -843,7 +908,6 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		return nil, err
 	}
 	vmctx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
-
 	var traceConfig *TraceConfig
 	if config != nil {
 		traceConfig = &TraceConfig{
@@ -904,6 +968,59 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		return nil, fmt.Errorf("tracing failed: %w", err)
 	}
 
+	return api.traceResult(tracer, result)
+}
+
+// TODO Reuse code
+func (api *API) tracePoSAApplyDoubleSignPunishTx(ctx context.Context, sender common.Address, tx *types.Transaction, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
+	// Assemble the structured logger or the JavaScript tracer
+	var (
+		tracer vm.EVMLogger
+		err    error
+	)
+	switch {
+	case config != nil && config.Tracer != nil:
+		// Define a meaningful timeout of a single transaction trace
+		timeout := defaultTraceTimeout
+		if config.Timeout != nil {
+			if timeout, err = time.ParseDuration(*config.Timeout); err != nil {
+				return nil, err
+			}
+		}
+		// Constuct the JavaScript tracer to execute with
+		if tracer, err = New(*config.Tracer, txctx); err != nil {
+			return nil, err
+		}
+		// Handle timeouts and RPC cancellations
+		deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
+		go func() {
+			<-deadlineCtx.Done()
+			if deadlineCtx.Err() == context.DeadlineExceeded {
+				tracer.(Tracer).Stop(errors.New("execution timeout"))
+			}
+		}()
+		defer cancel()
+
+	case config == nil:
+		tracer = vm.NewStructLogger(nil)
+
+	default:
+		tracer = vm.NewStructLogger(config.LogConfig)
+	}
+	// Run the transaction with tracing enabled.
+	vmenvWithoutTxCtx := vm.NewEVM(vmctx, vm.TxContext{}, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
+
+	ret, vmerr, err := api.posa.ApplyDoubleSignPunishTx(vmenvWithoutTxCtx, statedb, txctx.TxIndex, sender, tx)
+	if err != nil {
+		return nil, fmt.Errorf("tracing failed: %w", err)
+	}
+	return api.traceResult(tracer, &core.ExecutionResult{
+		Err:        vmerr,
+		ReturnData: ret,
+	})
+}
+
+func (api *API) traceResult(tracer vm.EVMLogger, result *core.ExecutionResult) (interface{}, error) {
 	// Depending on the tracer type, format and return the output.
 	switch tracer := tracer.(type) {
 	case *vm.StructLogger:

@@ -20,11 +20,18 @@ package consensus
 import (
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/ethdb"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+)
+
+var (
+	FeeRecoder = common.HexToAddress("0xffffffffffffffffffffffffffffffffffffffff")
 )
 
 // ChainHeaderReader defines a small collection of methods needed to access the local
@@ -86,8 +93,8 @@ type Engine interface {
 	//
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
-	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header)
+	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction,
+		uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error
 
 	// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
 	// rewards) and assembles the final block.
@@ -95,7 +102,7 @@ type Engine interface {
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
 	FinalizeAndAssemble(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction,
-		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error)
+		uncles []*types.Header, receipts []*types.Receipt) (*types.Block, []*types.Receipt, error)
 
 	// Seal generates a new sealing request for the given input block and pushes
 	// the result into the given channel.
@@ -109,6 +116,8 @@ type Engine interface {
 
 	// CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 	// that a new block should have.
+	// Notice: this is currently only used and should be only used for test-case,
+	// and it's mainly for the ethash engine.
 	CalcDifficulty(chain ChainHeaderReader, time uint64, parent *types.Header) *big.Int
 
 	// APIs returns the RPC APIs this consensus engine provides.
@@ -124,4 +133,50 @@ type PoW interface {
 
 	// Hashrate returns the current mining hashrate of a PoW consensus engine.
 	Hashrate() float64
+}
+
+// PoSA is a consensus engine based on proof-of-stake-authority.
+type PoSA interface {
+	Engine
+
+	// PreHandle runs any pre-transaction state modifications (e.g. apply hard fork rules).
+	//
+	// Note: The block header and state database might be updated to reflect any
+	// consensus rules that happen at pre-handling.
+	PreHandle(chain ChainHeaderReader, header *types.Header, state *state.StateDB) error
+
+	// VerifyAttestation checks whether an attestation is valid,
+	// and if it's valid, return the signer,
+	// and a threshold that indicates how many attestations can finalize a block.
+	VerifyAttestation(chain ChainHeaderReader, a *types.Attestation) (common.Address, int, error)
+
+	// CurrentValidator Get the verifier address in the current consensus
+	CurrentValidator() common.Address
+
+	// Attest trys to give an attestation on current chain when a ChainHeadEvent is fired.
+	Attest(chain ChainHeaderReader, headerNum *big.Int, source, target *types.RangeEdge) (*types.Attestation, error)
+	CurrentNeedHandleHeight(headerNum uint64) (uint64, error)
+
+	// IsReadyAttest Whether it meets the conditions for executing interest
+	IsReadyAttest(num *big.Int) bool
+
+	// AttestationThreshold Get the attestation threshold at the specified height
+	AttestationThreshold(chain ChainHeaderReader, hash common.Hash, number uint64) (int, error)
+
+	Validators(chain ChainHeaderReader, hash common.Hash, number uint64) ([]common.Address, error)
+
+	// CalculateGasPool calculate the expected max gas used for a block
+	CalculateGasPool(header *types.Header) uint64
+
+	GetDb() ethdb.Database
+
+	VerifyCasperFFGRule(beforeSourceNum uint64, beforeTargetNum uint64, afterSourceNum uint64, afterTargetNum uint64) int
+	// IsDoubleSignPunishTransaction checks whether a specific transaction is a system transaction.
+	IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error)
+	IsDoubleSignPunished(chain ChainHeaderReader, header *types.Header, state *state.StateDB, punishHash common.Hash) (bool, error)
+	ApplyDoubleSignPunishTx(evm *vm.EVM, state *state.StateDB, txIndex int, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
+}
+
+type StateReader interface {
+	GetState(addr common.Address, hash common.Hash) common.Hash
 }

@@ -112,6 +112,14 @@ func (api *PrivateMinerAPI) Stop() {
 	api.e.StopMining()
 }
 
+func (api *PrivateMinerAPI) StartAttestation() {
+	api.e.StartAttestation()
+}
+
+func (api *PrivateMinerAPI) StopAttestation() {
+	api.e.StopAttestation()
+}
+
 // SetExtra sets the extra data string that is included when this miner mines a block.
 func (api *PrivateMinerAPI) SetExtra(extra string) (bool, error) {
 	if err := api.e.Miner().SetExtra([]byte(extra)); err != nil {

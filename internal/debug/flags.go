@@ -34,6 +34,7 @@ import (
 )
 
 var Memsize memsizeui.Handler
+var ID string
 
 var (
 	verbosityFlag = cli.IntFlag{
@@ -41,6 +42,17 @@ var (
 		Usage: "Logging verbosity: 0=silent, 1=error, 2=warn, 3=info, 4=debug, 5=detail",
 		Value: 3,
 	}
+	logPathFlag = cli.StringFlag{
+		Name:  "logpath",
+		Usage: "File path for log files",
+		Value: "",
+	}
+
+	metricLogFlag = cli.BoolFlag{
+		Name:  "metriclog",
+		Usage: "Write metric info to log files",
+	}
+
 	vmoduleFlag = cli.StringFlag{
 		Name:  "vmodule",
 		Usage: "Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)",
@@ -95,8 +107,10 @@ var (
 // Flags holds all command-line flags required for debugging.
 var Flags = []cli.Flag{
 	verbosityFlag,
+	logPathFlag,
 	vmoduleFlag,
 	logjsonFlag,
+	metricLogFlag,
 	backtraceAtFlag,
 	debugFlag,
 	pprofFlag,
@@ -110,27 +124,78 @@ var Flags = []cli.Flag{
 
 var glogger *log.GlogHandler
 
+const (
+	metricLogFile = "metric.log"
+	metricKey     = "metric"
+)
+
 func init() {
 	glogger = log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 	glogger.Verbosity(log.LvlInfo)
 	log.Root().SetHandler(glogger)
 }
 
-// Setup initializes profiling and logging based on the CLI flags.
-// It should be called as early as possible in the program.
-func Setup(ctx *cli.Context) error {
-	var ostream log.Handler
+func setupLogHandler(ctx *cli.Context) (handler log.Handler) {
+	defer func() {
+		if !ctx.GlobalBool(metricLogFlag.Name) {
+			inner := handler
+			handler = log.FuncHandler(func(r *log.Record) error {
+				if r.Msg == metricKey {
+					return nil
+				}
+
+				return inner.Log(r)
+			})
+		}
+	}()
+
+	var format log.Format
 	output := io.Writer(os.Stderr)
 	if ctx.GlobalBool(logjsonFlag.Name) {
-		ostream = log.StreamHandler(output, log.JSONFormat())
+		format = log.JSONFormat()
 	} else {
 		usecolor := (isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb"
 		if usecolor {
 			output = colorable.NewColorableStderr()
 		}
-		ostream = log.StreamHandler(output, log.TerminalFormat(usecolor))
+		format = log.TerminalFormat(usecolor)
 	}
-	glogger.SetHandler(ostream)
+
+	if ctx.GlobalString(logPathFlag.Name) == "" {
+		handler = log.StreamHandler(output, format)
+		return
+	}
+
+	rConfig := log.NewRotateConfig()
+	rConfig.LogDir = ctx.GlobalString(logPathFlag.Name)
+	handler1 := log.NewFileRotateHandler(rConfig, format)
+	if !ctx.GlobalBool(metricLogFlag.Name) {
+		handler = handler1
+		return
+	}
+
+	mConfig := log.NewRotateConfig()
+	mConfig.LogDir = ctx.GlobalString(logPathFlag.Name)
+	mConfig.Filename = metricLogFile
+	handler2 := log.NewFileRotateHandler(mConfig, log.JSONFormat())
+
+	handler = log.FuncHandler(func(r *log.Record) error {
+		if r.Msg == metricKey {
+			r.Ctx = append(r.Ctx, "id", ID)
+			return handler2.Log(r)
+		} else {
+			return handler1.Log(r)
+		}
+	})
+
+	return
+}
+
+// Setup initializes profiling and logging based on the CLI flags.
+// It should be called as early as possible in the program.
+func Setup(ctx *cli.Context) error {
+	handler := setupLogHandler(ctx)
+	glogger.SetHandler(handler)
 
 	// logging
 	verbosity := ctx.GlobalInt(verbosityFlag.Name)

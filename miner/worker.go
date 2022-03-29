@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"errors"
 	"math/big"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -91,6 +92,8 @@ type environment struct {
 	header   *types.Header
 	txs      []*types.Transaction
 	receipts []*types.Receipt
+
+	extraValidator types.EvmExtraValidator
 }
 
 // task contains all information for consensus engine sealing and result submitting.
@@ -128,6 +131,10 @@ type worker struct {
 	engine      consensus.Engine
 	eth         Backend
 	chain       *core.BlockChain
+
+	// Is the engine a PoSA engine?
+	posa   consensus.PoSA
+	isPoSA bool
 
 	// Feeds
 	pendingLogsFeed event.Feed
@@ -191,10 +198,13 @@ type worker struct {
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
+	posa, isPoSA := engine.(consensus.PoSA)
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
 		engine:             engine,
+		isPoSA:             isPoSA,
+		posa:               posa,
 		eth:                eth,
 		mux:                mux,
 		chain:              eth.BlockChain(),
@@ -771,7 +781,7 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig())
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.extraValidator)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -790,7 +800,11 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	gasLimit := w.current.header.GasLimit
 	if w.current.gasPool == nil {
-		w.current.gasPool = new(core.GasPool).AddGas(gasLimit)
+		if w.isPoSA {
+			w.current.gasPool = new(core.GasPool).AddGas(w.posa.CalculateGasPool(w.current.header))
+		} else {
+			w.current.gasPool = new(core.GasPool).AddGas(gasLimit)
+		}
 	}
 
 	var coalescedLogs []*types.Log
@@ -839,6 +853,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 			txs.Pop()
 			continue
 		}
+
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), w.current.tcount)
 
@@ -923,10 +938,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
-		if !w.chainConfig.IsLondon(parent.Number()) {
-			parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
-			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
-		}
+		parentGasLimit := parent.GasLimit()
+		header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
 	}
 	// Only set the coinbase if our consensus engine is running (avoid spurious block rewards)
 	if w.isRunning() {
@@ -961,8 +974,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	// Create the current work task and check any fork transitions needed
 	env := w.current
-	if w.chainConfig.DAOForkSupport && w.chainConfig.DAOForkBlock != nil && w.chainConfig.DAOForkBlock.Cmp(header.Number) == 0 {
-		misc.ApplyDAOHardFork(env.state)
+	if w.isPoSA {
+		if err := w.posa.PreHandle(w.chain, header, env.state); err != nil {
+			log.Error("Failed to apply system contract upgrade", "err", err)
+			return
+		}
 	}
 	// Accumulate the uncles for the current block
 	uncles := make([]*types.Header, 0, 2)
@@ -1031,9 +1047,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	// Deep copy receipts here to avoid interaction between different tasks.
-	receipts := copyReceipts(w.current.receipts)
+	cpyReceipts := copyReceipts(w.current.receipts)
+	// copy transactions to a new slice to avoid interaction between different tasks.
+	txs := make([]*types.Transaction, len(w.current.txs))
+	copy(txs, w.current.txs)
 	s := w.current.state.Copy()
-	block, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, w.current.txs, uncles, receipts)
+	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, txs, uncles, cpyReceipts)
 	if err != nil {
 		return err
 	}
@@ -1079,6 +1098,18 @@ func (w *worker) postSideBlock(event core.ChainSideEvent) {
 
 // totalFees computes total consumed miner fees in ETH. Block transactions and receipts have to have the same order.
 func totalFees(block *types.Block, receipts []*types.Receipt) *big.Float {
+	if len(block.Transactions()) != len(receipts) {
+		// for debug
+		log.Error("transactions len != receipts len", "blockHash", block.Hash().String(), "number", block.Number())
+		for i, tx := range block.Transactions() {
+			js, _ := tx.MarshalJSON()
+			log.Error("tx", strconv.Itoa(i), string(js))
+		}
+		for i, receipt := range receipts {
+			js, _ := receipt.MarshalJSON()
+			log.Error("receipt", strconv.Itoa(i), string(js))
+		}
+	}
 	feesWei := new(big.Int)
 	for i, tx := range block.Transactions() {
 		minerFee, _ := tx.EffectiveGasTip(block.BaseFee())

@@ -389,13 +389,22 @@ func (s EIP155Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big
 // Hash returns the hash to be signed by the sender.
 // It does not uniquely identify the transaction.
 func (s EIP155Signer) Hash(tx *Transaction) common.Hash {
+
+	var data = tx.Data()
+	if IsMetaTransaction(data) {
+		metaData, err := DecodeMetaData(data, big.NewInt(0))
+		if err == nil {
+			data = metaData.Payload
+		}
+	}
+
 	return rlpHash([]interface{}{
 		tx.Nonce(),
 		tx.GasPrice(),
 		tx.Gas(),
 		tx.To(),
 		tx.Value(),
-		tx.Data(),
+		data,
 		s.chainId, uint(0), uint(0),
 	})
 }
@@ -477,6 +486,10 @@ func decodeSignature(sig []byte) (r, s, v *big.Int) {
 	s = new(big.Int).SetBytes(sig[32:64])
 	v = new(big.Int).SetBytes([]byte{sig[64] + 27})
 	return r, s, v
+}
+
+func RecoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {
+	return recoverPlain(sighash, R, S, Vb, homestead)
 }
 
 func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (common.Address, error) {

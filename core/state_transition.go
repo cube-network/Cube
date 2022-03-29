@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -49,17 +50,21 @@ The state transitioning model does all the necessary work to work out a valid ne
 6) Derive new state root
 */
 type StateTransition struct {
-	gp         *GasPool
-	msg        Message
-	gas        uint64
-	gasPrice   *big.Int
-	gasFeeCap  *big.Int
-	gasTipCap  *big.Int
-	initialGas uint64
-	value      *big.Int
-	data       []byte
-	state      vm.StateDB
-	evm        *vm.EVM
+	gp          *GasPool
+	msg         Message
+	gas         uint64
+	gasPrice    *big.Int
+	gasFeeCap   *big.Int
+	gasTipCap   *big.Int
+	initialGas  uint64
+	value       *big.Int
+	data        []byte
+	state       vm.StateDB
+	evm         *vm.EVM
+	isMeta      bool
+	feeAddress  common.Address
+	feePercent  uint64 //meta transaction fee percent
+	realPayload []byte //the real transaction fee percent
 }
 
 // Message represents a message sent to a contract.
@@ -211,6 +216,29 @@ func (st *StateTransition) buyGas() error {
 	return nil
 }
 
+func (st *StateTransition) buyGasMeta() error {
+
+	mgval := new(big.Int).Mul(new(big.Int).SetUint64(st.msg.Gas()), st.gasPrice)
+	mgFeeAddrVal := new(big.Int).Div(new(big.Int).Mul(mgval, new(big.Int).SetUint64(st.feePercent)), types.BIG10000)                      //value deduct from fee address
+	mgSelfVal := new(big.Int).Div(new(big.Int).Mul(mgval, new(big.Int).SetUint64(types.BIG10000.Uint64()-st.feePercent)), types.BIG10000) //value deduct from sender address
+
+	if st.state.GetBalance(st.feeAddress).Cmp(mgFeeAddrVal) < 0 || st.state.GetBalance(st.msg.From()).Cmp(mgSelfVal) < 0 {
+		return ErrInsufficientFunds
+	}
+	if err := st.gp.SubGas(st.msg.Gas()); err != nil {
+		return err
+	}
+	st.gas += st.msg.Gas()
+
+	st.initialGas = st.msg.Gas()
+	st.state.SubBalance(st.feeAddress, mgFeeAddrVal)
+	st.state.SubBalance(st.msg.From(), mgSelfVal)
+	return nil
+}
+
+/**
+检查是普通交易还是元交易类型, 元交易和普通交易的区别在于extraData开头的标识位
+*/
 func (st *StateTransition) preCheck() error {
 	// Only check transactions that are not fake
 	if !st.msg.IsFake() {
@@ -256,7 +284,36 @@ func (st *StateTransition) preCheck() error {
 			}
 		}
 	}
+
+	if err := st.metaTransactionCheck(); err != nil {
+		return err
+	}
+	if st.isMeta {
+		return st.buyGasMeta()
+	}
 	return st.buyGas()
+}
+
+//check if tx is meta tx
+func (st *StateTransition) metaTransactionCheck() error {
+	if types.IsMetaTransaction(st.data) {
+		metaData, err := types.DecodeMetaData(st.data, st.evm.Context.BlockNumber)
+		if err != nil {
+			return err
+		}
+		chainID := st.evm.ChainConfig().ChainID
+		addr, err := metaData.ParseMetaData(st.msg.Nonce(), st.msg.GasPrice(), st.msg.Gas(), st.msg.To(), st.msg.Value(), metaData.Payload, st.msg.From(), chainID)
+		if err != nil {
+			return err
+		}
+		st.isMeta = true
+		st.feeAddress = addr
+		st.realPayload = st.data
+		st.data = metaData.Payload
+		st.feePercent = metaData.FeePercent
+		return nil
+	}
+	return nil
 }
 
 // TransitionDb will transition the state by applying the current message and
@@ -336,7 +393,12 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if london {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
 	}
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
+	tip := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
+	if st.evm.ChainConfig().Chaos != nil {
+		st.state.AddBalance(consensus.FeeRecoder, tip)
+	} else {
+		st.state.AddBalance(st.evm.Context.Coinbase, tip)
+	}
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),
@@ -355,7 +417,16 @@ func (st *StateTransition) refundGas(refundQuotient uint64) {
 
 	// Return ETH for remaining gas, exchanged at the original rate.
 	remaining := new(big.Int).Mul(new(big.Int).SetUint64(st.gas), st.gasPrice)
-	st.state.AddBalance(st.msg.From(), remaining)
+
+	if st.isMeta {
+		mgFeeAddrVal := new(big.Int).Div(new(big.Int).Mul(remaining, new(big.Int).SetUint64(st.feePercent)), types.BIG10000)
+		mgSelfVal := new(big.Int).Div(new(big.Int).Mul(remaining, new(big.Int).SetUint64(types.BIG10000.Uint64()-st.feePercent)), types.BIG10000)
+		st.state.AddBalance(st.feeAddress, mgFeeAddrVal)
+		st.state.AddBalance(st.msg.From(), mgSelfVal)
+		st.data = st.realPayload
+	} else {
+		st.state.AddBalance(st.msg.From(), remaining)
+	}
 
 	// Also return remaining gas to the block gas counter so it is
 	// available for the next transaction.

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -882,4 +883,77 @@ func BenchmarkDecodeRLPLogs(b *testing.B) {
 			}
 		}
 	})
+}
+func TestWriteAndReadLastAttestNumber(t *testing.T) {
+	db := NewMemoryDatabase()
+	addr := common.BytesToAddress([]byte{0x11})
+	num := new(big.Int).SetInt64(1)
+	WriteLastAttestNumber(db, addr, num)
+	result := ReadLastAttestNumber(db, addr)
+	require.True(t, result.Uint64() == num.Uint64())
+}
+
+func TestWriteAndReadBlockBasJustified1(t *testing.T) {
+	db := NewMemoryDatabase()
+	blockNumber1 := new(big.Int).SetUint64(1)
+	blockHash := common.BytesToHash([]byte{0xaa, 0xbb, 0xcc, 0x12, 0x34})
+	err := WriteBlockStatus(db, blockNumber1, blockHash, new(big.Int).SetUint64(types.BasJustified))
+	require.True(t, err == nil)
+
+	statusList := ReadAllBlockStatus(db)
+	require.True(t, statusList[0].Status.Uint64() == types.BasJustified)
+	require.True(t, statusList[0].BlockNumber.Uint64() == blockNumber1.Uint64())
+	require.True(t, statusList[0].Hash == blockHash)
+}
+
+func TestWriteAndReadAndDeleteAndClearViolateCasperFFGPunish(t *testing.T) {
+	db := NewMemoryDatabase()
+	priv, err := crypto.GenerateKey()
+	require.NoError(t, err)
+	//signer := crypto.PubkeyToAddress(priv.PublicKey)
+	blockHash := common.BytesToHash([]byte{0xaa, 0xbb, 0xcc, 0x12, 0x34})
+	sig, err := crypto.Sign(crypto.Keccak256(types.AttestationData(&types.RangeEdge{
+		Hash:   blockHash,
+		Number: new(big.Int).SetUint64(1),
+	}, &types.RangeEdge{
+		Hash:   blockHash,
+		Number: new(big.Int).SetUint64(2),
+	})), priv)
+	require.NoError(t, err)
+
+	i := 1
+	for ; i <= 5000; i++ {
+		before := types.NewAttestation(&types.RangeEdge{
+			Hash:   blockHash,
+			Number: new(big.Int).SetUint64(uint64(i)),
+		}, &types.RangeEdge{
+			Hash:   blockHash,
+			Number: new(big.Int).SetUint64(uint64(i + 1)),
+		}, sig)
+
+		after := types.NewAttestation(&types.RangeEdge{
+			Hash:   blockHash,
+			Number: new(big.Int).SetUint64(uint64(i + 1)),
+		}, &types.RangeEdge{
+			Hash:   blockHash,
+			Number: new(big.Int).SetUint64(uint64(i + 2)),
+		}, sig)
+		err = WriteViolateCasperFFGPunish(db, before, after, types.PunishMultiSig, new(big.Int).SetUint64(uint64(i)))
+		require.NoError(t, err)
+	}
+	pushList := ReadAllViolateCasperFFGPunish(db)
+	require.True(t, len(pushList) == casperFFGPunishToKeep)
+
+	var deleteList []*types.ViolateCasperFFGPunish
+	for j := 0; j < 10; j++ {
+		deleteList = append(deleteList, pushList[j])
+	}
+	DeleteViolateCasperFFGPunishList(db, &deleteList)
+
+	pushList = ReadAllViolateCasperFFGPunish(db)
+	require.True(t, len(pushList) == casperFFGPunishToKeep-10)
+
+	ClearAllViolateCasperFFGPunish(db)
+	pushList = ReadAllViolateCasperFFGPunish(db)
+	require.True(t, len(pushList) == 0)
 }

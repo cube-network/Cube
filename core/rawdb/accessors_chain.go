@@ -804,6 +804,10 @@ func DeleteBlockWithoutNumber(db ethdb.KeyValueWriter, hash common.Hash, number 
 }
 
 const badBlockToKeep = 10
+const blockStatusToKeep = 100
+const attestationToKeep = 50
+const casperFFGToKeep = 50
+const casperFFGPunishToKeep = 2 * 200 / 2 * 20
 
 type badBlock struct {
 	Header *types.Header
@@ -950,4 +954,205 @@ func ReadHeadBlock(db ethdb.Reader) *types.Block {
 		return nil
 	}
 	return ReadBlock(db, headBlockHash, *headBlockNumber)
+}
+
+func ReadLastAttestNumber(db ethdb.Reader, val common.Address) *big.Int {
+	key := append(lastAttestPrefix, val.Bytes()...)
+	data, _ := db.Get(key)
+	return new(big.Int).SetBytes(data)
+}
+
+func WriteLastAttestNumber(db ethdb.KeyValueWriter, val common.Address, num *big.Int) {
+	key := append(lastAttestPrefix, val.Bytes()...)
+	err := db.Put(key, num.Bytes())
+	if err != nil {
+		log.Crit("Failed to store last attest number", "err", err)
+	}
+}
+
+func ReadAllBlockStatus(db ethdb.Reader) []*types.BlockStatus {
+	blob, err := db.Get(blockStatusKey)
+	if err != nil {
+		log.Warn("Failed to load block status", "error", err)
+	}
+	var bsList types.BlockStatusList
+	if len(blob) > 0 {
+		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
+			log.Crit("failed to decode all block status")
+		}
+	}
+	var ss []*types.BlockStatus
+	for _, s := range bsList {
+		ss = append(ss, &types.BlockStatus{BlockNumber: s.BlockNumber, Hash: s.Hash, Status: s.Status})
+	}
+	return ss
+}
+
+func ReadBlockStatusByNumAndHash(db ethdb.Reader, num *big.Int, hash common.Hash) *big.Int {
+	status, oldHash := ReadBlockStatusByNum(db, num.Uint64())
+	if oldHash == hash {
+		return status
+	}
+	return new(big.Int).SetUint64(types.BasUnknown)
+}
+
+func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
+	return db.Has(blockStatusKey)
+}
+
+func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash) {
+	blob, err := db.Get(blockStatusKey)
+	if err != nil {
+		log.Warn("Failed to Read block status", "error", err)
+	}
+	var bsList types.BlockStatusList
+	if len(blob) > 0 {
+		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
+			log.Crit("failed to decode old bad blocks")
+		}
+	}
+	for _, s := range bsList {
+		if s.BlockNumber.Uint64() == number {
+			return s.Status, s.Hash
+		}
+		if s.BlockNumber.Uint64() < number {
+			break
+		}
+	}
+	return new(big.Int).SetUint64(types.BasUnknown), common.Hash{}
+}
+
+func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status *big.Int) error {
+	blob, err := db.Get(blockStatusKey)
+	if err != nil {
+		log.Warn("Failed to Write block status", "error", err)
+	}
+	var bsList types.BlockStatusList
+	if len(blob) > 0 {
+		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
+			log.Crit("failed to decode old bad blocks")
+		}
+	}
+
+	found := false
+	for _, b := range bsList {
+		if b.BlockNumber.Uint64() == num.Uint64() && b.Hash == hash {
+			if b.Status.Uint64() == status.Uint64() {
+				return nil
+			}
+			b.Status = status
+			found = true
+			break
+		}
+		if b.BlockNumber.Uint64() == num.Uint64() {
+			return fmt.Errorf("only one hash can be marked at the same height %d %v", num.Uint64(), hash.String())
+		}
+		if b.BlockNumber.Uint64() < num.Uint64() {
+			break
+		}
+	}
+	if !found {
+		bsList = append(bsList, &types.BlockStatus{
+			BlockNumber: num,
+			Hash:        hash,
+			Status:      status,
+		})
+		sort.Sort(sort.Reverse(bsList))
+		if len(bsList) > blockStatusToKeep {
+			bsList = bsList[:blockStatusToKeep]
+		}
+	}
+	data, err := rlp.EncodeToBytes(bsList)
+	if err != nil {
+		log.Crit("failed to encode block status %v", err.Error())
+	}
+	if err := db.Put(blockStatusKey, data); err != nil {
+		log.Crit("failed to write block status %v", err.Error())
+	}
+	return nil
+}
+
+func ReadAllViolateCasperFFGPunish(db ethdb.Reader) []*types.ViolateCasperFFGPunish {
+	blob, err := db.Get(violateCasperFFGPunishKey)
+	if err != nil {
+		return nil
+	}
+	var vcfList types.ViolateCasperFFGPunishList
+	if err := rlp.DecodeBytes(blob, &vcfList); err != nil {
+		return nil
+	}
+	return vcfList
+}
+
+func DeleteViolateCasperFFGPunishList(db ethdb.KeyValueStore, punishList *[]*types.ViolateCasperFFGPunish) {
+	blob, err := db.Get(violateCasperFFGPunishKey)
+	if err != nil {
+		log.Warn("Failed to load violate casperFFG punish", "error", err)
+	}
+	var vcfList types.ViolateCasperFFGPunishList
+	if len(blob) > 0 {
+		if err := rlp.DecodeBytes(blob, &vcfList); err != nil {
+			log.Crit("Failed to decode old bad blocks", "error", err)
+		}
+	}
+
+	for _, p := range *punishList {
+		for i, v := range vcfList {
+			if p.Hash() == v.Hash() {
+				vcfList = append(vcfList[:i], vcfList[i+1:]...)
+				break
+			}
+		}
+	}
+
+	data, err := rlp.EncodeToBytes(vcfList)
+	if err != nil {
+		log.Crit("Failed to encode violate casperFFG punish", "err", err)
+	}
+	if err := db.Put(violateCasperFFGPunishKey, data); err != nil {
+		log.Crit("Failed to write violate casperFFG punish", "err", err)
+	}
+}
+
+func ClearAllViolateCasperFFGPunish(db ethdb.KeyValueStore) {
+	if err := db.Delete(violateCasperFFGPunishKey); err != nil {
+		log.Crit("Failed to delete violate casperFFG punish", "err", err)
+	}
+}
+
+func WriteViolateCasperFFGPunish(db ethdb.KeyValueStore, before *types.Attestation, after *types.Attestation, pType int, blockNum *big.Int) error {
+	blob, err := db.Get(violateCasperFFGPunishKey)
+	if err != nil {
+		log.Warn("Failed to load violate casperFFG punish", "error", err)
+	}
+	var vcfList types.ViolateCasperFFGPunishList
+	if len(blob) > 0 {
+		if err := rlp.DecodeBytes(blob, &vcfList); err != nil {
+			log.Crit("Failed to decode old bad blocks", "error", err)
+		}
+	}
+
+	for _, v := range vcfList {
+		if v.Before.Hash() == before.Hash() && v.After.Hash() == after.Hash() {
+			return fmt.Errorf("skip duplicated punish %v %v", before.Hash().String(), after.Hash().String())
+		}
+	}
+	vcfList = append(vcfList, &types.ViolateCasperFFGPunish{
+		PunishType: new(big.Int).SetUint64(uint64(pType)),
+		Before:     before,
+		After:      after,
+		BlockNum:   blockNum,
+	})
+	sort.Sort(sort.Reverse(vcfList))
+	if len(vcfList) > casperFFGPunishToKeep {
+		vcfList = vcfList[:casperFFGPunishToKeep]
+	}
+	data, err := rlp.EncodeToBytes(vcfList)
+	if err != nil {
+		log.Crit("Failed to encode violate casperFFG punish", "err", err)
+	}
+	if err := db.Put(violateCasperFFGPunishKey, data); err != nil {
+		log.Crit("Failed to write violate casperFFG punish", "err", err)
+	}
+	return nil
 }

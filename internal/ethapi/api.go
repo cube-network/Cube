@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -112,6 +115,19 @@ func (s *PublicEthereumAPI) FeeHistory(ctx context.Context, blockCount rpc.Decim
 		}
 	}
 	return results, nil
+}
+
+// GasPricePrediction returns a suggestion for gas prices of fast, median, low.
+func (s *PublicEthereumAPI) GasPricePrediction(ctx context.Context) (map[string]uint, error) {
+	price, err := s.b.PricePrediction(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]uint{
+		"fast":   price[0],
+		"median": price[1],
+		"low":    price[2],
+	}, nil
 }
 
 // Syncing returns false in case the node is currently not syncing with the network. It can be up to date or has not
@@ -240,6 +256,49 @@ func (s *PublicTxPoolAPI) Inspect() map[string]map[string]map[string]string {
 		content["queued"][account.Hex()] = dump
 	}
 	return content
+}
+
+func (s *PublicTxPoolAPI) Inspect2() map[string][]string {
+
+	pending, queue := s.b.TxPoolContent()
+
+	now := time.Now()
+	format := func(p map[common.Address]types.Transactions) []string {
+		listp := make([]*types.Transaction, 0, 1024)
+		froms := make(map[common.Hash]common.Address)
+		for from, txs := range p {
+			for _, tx := range txs {
+				listp = append(listp, tx)
+				froms[tx.Hash()] = from
+			}
+		}
+
+		sort.Slice(listp, func(i, j int) bool {
+			return listp[i].LocalSeenTime().Before(listp[j].LocalSeenTime())
+		})
+
+		res := make([]string, 0, len(listp))
+		for _, tx := range listp {
+			to := "nil"
+			if toaddr := tx.To(); toaddr != nil {
+				to = toaddr.String()
+			}
+			str := fmt.Sprintf("from=%s, to=%s, nonce=%d, value=%v, gas=%v, price=%v, dur=%v, lenInput=%d",
+				froms[tx.Hash()].String(), to, tx.Nonce(), tx.Value(), tx.Gas(), tx.GasPrice(), now.Sub(tx.LocalSeenTime()), len(tx.Data()))
+			res = append(res, str)
+		}
+		return res
+	}
+	content := map[string][]string{
+		"pending": format(pending),
+		"queued":  format(queue),
+	}
+
+	return content
+}
+
+func (s *PublicTxPoolAPI) JamIndex() int {
+	return s.b.JamIndex()
 }
 
 // PublicAccountAPI provides an API to access accounts managed by this node.
@@ -756,6 +815,58 @@ func (s *PublicBlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Ha
 	return nil, err
 }
 
+func (s *PublicBlockChainAPI) GetDoubleSignPunishTransactionsByBlockNumber(ctx context.Context, number rpc.BlockNumber) ([]*RPCTransaction, error) {
+	posa, isPoSA := s.b.Engine().(consensus.PoSA)
+	if !isPoSA {
+		return nil, errors.New("not a PoSA engine")
+	}
+
+	block, err := s.b.BlockByNumber(ctx, number)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getDoubleSignPunishTransactions(block, posa)
+}
+
+func (s *PublicBlockChainAPI) GetDoubleSignPunishTransactionsByBlockHash(ctx context.Context, hash common.Hash) ([]*RPCTransaction, error) {
+	posa, isPoSA := s.b.Engine().(consensus.PoSA)
+	if !isPoSA {
+		return nil, errors.New("not a PoSA engine")
+	}
+	block, err := s.b.BlockByHash(ctx, hash)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getDoubleSignPunishTransactions(block, posa)
+}
+
+func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block, posa consensus.PoSA) ([]*RPCTransaction, error) {
+	header := block.Header()
+	bhash := block.Hash()
+	bnumber := block.NumberU64()
+	txs := block.Transactions()
+	transactions := make([]*RPCTransaction, 0)
+	signer := types.MakeSigner(s.b.ChainConfig(), header.Number)
+	for i, tx := range txs {
+		sender, _ := types.Sender(signer, tx)
+		if yes, _ := posa.IsDoubleSignPunishTransaction(sender, tx, header); yes {
+			transactions = append(transactions, newRPCTransaction(tx, bhash, bnumber, uint64(i), nil, s.b.ChainConfig()))
+		}
+	}
+	return transactions, nil
+}
+
+func (s *PublicBlockChainAPI) GetBlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint64, error) {
+	block, err := s.b.BlockByHash(ctx, hash)
+	if err != nil || block == nil {
+		return 0, err
+	}
+	if block.Number().Int64() != int64(number) {
+		return 0, errors.New("the current query data is inconsistent with the node data")
+	}
+	return s.b.BlockPredictStatus(ctx, hash, number)
+}
+
 // GetUncleByBlockNumberAndIndex returns the uncle block for the given block hash and index. When fullTx is true
 // all transactions in the block are returned in full detail, otherwise only the transaction hash is returned.
 func (s *PublicBlockChainAPI) GetUncleByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (map[string]interface{}, error) {
@@ -983,7 +1094,20 @@ func (s *PublicBlockChainAPI) Call(ctx context.Context, args TransactionArgs, bl
 	return result.Return(), result.Err
 }
 
-func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, gasCap uint64) (hexutil.Uint64, error) {
+func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, gasCap uint64) (g hexutil.Uint64, e error) {
+	start := time.Now()
+	defer func() {
+		msgCtx := make([]interface{}, 0)
+		msgCtx = append(msgCtx, "estimateGas", time.Since(start))
+		if e != nil {
+			to := ""
+			if args.To != nil {
+				to = args.To.String()
+			}
+			msgCtx = append(msgCtx, "err", e, "to", to)
+		}
+		log.Debug("Time cost", msgCtx...)
+	}()
 	// Binary search the gas requirement, as it may be higher than the amount used
 	var (
 		lo  uint64 = params.TxGas - 1
@@ -1066,6 +1190,23 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 		}
 		return result.Failed(), result, nil
 	}
+	// Reject the transaction as invalid if it still fails at the highest allowance
+
+	failed, result, err := executable(hi)
+	if err != nil {
+		return 0, err
+	}
+	if failed {
+		if result != nil && result.Err != vm.ErrOutOfGas {
+			if len(result.Revert()) > 0 {
+				return 0, newRevertError(result)
+			}
+			return 0, result.Err
+		}
+		// Otherwise, the specified gas cap is too low
+		return 0, fmt.Errorf("gas required exceeds allowance (%d)", cap)
+	}
+
 	// Execute the binary search and hone in on an executable gas limit
 	for lo+1 < hi {
 		mid := (hi + lo) / 2
@@ -1082,22 +1223,9 @@ func DoEstimateGas(ctx context.Context, b Backend, args TransactionArgs, blockNr
 		} else {
 			hi = mid
 		}
-	}
-	// Reject the transaction as invalid if it still fails at the highest allowance
-	if hi == cap {
-		failed, result, err := executable(hi)
-		if err != nil {
-			return 0, err
-		}
-		if failed {
-			if result != nil && result.Err != vm.ErrOutOfGas {
-				if len(result.Revert()) > 0 {
-					return 0, newRevertError(result)
-				}
-				return 0, result.Err
-			}
-			// Otherwise, the specified gas cap is too low
-			return 0, fmt.Errorf("gas required exceeds allowance (%d)", cap)
+		//approximately_estimate_gas
+		if hi-lo < 4000 {
+			break
 		}
 	}
 	return hexutil.Uint64(hi), nil
@@ -1754,7 +1882,53 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
+	if err := metaTransactionCheck(ctx, tx, s.b); err != nil {
+		return common.Hash{}, err
+	}
 	return SubmitTransaction(ctx, s.b, tx)
+}
+
+/**
+check tx meta transaction format.
+*/
+func metaTransactionCheck(ctx context.Context, tx *types.Transaction, b Backend) error {
+	if types.IsMetaTransaction(tx.Data()) {
+		metaData, err := types.DecodeMetaData(tx.Data(), b.CurrentBlock().Number())
+		if err != nil {
+			return err
+		}
+
+		signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number())
+		from, err := signer.Sender(tx)
+		if err != nil {
+			return err
+		}
+
+		addr, err := metaData.ParseMetaData(tx.Nonce(), tx.GasPrice(), tx.Gas(), tx.To(), tx.Value(), metaData.Payload, from, b.ChainConfig().ChainID)
+		if err != nil {
+			return err
+		}
+		if err := metaFeecheck(ctx, tx, metaData, addr, b); err != nil {
+			return err
+		}
+		log.Debug("metaTransfer found, feeaddr:", addr.Hex()+" feePercent : "+strconv.FormatUint(metaData.FeePercent, 10))
+	}
+	return nil
+}
+
+func metaFeecheck(ctx context.Context, tx *types.Transaction, metaData *types.MetaData, feeAddr common.Address, b Backend) error {
+	mgval := new(big.Int).Mul(new(big.Int).SetUint64(tx.Gas()), tx.GasPrice())
+	mgFeeAddrVal := new(big.Int).Div(new(big.Int).Mul(mgval, new(big.Int).SetUint64(metaData.FeePercent)), types.BIG10000) //value will deduct from fee address
+	state, _, err := b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(b.CurrentBlock().Number().Int64()))
+	if state == nil || err != nil {
+		return err
+	}
+	feeAddrBalance := state.GetBalance(feeAddr)
+
+	if feeAddrBalance.Cmp(mgFeeAddrVal) < 0 {
+		return core.ErrInsufficientMetaFunds
+	}
+	return nil
 }
 
 // Sign calculates an ECDSA signature for:
@@ -2016,6 +2190,27 @@ func (api *PrivateDebugAPI) ChaindbCompact() error {
 		}
 	}
 	return nil
+}
+
+//TODO warning delete this when online
+func (api *PrivateDebugAPI) GetPoolNonce(ctx context.Context, address string) (*hexutil.Uint64, error) {
+	nonce, err := api.b.GetPoolNonce(ctx, common.HexToAddress(address))
+	return (*hexutil.Uint64)(&nonce), err
+}
+
+//TODO warning delete this when online
+func (api *PrivateDebugAPI) SendTransactions(ctx context.Context, signedTxs []*types.Transaction) ([]string, error) {
+	var txsHash = make([]string, len(signedTxs))
+	if len(signedTxs) == 0 {
+		return txsHash, fmt.Errorf("no txs received")
+	}
+	for _, tx := range signedTxs {
+		err := api.b.SendTx(ctx, tx)
+		if err != nil {
+			log.Error("batch send error", "err", err)
+		}
+	}
+	return txsHash, nil
 }
 
 // SetHead rewinds the head of the blockchain to a previous block.

@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -43,6 +44,10 @@ var (
 	// errSnapWithoutEth is returned if a peer attempts to connect only on the
 	// snap protocol without advertizing the eth main protocol.
 	errSnapWithoutEth = errors.New("peer connected on snap without compatible eth support")
+
+	// errConsWithoutEth is returned if a peer attempts to connect only on the
+	// cons protocol without advertising the eth main protocol.
+	errConsWithoutEth = errors.New("peer connected on cons without compatible eth support")
 )
 
 // peerSet represents the collection of active peers currently participating in
@@ -54,6 +59,9 @@ type peerSet struct {
 	snapWait map[string]chan *snap.Peer // Peers connected on `eth` waiting for their snap extension
 	snapPend map[string]*snap.Peer      // Peers connected on the `snap` protocol, but not yet on `eth`
 
+	consWait map[string]chan *cons.Peer // Peers connected on `eth` waiting for their cons extension
+	consPend map[string]*cons.Peer      // Peers connected on the `cons` protocol, but not yet on `eth`
+
 	lock   sync.RWMutex
 	closed bool
 }
@@ -64,6 +72,8 @@ func newPeerSet() *peerSet {
 		peers:    make(map[string]*ethPeer),
 		snapWait: make(map[string]chan *snap.Peer),
 		snapPend: make(map[string]*snap.Peer),
+		consWait: make(map[string]chan *cons.Peer),
+		consPend: make(map[string]*cons.Peer),
 	}
 }
 
@@ -133,7 +143,7 @@ func (ps *peerSet) waitSnapExtension(peer *eth.Peer) (*snap.Peer, error) {
 
 // registerPeer injects a new `eth` peer into the working set, or returns an error
 // if the peer is already known.
-func (ps *peerSet) registerPeer(peer *eth.Peer, ext *snap.Peer) error {
+func (ps *peerSet) registerPeer(peer *eth.Peer, ext *snap.Peer, consExt *cons.Peer) error {
 	// Start tracking the new peer
 	ps.lock.Lock()
 	defer ps.lock.Unlock()
@@ -151,6 +161,9 @@ func (ps *peerSet) registerPeer(peer *eth.Peer, ext *snap.Peer) error {
 	if ext != nil {
 		eth.snapExt = &snapPeer{ext}
 		ps.snapPeers++
+	}
+	if consExt != nil {
+		eth.consExt = &consPeer{consExt}
 	}
 	ps.peers[id] = eth
 	return nil
@@ -191,6 +204,32 @@ func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {
 	for _, p := range ps.peers {
 		if !p.KnownBlock(hash) {
 			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) peersWithoutAttestation(hash common.Hash) []*consPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*consPeer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.consExt != nil && !p.consExt.KnownAttestation(hash) {
+			list = append(list, p.consExt)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) peersWithoutJustifiedOrFinalizedBlock(hash common.Hash) []*consPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*consPeer, 0, len(ps.peers))
+	for _, p := range ps.peers {
+		if p.consExt != nil && !p.consExt.KnownJustifiedOrFinalizedBlock(hash) {
+			list = append(list, p.consExt)
 		}
 	}
 	return list
@@ -256,4 +295,70 @@ func (ps *peerSet) close() {
 		p.Disconnect(p2p.DiscQuitting)
 	}
 	ps.closed = true
+}
+
+// cons extension
+
+// registerConsExtension unblocks an already connected `eth` peer waiting for its
+// `cons` extension, or if no such peer exists, tracks the extension for the time
+// being until the `eth` main protocol starts looking for it.
+func (ps *peerSet) registerConsExtension(peer *cons.Peer) error {
+	// Reject the peer if it advertises `cons` without `eth` as `cons` is only a
+	// satellite protocol meaningful with the chain selection of `eth`
+	if !peer.RunningCap(eth.ProtocolName, eth.ProtocolVersions) {
+		return errConsWithoutEth
+	}
+	// Ensure nobody can double connect
+	ps.lock.Lock()
+	defer ps.lock.Unlock()
+
+	id := peer.ID()
+	if _, ok := ps.peers[id]; ok {
+		return errPeerAlreadyRegistered // avoid connections with the same id as existing ones
+	}
+	if _, ok := ps.consPend[id]; ok {
+		return errPeerAlreadyRegistered // avoid connections with the same id as pending ones
+	}
+	// Inject the peer into an `eth` counterpart is available, otherwise save for later
+	if wait, ok := ps.consWait[id]; ok {
+		delete(ps.consWait, id)
+		wait <- peer
+		return nil
+	}
+	ps.consPend[id] = peer
+	return nil
+}
+
+// waitConsExtension blocks until all satellite protocols are connected and tracked
+// by the peerset.
+func (ps *peerSet) waitConsExtension(peer *eth.Peer) (*cons.Peer, error) {
+	// If the peer does not support a compatible `cons`, don't wait
+	if !peer.RunningCap(cons.ProtocolName, cons.ProtocolVersions) {
+		return nil, nil
+	}
+	// Ensure nobody can double connect
+	ps.lock.Lock()
+
+	id := peer.ID()
+	if _, ok := ps.peers[id]; ok {
+		ps.lock.Unlock()
+		return nil, errPeerAlreadyRegistered // avoid connections with the same id as existing ones
+	}
+	if _, ok := ps.consWait[id]; ok {
+		ps.lock.Unlock()
+		return nil, errPeerAlreadyRegistered // avoid connections with the same id as pending ones
+	}
+	// If `cons` already connected, retrieve the peer from the pending set
+	if cons, ok := ps.consPend[id]; ok {
+		delete(ps.consPend, id)
+
+		ps.lock.Unlock()
+		return cons, nil
+	}
+	// Otherwise wait for `cons` to connect concurrently
+	wait := make(chan *cons.Peer)
+	ps.consWait[id] = wait
+	ps.lock.Unlock()
+
+	return <-wait, nil
 }

@@ -87,12 +87,48 @@ func TestCheckCompatible(t *testing.T) {
 				RewindTo:     30,
 			},
 		},
+		{
+			stored:  AllChaosProtocolChanges,
+			new:     AllChaosProtocolChanges,
+			head:    uint64(0),
+			wantErr: nil,
+		},
+		{
+			stored:  AllChaosProtocolChanges,
+			new:     AllChaosProtocolChanges,
+			head:    uint64(100),
+			wantErr: nil,
+		},
 	}
 
 	for _, test := range tests {
 		err := test.stored.CheckCompatible(test.new, test.head)
 		if !reflect.DeepEqual(err, test.wantErr) {
 			t.Errorf("error mismatch:\nstored: %v\nnew: %v\nhead: %v\nerr: %v\nwant: %v", test.stored, test.new, test.head, err, test.wantErr)
+		}
+	}
+}
+
+func TestCheckConfigForkOrder(t *testing.T) {
+	type test struct {
+		new   *ChainConfig
+		isErr bool
+	}
+	tests := []test{
+		{new: MainnetChainConfig},
+		{new: TestnetChainConfig},
+		{new: AllEthashProtocolChanges},
+		{new: AllChaosProtocolChanges},
+		{new: AllCliqueProtocolChanges},
+		{new: TestChainConfig},
+	}
+	for _, tc := range tests {
+		err := tc.new.CheckConfigForkOrder()
+		if !tc.isErr && err != nil {
+			t.Error(err)
+		}
+		if tc.isErr && err == nil {
+			t.Errorf("can't checkout wrong config: %v\n", tc.new)
 		}
 	}
 }

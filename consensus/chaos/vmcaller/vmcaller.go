@@ -1,6 +1,7 @@
 package vmcaller
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -11,6 +12,13 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+type VMContext struct {
+	Statedb      *state.StateDB
+	Header       *types.Header
+	ChainContext core.ChainContext
+	ChainConfig  *params.ChainConfig
+}
 
 // ExecuteMsg executes transaction sent to system contracts.
 func ExecuteMsg(msg core.Message, state *state.StateDB, header *types.Header, chainContext core.ChainContext, chainConfig *params.ChainConfig) (ret []byte, err error) {
@@ -30,4 +38,10 @@ func ExecuteMsg(msg core.Message, state *state.StateDB, header *types.Header, ch
 // NewLegacyMessage builds a message for consensus and system governance actions, it will not consumes any fee.
 func NewLegacyMessage(from common.Address, to *common.Address, nonce uint64, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte, checkNonce bool) types.Message {
 	return types.NewMessage(from, to, nonce, amount, gasLimit, gasPrice, gasPrice, gasPrice, data, nil, checkNonce)
+}
+
+// Execute return contract calling result
+func Execute(ctx *VMContext, to *common.Address, data []byte) (ret []byte, err error) {
+	msg := types.NewMessage(ctx.Header.Coinbase, to, 0, big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
+	return ExecuteMsg(msg, ctx.Statedb, ctx.Header, ctx.ChainContext, ctx.ChainConfig)
 }

@@ -41,6 +41,9 @@ import (
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
 //go:generate gencodec -type GenesisAccount -field-override genesisAccountMarshaling -out gen_genesis_account.go
+//go:generate gencodec -type Init -field-override initMarshaling -out gen_genesis_init.go
+//go:generate gencodec -type LockedAccount -field-override lockedAccountMarshaling -out gen_genesis_locked_account.go
+//go:generate gencodec -type ValidatorInfo -field-override validatorInfoMarshaling -out gen_genesis_validator_info.go
 
 var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
@@ -56,6 +59,7 @@ type Genesis struct {
 	Mixhash    common.Hash         `json:"mixHash"`
 	Coinbase   common.Address      `json:"coinbase"`
 	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
+	Validators []ValidatorInfo     `json:"validators" gencodec:"required"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -84,9 +88,44 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 type GenesisAccount struct {
 	Code       []byte                      `json:"code,omitempty"`
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
-	Balance    *big.Int                    `json:"balance" gencodec:"required"`
+	Balance    *big.Int                    `json:"balance"            gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
+	Init       Init                        `json:"init,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
+}
+
+// InitArgs represents the args of system contracts inital args
+type Init struct {
+	Admin           common.Address  `json:"admin,omitempty"`
+	StakingContract common.Address  `json:"stakingContract,omitempty"`
+	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
+	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
+	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
+	TotalRewards    *big.Int        `json:"totalRewards,omitempty"`
+	RewardsPerBlock *big.Int        `json:"rewardsPerBlock,omitempty"`
+	Epoch           *big.Int        `json:"epoch,omitempty"`
+	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
+	CommunityPool   common.Address  `json:"communityPool,omitempty"`
+	BonusPool       common.Address  `json:"bonusPool,omitempty"`
+	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
+}
+
+// LockedAccount represents the info of the locked account
+type LockedAccount struct {
+	UserAddress  common.Address `json:"userAddress,omitempty"`
+	TypeId       *big.Int       `json:"typeId,omitempty"`
+	LockedAmount *big.Int       `json:"lockedAmount,omitempty"`
+	LockedTime   *big.Int       `json:"lockedTime,omitempty"`
+	PeriodAmount *big.Int       `json:"periodAmount,omitempty"`
+}
+
+// ValidatorInfo represents the info of inital validators
+type ValidatorInfo struct {
+	Address          common.Address `json:"address"         gencodec:"required"`
+	Manager          common.Address `json:"manager"         gencodec:"required"`
+	Rate             *big.Int       `json:"rate,omitempty"`
+	Stake            *big.Int       `json:"stake,omitempty"`
+	AcceptDelegation bool           `json:"acceptDelegation,omitempty"`
 }
 
 // field type overrides for gencodec
@@ -108,6 +147,28 @@ type genesisAccountMarshaling struct {
 	Nonce      math.HexOrDecimal64
 	Storage    map[storageJSON]storageJSON
 	PrivateKey hexutil.Bytes
+}
+
+type initMarshaling struct {
+	FirstLockPeriod *math.HexOrDecimal256
+	ReleasePeriod   *math.HexOrDecimal256
+	ReleaseCnt      *math.HexOrDecimal256
+	TotalRewards    *math.HexOrDecimal256
+	RewardsPerBlock *math.HexOrDecimal256
+	Epoch           *math.HexOrDecimal256
+	RuEpoch         *math.HexOrDecimal256
+}
+
+type lockedAccountMarshaling struct {
+	TypeId       *math.HexOrDecimal256
+	LockedAmount *math.HexOrDecimal256
+	LockedTime   *math.HexOrDecimal256
+	PeriodAmount *math.HexOrDecimal256
+}
+
+type validatorInfoMarshaling struct {
+	Rate  *math.HexOrDecimal256
+	Stake *math.HexOrDecimal256
 }
 
 // storageJSON represents a 256 bit byte array, but allows less than 256 bits when
@@ -294,10 +355,22 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		}
 	}
 
-	env := &genesisVMEnv{statedb, head, g}
-	// TODO
-	if err := initStaking(env); err != nil {
-		panic(err)
+	// init system contract
+	gVMEnv := &genesisVMEnv{statedb, head, g}
+	if err = gVMEnv.initStaking(); err != nil {
+		log.Crit("Failed to init staking contract", "err", err)
+	}
+	if err = gVMEnv.initCommunityPool(); err != nil {
+		log.Crit("Failed to init staking contract", "err", err)
+	}
+	if err = gVMEnv.initBonusPool(); err != nil {
+		log.Crit("Failed to init staking contract", "err", err)
+	}
+	if err = gVMEnv.initGenesisLock(); err != nil {
+		log.Crit("Failed to init staking contract", "err", err)
+	}
+	if head.Extra, err = gVMEnv.initValidators(); err != nil {
+		log.Crit("Failed to init staking contract", "err", err)
 	}
 
 	// Update root after execution

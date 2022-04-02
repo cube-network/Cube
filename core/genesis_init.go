@@ -18,13 +18,22 @@ package core
 
 import (
 	"errors"
+	"math"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/sysabi"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+)
+
+const (
+	initBatch   = 30
+	extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for validator vanity
+	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
 )
 
 type genesisVMEnv struct {
@@ -33,25 +42,15 @@ type genesisVMEnv struct {
 	genesis *Genesis
 }
 
-func (env *genesisVMEnv) exec(contract, method string, args ...interface{}) ([]byte, error) {
-	// Get contract abi
-	contractABIs := sysabi.GetInteractiveABI()
-	contractABI, ok := contractABIs[contract]
-	if !ok {
-		return nil, errors.New("Unknown contract abi: " + contract)
-	}
+func (env *genesisVMEnv) exec(contract common.Address, method string, args ...interface{}) ([]byte, error) {
 	// Pack method and args for data seg
-	data, err := contractABI.Pack(method, args...)
+	data, err := system.ABIPack(contract, method, args...)
 	if err != nil {
 		return nil, err
 	}
-	// Get contract address
-	contractAddress, ok := sysabi.GetContractAddress()[contract]
-	if !ok {
-		return nil, errors.New("Unknown contract address: " + contract)
-	}
+
 	// Create EVM calling message
-	msg := types.NewMessage(env.genesis.Coinbase, &contractAddress, 0, big.NewInt(0), 0, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, true)
+	msg := types.NewMessage(env.genesis.Coinbase, &contract, 0, big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
 	// Create EVM
 	evm := vm.NewEVM(NewEVMBlockContext(env.header, nil, &env.header.Coinbase), NewEVMTxContext(msg), env.state, env.genesis.Config, vm.Config{})
 	// Run evm call
@@ -62,7 +61,101 @@ func (env *genesisVMEnv) exec(contract, method string, args ...interface{}) ([]b
 	return ret, err
 }
 
-func initStaking(env *genesisVMEnv) error {
-	env.exec("contract", "method")
+func (env *genesisVMEnv) initStaking() error {
+	contract, ok := env.genesis.Alloc[system.StakingContract]
+	if !ok {
+		return errors.New("Staking Contract is missing in genesis!")
+	}
+	_, err := env.exec(system.StakingContract, "initialize",
+		contract.Init.Admin,
+		contract.Init.FirstLockPeriod,
+		contract.Init.ReleasePeriod,
+		contract.Init.ReleaseCnt,
+		contract.Init.TotalRewards,
+		contract.Init.RewardsPerBlock,
+		contract.Init.Epoch,
+		contract.Init.RuEpoch,
+		contract.Init.CommunityPool,
+		contract.Init.BonusPool)
+	return err
+}
+
+func (env *genesisVMEnv) initCommunityPool() error {
+	contract, ok := env.genesis.Alloc[system.CommunityPoolContract]
+	if !ok {
+		return errors.New("CommunityPool Contract is missing in genesis!")
+	}
+	_, err := env.exec(system.CommunityPoolContract, "initialize", contract.Init.Admin)
+	return err
+}
+
+func (env *genesisVMEnv) initBonusPool() error {
+	contract, ok := env.genesis.Alloc[system.BonusPoolContract]
+	if !ok {
+		return errors.New("BonusPool Contract is missing in genesis!")
+	}
+	_, err := env.exec(system.BonusPoolContract, "initialize", contract.Init.StakingContract)
+	return err
+}
+
+func (env *genesisVMEnv) initGenesisLock() error {
+	contract, ok := env.genesis.Alloc[system.GenesisLockContract]
+	if !ok {
+		return errors.New("GenesisLock Contract is missing in genesis!")
+	}
+	var (
+		address      = make([]common.Address, 0, initBatch)
+		typeId       = make([]*big.Int, 0, initBatch)
+		lockedAmount = make([]*big.Int, 0, initBatch)
+		lockedTime   = make([]*big.Int, 0, initBatch)
+		periodAmount = make([]*big.Int, 0, initBatch)
+	)
+	sum := 0
+	for _, account := range contract.Init.LockedAccounts {
+		address = append(address, account.UserAddress)
+		typeId = append(typeId, account.TypeId)
+		lockedAmount = append(lockedAmount, account.LockedAmount)
+		lockedTime = append(lockedTime, account.LockedTime)
+		periodAmount = append(periodAmount, account.PeriodAmount)
+		sum++
+		if sum == initBatch {
+			if _, err := env.exec(system.GenesisLockContract, "initialize",
+				address, typeId, lockedAmount, lockedTime, periodAmount); err != nil {
+				return err
+			}
+			sum = 0
+			address = make([]common.Address, 0, initBatch)
+			typeId = make([]*big.Int, 0, initBatch)
+			lockedAmount = make([]*big.Int, 0, initBatch)
+			lockedTime = make([]*big.Int, 0, initBatch)
+			periodAmount = make([]*big.Int, 0, initBatch)
+		}
+	}
+	if len(address) > 0 {
+		_, err := env.exec(system.GenesisLockContract, "initialize",
+			address, typeId, lockedAmount, lockedTime, periodAmount)
+		return err
+	}
 	return nil
+}
+
+// initValidators add validators into system contracts
+// and set validator addresses to header extra data
+// and return new header extra data
+func (env *genesisVMEnv) initValidators() ([]byte, error) {
+	if len(env.genesis.Validators) <= 0 {
+		return env.header.Extra, errors.New("validators are missing in genesis!")
+	}
+	extra := make([]byte, 0, extraVanity+common.AddressLength*len(env.genesis.Validators)+extraSeal)
+	extra = append(extra, env.header.Extra[:extraVanity]...)
+	for _, v := range env.genesis.Validators {
+		if _, err := env.exec(system.StakingContract, "initValidator",
+			v.Address, v.Manager, v.Rate, v.Stake, v.AcceptDelegation); err != nil {
+			return env.header.Extra, err
+		}
+		extra = append(extra, v.Address[:]...)
+	}
+	extra = append(extra, env.header.Extra[len(env.header.Extra)-extraSeal:]...)
+	env.header.Extra = extra
+	return env.header.Extra, nil
 }

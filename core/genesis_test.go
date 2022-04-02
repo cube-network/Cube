@@ -17,7 +17,9 @@
 package core
 
 import (
+	"encoding/json"
 	"math/big"
+	"os"
 	"reflect"
 	"testing"
 
@@ -201,4 +203,27 @@ func TestGenesis_Commit(t *testing.T) {
 	if stored.Cmp(genesisBlock.Difficulty()) != 0 {
 		t.Errorf("inequal difficulty; stored: %v, genesisBlock: %v", stored, genesisBlock.Difficulty())
 	}
+}
+
+func TestGenesisUnmarshal(t *testing.T) {
+	file, err := os.Open("testdata/test-genesis.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	genesis := new(Genesis)
+	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+		t.Fatalf("invalid genesis file: %v", err)
+	}
+	init := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F002")].Init
+	t.Log(init)
+
+	init = genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init
+	t.Log(init.LockedAccounts[0])
+
+	validator := genesis.Validators[2]
+	t.Log(validator.AcceptDelegation)
+
+	code := genesis.Alloc[common.HexToAddress("0x0000000000000000000000000000000000000000")].Code
+	t.Log(code == nil)
 }

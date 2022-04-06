@@ -581,4 +581,32 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
     function getAllDelegatorsLength() public view returns (uint) {
         return allDelegatorAddrs.length;
     }
+
+    // #if !Mainnet
+    function getSelfDebt() public view returns(uint256) {
+        return selfDebt;
+    }
+
+    function getSelfSettledRewards() public view returns(uint256) {
+        return selfSettledRewards;
+    }
+
+    function setState(State s) external onlyOwner {
+        state = s;
+    }
+
+    function testCalcDelegatorPunishment(address _delegator) public view returns (uint) {
+        return calcDelegatorPunishment(_delegator);
+    }
+
+    // You need to query before them「validatorClaimAny delegatorClaimAny」,
+    // otherwise the data will be cleared by the processclaimableunbound executed in the middle
+    function testGetClaimableUnbound(address _owner) public view returns (uint) {
+        return getClaimableUnbound(_owner);
+    }
+
+    function testSlashFromUnbound(address _owner, uint _amount) public {
+        slashFromUnbound(_owner, _amount);
+    }
+    // #endif
 }

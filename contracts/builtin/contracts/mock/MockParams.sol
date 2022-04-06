@@ -13,7 +13,7 @@ contract Params {
     uint public constant StakeUnit = 1; // ether
 
     uint public constant JailPeriod = 86400; //
-    uint public constant UnboundLockPeriod = 21 days; // Seconds delay when a validator unbound staking.
+    uint public constant UnboundLockPeriod = 0; // Seconds delay when a validator unbound staking.
     uint256 public constant PunishBase = 1000;
     uint256 public constant LazyPunishFactor = 1; // the punish factor when validator failed to propose blocks for specific times
     uint256 public constant EvilPunishFactor = 10; // the punish factor when a validator do something evil, such as "double sign".

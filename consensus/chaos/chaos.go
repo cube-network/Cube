@@ -22,22 +22,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/big"
 	"math/rand"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
-	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/sysabi"
-	"github.com/ethereum/go-ethereum/consensus/chaos/vmcaller"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -60,7 +55,7 @@ const (
 	wiggleTime        = 500 * time.Millisecond // Random delay (per validator) to allow concurrent validators
 	minNotInTurnDelay = 100 * time.Millisecond // Minimal delay for a not-in-turn validator to seal a block
 	maxValidators     = 21                     // Max validators allowed to seal.
-
+	blocksPerDay      = 60 * 60 * 24 / 3       // blocks produced per day
 )
 
 // Chaos proof-of-stake-authority protocol constants.
@@ -187,8 +182,7 @@ func ecrecover(header *types.Header, sigcache *lru.ARCCache) (common.Address, er
 	return validator, nil
 }
 
-// Chaos is the proof-of-stake-authority consensus engine proposed to support the
-// Ethereum testnet following the Ropsten attacks.
+// Chaos is a delegate proof-of-stake consensus engine
 type Chaos struct {
 	chainConfig *params.ChainConfig // ChainConfig to execute evm
 	config      *params.ChaosConfig // Consensus engine configuration parameters
@@ -207,8 +201,6 @@ type Chaos struct {
 
 	stateFn StateFn // Function to get state by state root
 
-	abi map[string]abi.ABI // Interactive with system contracts
-
 	chain consensus.ChainHeaderReader
 
 	// The fields below are for testing only
@@ -225,16 +217,10 @@ func New(chainConfig *params.ChainConfig, db ethdb.Database) *Chaos {
 	if conf.Epoch <= 1 {
 		conf.Epoch = epochLength
 	}
-	// set admin of system contracts if it's provided for private/develop chain
-	if (conf.SysContractAdmin != common.Address{}) {
-		sysabi.AdminForDevelopChain = conf.SysContractAdmin
-	}
 
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
-
-	abis := sysabi.GetInteractiveABI()
 
 	return &Chaos{
 		chainConfig: chainConfig,
@@ -242,7 +228,6 @@ func New(chainConfig *params.ChainConfig, db ethdb.Database) *Chaos {
 		db:          db,
 		recents:     recents,
 		signatures:  signatures,
-		abi:         abis,
 		signer:      types.LatestSignerForChainID(chainConfig.ChainID),
 	}
 }
@@ -593,61 +578,12 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
-func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error {
-	// Initialize all system contracts at block 1.
-	if header.Number.Cmp(common.Big1) == 0 {
-		if err := c.initializeSystemContracts(chain, header, state); err != nil {
-			log.Error("Initialize system contracts failed", "err", err)
-			return err
-		}
+func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB,
+	txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error {
+	// Preparing jobs before finalize
+	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, false); err != nil {
+		return err
 	}
-
-	if header.Difficulty.Cmp(diffInTurn) != 0 {
-		if err := c.tryPunishValidator(chain, header, state); err != nil {
-			return err
-		}
-	}
-
-	// execute block reward tx.
-	if len(*txs) > 0 {
-		if err := c.trySendBlockReward(chain, header, state); err != nil {
-			return err
-		}
-	}
-
-	// do epoch thing at the end, because it will update active validators
-	if header.Number.Uint64()%c.config.Epoch == 0 {
-		newValidators, err := c.doSomethingAtEpoch(chain, header, state)
-		if err != nil {
-			return err
-		}
-
-		validatorsBytes := make([]byte, len(newValidators)*common.AddressLength)
-		for i, validator := range newValidators {
-			copy(validatorsBytes[i*common.AddressLength:], validator.Bytes())
-		}
-
-		extraSuffix := len(header.Extra) - extraSeal
-		if !bytes.Equal(header.Extra[extraVanity:extraSuffix], validatorsBytes) {
-			return errInvalidExtraValidators
-		}
-	}
-
-	// handle violating CasperFFG rules
-	totalTxIndex := len(punishTxs)
-	for i := uint32(0); i < uint32(totalTxIndex); i++ {
-		log.Debug("💥Received a pending penalty", "Number", header.Number.Uint64())
-		// execute the doubleSignPunish
-		// If one transaction fails to execute, the whole block will be discarded
-		tx := punishTxs[int(i)]
-		receipt, err := c.replayDoubleSignPunish(chain, header, state, totalTxIndex, tx)
-		if err != nil {
-			return err
-		}
-		*txs = append(*txs, tx)
-		*receipts = append(*receipts, receipt)
-	}
-
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
@@ -657,77 +593,17 @@ func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
-func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (b *types.Block, rs []*types.Receipt, err error) {
+func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB,
+	txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (b *types.Block, rs []*types.Receipt, err error) {
 	defer func() {
 		if err != nil {
 			log.Warn("FinalizeAndAssemble failed", "err", err)
 		}
 	}()
-	// Initialize all system contracts at block 1.
-	if header.Number.Cmp(common.Big1) == 0 {
-		if err := c.initializeSystemContracts(chain, header, state); err != nil {
-			panic(err)
-		}
+	// Preparing jobs before finalize
+	if err := c.prepareFinalize(chain, header, state, &txs, &receipts, nil, true); err != nil {
+		panic(err)
 	}
-
-	// punish validator if necessary
-	if header.Difficulty.Cmp(diffInTurn) != 0 {
-		if err := c.tryPunishValidator(chain, header, state); err != nil {
-			panic(err)
-		}
-	}
-
-	// deposit block reward if any tx exists.
-	if len(txs) > 0 {
-		if err := c.trySendBlockReward(chain, header, state); err != nil {
-			panic(err)
-		}
-	}
-
-	// do epoch thing at the end, because it will update active validators
-	if header.Number.Uint64()%c.config.Epoch == 0 {
-		if _, err := c.doSomethingAtEpoch(chain, header, state); err != nil {
-			panic(err)
-		}
-	}
-
-	// Note:
-	// Even if the miner is not `running`, it's still working,
-	// the 'miner.worker' will try to FinalizeAndAssemble a block,
-	// in this case, the signTxFn is not set. A `non-miner node` can't execute tx.
-	if c.signTxFn != nil {
-		// Add penalty transactions for violating CasperFFG rules
-		punishList := c.GetAllViolateCasperFFGPunish()
-		if len(punishList) > 0 {
-			var punishNeedDelList []*types.ViolateCasperFFGPunish
-			for _, p := range punishList {
-				val, err := p.RecoverSigner()
-				if err != nil {
-					continue
-				}
-				b, err := c.IsDoubleSignPunished(chain, header, state, p.Hash())
-				if err != nil {
-					log.Error("IsDoubleSignPunished error", "error", err.Error())
-					return nil, nil, err
-				}
-				if !b {
-					// execute the Punish.sol doubleSignPunish
-					tx, receipt, err := c.executeDoubleSignPunish(chain, header, state, p, len(punishList))
-					if err != nil {
-						log.Error("executeDoubleSignPunish error", "error", err.Error())
-						return nil, nil, err
-					}
-					txs = append(txs, tx)
-					receipts = append(receipts, receipt)
-					log.Debug("💥executeDoubleSignPunish", "Violator", val, "Number", header.Number.Uint64())
-				}
-
-				punishNeedDelList = append(punishNeedDelList, p)
-			}
-			c.DeleteViolateCasperFFGPunishList(&punishNeedDelList) // TODO Will asynchronous data inconsistency be involved? Cause asynchronous newly inserted data to be deleted?
-		}
-	}
-
 	// No block rewards in PoS, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
@@ -736,19 +612,84 @@ func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *t
 	return types.NewBlock(header, txs, nil, receipts, new(trie.Trie)), receipts, nil
 }
 
-func (c *Chaos) GetAllViolateCasperFFGPunish() []*types.ViolateCasperFFGPunish {
-	return rawdb.ReadAllViolateCasperFFGPunish(c.db)
+// prepareFinalize does some preparing jobs before finalize, including:
+// * lazy punish
+// * distribute block fee
+// * update validators
+// * decrease missed blocks counter
+// * update rewards info
+// * punish double sign
+func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
+	// punish validator if low difficulty block found
+	if header.Difficulty.Cmp(diffInTurn) != 0 {
+		if err := c.tryLasyPunish(chain, header, state); err != nil {
+			return err
+		}
+	}
+	// execute block reward tx.
+	if len(*txs) > 0 {
+		if err := c.tryDistributeBlockFee(chain, header, state); err != nil {
+			return err
+		}
+	}
+	// do epoch thing at the end, because it will update active validators
+	if header.Number.Uint64()%c.config.Epoch == 0 {
+		vmCtx := &systemcontract.CallContext{
+			Statedb:      state,
+			Header:       header,
+			ChainContext: newChainContext(chain, c),
+			ChainConfig:  c.chainConfig,
+		}
+		if err := c.updateValidators(vmCtx, chain, mined); err != nil {
+			return err
+		}
+		//  decrease validator missed blocks counter at epoch
+		if err := systemcontract.DecreaseMissedBlocksCounter(vmCtx); err != nil {
+			return err
+		}
+	}
+	// UpdateRewardsInfo once a day
+	if header.Number.Uint64()%blocksPerDay == 0 {
+		if err := systemcontract.UpdateRewardsInfo(&systemcontract.CallContext{
+			Statedb:      state,
+			Header:       header,
+			ChainContext: newChainContext(chain, c),
+			ChainConfig:  c.chainConfig,
+		}); err != nil {
+			return err
+		}
+	}
+	// punish double sign
+	return c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined)
 }
 
-func (c *Chaos) DeleteViolateCasperFFGPunishList(punishList *[]*types.ViolateCasperFFGPunish) {
-	rawdb.DeleteViolateCasperFFGPunishList(c.db, punishList)
+// updateValidators updates validators info to system contracts
+func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consensus.ChainHeaderReader, mined bool) error {
+	newValidators, err := c.getTopValidators(chain, vmCtx.Header)
+	if err != nil {
+		return err
+	}
+	if !mined {
+		// check whether validators are the same in header
+		validatorsBytes := make([]byte, len(newValidators)*common.AddressLength)
+		for i, validator := range newValidators {
+			copy(validatorsBytes[i*common.AddressLength:], validator.Bytes())
+		}
+		if !bytes.Equal(vmCtx.Header.Extra[extraVanity:len(vmCtx.Header.Extra)-extraSeal], validatorsBytes) {
+			return errInvalidExtraValidators
+		}
+	}
+	// update contract new validators if new set exists
+	if err := systemcontract.UpdateActiveValidatorSet(vmCtx, newValidators); err != nil {
+		log.Error("Fail to update validators to system contract", "err", err)
+		return err
+	}
+	return nil
 }
 
-func (c *Chaos) ClearAllViolateCasperFFGPunish() {
-	rawdb.ClearAllViolateCasperFFGPunish(c.db)
-}
-
-func (c *Chaos) trySendBlockReward(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
+// tryDistributeBlockFee distributes block fee to validators
+func (c *Chaos) tryDistributeBlockFee(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	fee := state.GetBalance(consensus.FeeRecoder)
 	if fee.Cmp(common.Big0) <= 0 {
 		return nil
@@ -759,24 +700,16 @@ func (c *Chaos) trySendBlockReward(chain consensus.ChainHeaderReader, header *ty
 	// reset fee
 	state.SetBalance(consensus.FeeRecoder, common.Big0)
 
-	method := "distributeBlockReward"
-	data, err := c.abi[sysabi.ValidatorsContractName].Pack(method)
-	if err != nil {
-		log.Error("Can't pack data for distributeBlockReward", "err", err)
-		return err
-	}
-
-	nonce := state.GetNonce(header.Coinbase)
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetValidatorAddr(header.Number, c.chainConfig), nonce, fee, math.MaxUint64, new(big.Int), data, true)
-
-	if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-		return err
-	}
-
-	return nil
+	return systemcontract.DistributeBlockFee(&systemcontract.CallContext{
+		Statedb:      state,
+		Header:       header,
+		ChainContext: newChainContext(chain, c),
+		ChainConfig:  c.chainConfig,
+	})
 }
 
-func (c *Chaos) tryPunishValidator(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
+// tryLasyPunish punishes validators that didn't produce blocks
+func (c *Chaos) tryLasyPunish(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	number := header.Number.Uint64()
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
 	if err != nil {
@@ -794,66 +727,12 @@ func (c *Chaos) tryPunishValidator(chain consensus.ChainHeaderReader, header *ty
 		}
 	}
 	if !signedRecently {
-		if err := c.punishValidator(outTurnValidator, chain, header, state); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (c *Chaos) doSomethingAtEpoch(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) ([]common.Address, error) {
-	newSortedValidators, err := c.getTopValidators(chain, header)
-	if err != nil {
-		return []common.Address{}, err
-	}
-
-	// update contract new validators if new set exists
-	if err := c.updateValidators(newSortedValidators, chain, header, state); err != nil {
-		return []common.Address{}, err
-	}
-	//  decrease validator missed blocks counter at epoch
-	if err := c.decreaseMissedBlocksCounter(chain, header, state); err != nil {
-		return []common.Address{}, err
-	}
-	return newSortedValidators, nil
-}
-
-// initializeSystemContracts initializes all genesis system contracts.
-func (c *Chaos) initializeSystemContracts(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	snap, err := c.snapshot(chain, 0, header.ParentHash, nil)
-	if err != nil {
-		return err
-	}
-
-	genesisValidators := snap.validators()
-	if len(genesisValidators) == 0 || len(genesisValidators) > maxValidators {
-		return errInvalidValidatorsLength
-	}
-
-	method := "initialize"
-	contracts := []struct {
-		addr    common.Address
-		packFun func() ([]byte, error)
-	}{
-		{sysabi.ValidatorsContractAddr, func() ([]byte, error) {
-			return c.abi[sysabi.ValidatorsContractName].Pack(method, genesisValidators)
-		}},
-		{sysabi.PunishContractAddr, func() ([]byte, error) { return c.abi[sysabi.PunishContractName].Pack(method) }},
-	}
-
-	for _, contract := range contracts {
-		data, err := contract.packFun()
-		if err != nil {
-			return err
-		}
-
-		nonce := state.GetNonce(header.Coinbase)
-		msg := vmcaller.NewLegacyMessage(header.Coinbase, &contract.addr, nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-
-		if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-			return err
-		}
+		return systemcontract.LazyPunish(&systemcontract.CallContext{
+			Statedb:      state,
+			Header:       header,
+			ChainContext: newChainContext(chain, c),
+			ChainConfig:  c.chainConfig,
+		}, outTurnValidator)
 	}
 
 	return nil
@@ -869,100 +748,14 @@ func (c *Chaos) getTopValidators(chain consensus.ChainHeaderReader, header *type
 	if err != nil {
 		return []common.Address{}, err
 	}
-
-	method := "getTopValidators"
-	data, err := c.abi[sysabi.ValidatorsContractName].Pack(method)
-	if err != nil {
-		log.Error("Can't pack data for getTopValidators", "error", err)
-		return []common.Address{}, err
-	}
-
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetValidatorAddr(parent.Number, c.chainConfig), 0, new(big.Int), math.MaxUint64, new(big.Int), data, false)
-
-	// use parent
-	result, err := vmcaller.ExecuteMsg(msg, statedb, parent, newChainContext(chain, c), c.chainConfig)
-	if err != nil {
-		return []common.Address{}, err
-	}
-
-	// unpack data
-	ret, err := c.abi[sysabi.ValidatorsContractName].Unpack(method, result)
-	if err != nil {
-		return []common.Address{}, err
-	}
-	if len(ret) != 1 {
-		return []common.Address{}, errors.New("Invalid params length")
-	}
-	validators, ok := ret[0].([]common.Address)
-	if !ok {
-		return []common.Address{}, errors.New("Invalid validators format")
-	}
-	sort.Sort(validatorsAscending(validators))
-	return validators, err
+	return systemcontract.GetTopValidators(&systemcontract.CallContext{
+		Statedb:      statedb,
+		Header:       parent,
+		ChainContext: newChainContext(chain, c),
+		ChainConfig:  c.chainConfig})
 }
 
-func (c *Chaos) updateValidators(vals []common.Address, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	// method
-	method := "updateActiveValidatorSet"
-	data, err := c.abi[sysabi.ValidatorsContractName].Pack(method, vals, new(big.Int).SetUint64(c.config.Epoch))
-	if err != nil {
-		log.Error("Can't pack data for updateActiveValidatorSet", "error", err)
-		return err
-	}
-
-	// call contract
-	nonce := state.GetNonce(header.Coinbase)
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetValidatorAddr(header.Number, c.chainConfig), nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-	if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-		log.Error("Can't update validators to contract", "err", err)
-		return err
-	}
-
-	return nil
-}
-
-func (c *Chaos) punishValidator(val common.Address, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	// method
-	method := "punish"
-	data, err := c.abi[sysabi.PunishContractName].Pack(method, val)
-	if err != nil {
-		log.Error("Can't pack data for punish", "error", err)
-		return err
-	}
-
-	// call contract
-	nonce := state.GetNonce(header.Coinbase)
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetPunishAddr(header.Number, c.chainConfig), nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-	if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-		log.Error("Can't punish validator", "err", err)
-		return err
-	}
-
-	return nil
-}
-
-func (c *Chaos) decreaseMissedBlocksCounter(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	// method
-	method := "decreaseMissedBlocksCounter"
-	data, err := c.abi[sysabi.PunishContractName].Pack(method, new(big.Int).SetUint64(c.config.Epoch))
-	if err != nil {
-		log.Error("Can't pack data for decreaseMissedBlocksCounter", "error", err)
-		return err
-	}
-
-	// call contract
-	nonce := state.GetNonce(header.Coinbase)
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetPunishAddr(header.Number, c.chainConfig), nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-	if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-		log.Error("Can't decrease missed blocks counter for validator", "err", err)
-		return err
-	}
-
-	return nil
-}
-
-// Authorize injects a private key into the consensus engine to mint new blocks
-// with.
+// Authorize injects a private key into the consensus engine to mint new blocks with.
 func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn SignTxFn) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
@@ -974,12 +767,73 @@ func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn
 	c.isStartAttestation = true
 }
 
+// punishDoubleSign punishes double sign attack in casper ffg
+func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
+	if !mined {
+		// handle violating CasperFFG rules
+		totalTxIndex := len(punishTxs)
+		for i := uint32(0); i < uint32(totalTxIndex); i++ {
+			log.Debug("Received a pending penalty", "Number", header.Number.Uint64())
+			// execute the doubleSignPunish
+			// If one transaction fails to execute, the whole block will be discarded
+			tx := punishTxs[int(i)]
+			receipt, err := c.replayDoubleSignPunish(chain, header, state, totalTxIndex, tx)
+			if err != nil {
+				return err
+			}
+			*txs = append(*txs, tx)
+			*receipts = append(*receipts, receipt)
+		}
+	} else if c.signTxFn != nil {
+		// Note:
+		// Even if the miner is not `running`, it's still working,
+		// the 'miner.worker' will try to FinalizeAndAssemble a block,
+		// in this case, the signTxFn is not set. A `non-miner node` can't execute tx.
+
+		// Add penalty transactions for violating CasperFFG rules
+		punishList := rawdb.ReadAllViolateCasperFFGPunish(c.db)
+		if len(punishList) > 0 {
+			var punishNeedDelList []*types.ViolateCasperFFGPunish
+			for _, p := range punishList {
+				val, err := p.RecoverSigner()
+				if err != nil {
+					continue
+				}
+				b, err := c.IsDoubleSignPunished(chain, header, state, p.Hash())
+				if err != nil {
+					log.Error("IsDoubleSignPunished error", "error", err.Error())
+					return err
+				}
+				if !b {
+					// execute the Punish.sol doubleSignPunish
+					tx, receipt, err := c.executeDoubleSignPunish(chain, header, state, p, len(punishList))
+					if err != nil {
+						log.Error("executeDoubleSignPunish error", "error", err.Error())
+						return err
+					}
+					*txs = append(*txs, tx)
+					*receipts = append(*receipts, receipt)
+					log.Debug("executeDoubleSignPunish", "Violator", val, "Number", header.Number.Uint64())
+				}
+				punishNeedDelList = append(punishNeedDelList, p)
+			}
+			rawdb.DeleteViolateCasperFFGPunishList(c.db, &punishNeedDelList) // TODO Will asynchronous data inconsistency be involved? Cause asynchronous newly inserted data to be deleted?
+		}
+	}
+	return nil
+}
+
 func (c *Chaos) StartAttestation() {
 	c.isStartAttestation = true
 }
 
 func (c *Chaos) StopAttestation() {
 	c.isStartAttestation = false
+}
+
+func (c *Chaos) ClearAllViolateCasperFFGPunish() {
+	rawdb.ClearAllViolateCasperFFGPunish(c.db)
 }
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
@@ -1143,38 +997,10 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 }
 
 func (c *Chaos) PreHandle(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	if header.Number.Int64() == 3 {
-		return systemcontract.ApplySystemContractUpgrade(systemcontract.SysContractV1, state, header, newChainContext(chain, c), c.chainConfig)
-	}
 	return nil
 }
 
-func (c *Chaos) commonCallContract(header *types.Header, statedb *state.StateDB, contractABI abi.ABI, addr common.Address, method string, expectResultLen int, args ...interface{}) ([]interface{}, error) {
-	data, err := contractABI.Pack(method, args...)
-	if err != nil {
-		log.Error("Can't pack data ", "method", method, "err", err)
-		return nil, err
-	}
-
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, &addr, 0, new(big.Int), math.MaxUint64, new(big.Int), data, false)
-
-	// Note: It's safe to use minimalChainContext for executing AddressListContract
-	result, err := vmcaller.ExecuteMsg(msg, statedb, header, newMinimalChainContext(c), c.chainConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	// unpack data
-	ret, err := contractABI.Unpack(method, result)
-	if err != nil {
-		return nil, err
-	}
-	if len(ret) != expectResultLen {
-		return nil, errors.New("invalid result length")
-	}
-	return ret, nil
-}
-
+// CalculateGasPool determines gas limit of each block
 func (c *Chaos) CalculateGasPool(header *types.Header) uint64 {
 	idxInturn := header.Number.Uint64() % params.ContinousInturn
 	if idxInturn == 0 || idxInturn == params.ContinousInturn-1 {

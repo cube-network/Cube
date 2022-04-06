@@ -42,7 +42,7 @@ var CheckpointOracles = map[common.Hash]*CheckpointOracleConfig{}
 var (
 	// MainnetChainConfig is the chain parameters to run a node on the main network.
 	MainnetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(128),
+		ChainID:             big.NewInt(1818),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      true,
@@ -68,7 +68,7 @@ var (
 
 	// TestnetChainConfig contains the chain parameters to run a node on the YOLOv1 test network.
 	TestnetChainConfig = &ChainConfig{
-		ChainID:             big.NewInt(256),
+		ChainID:             big.NewInt(1819),
 		HomesteadBlock:      big.NewInt(0),
 		DAOForkBlock:        nil,
 		DAOForkSupport:      true,
@@ -247,8 +247,7 @@ type ChaosConfig struct {
 	EnableDevVerification bool `json:"enableDevVerification"` // Enable developer address verification
 	// AttestationDelay is the delay number for a validator to provide an attestation.
 	// That is: only attest to a block which height is ≤ `currentHead - AttestationDelay`
-	AttestationDelay uint64         `json:"attestationDelay"`
-	SysContractAdmin common.Address `json:"sysContractAdmin,omitempty"` // admin address of system contracts for a private chain, ONLY used by develop or private chain.
+	AttestationDelay uint64 `json:"attestationDelay"`
 }
 
 // String implements the stringer interface, returning the consensus engine details.

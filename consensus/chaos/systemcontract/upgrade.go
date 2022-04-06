@@ -3,8 +3,6 @@ package systemcontract
 import (
 	"math/big"
 
-	v3 "github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/v3"
-
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -17,12 +15,7 @@ const (
 )
 
 var sysContracts map[SysContractVersion][]IUpgradeAction = map[SysContractVersion][]IUpgradeAction{
-	SysContractV1: {
-		&hardForkValidatorsV1{},
-		&hardForkPunishV1{},
-		&hardForkValidatorsV2{},
-		&v3.HardForkPunish{},
-	},
+	SysContractV1: {},
 }
 
 type SysContractVersion int

@@ -90,7 +90,7 @@ type GenesisAccount struct {
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
 	Balance    *big.Int                    `json:"balance"            gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
-	Init       Init                        `json:"init,omitempty"`
+	Init       *Init                       `json:"init,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
@@ -126,6 +126,26 @@ type ValidatorInfo struct {
 	Rate             *big.Int       `json:"rate,omitempty"`
 	Stake            *big.Int       `json:"stake,omitempty"`
 	AcceptDelegation bool           `json:"acceptDelegation,omitempty"`
+}
+
+// makeValidator creates ValidatorInfo
+func makeValidator(address, manager, rate, stake string, acceptDelegation bool) ValidatorInfo {
+	rateNum, ok := new(big.Int).SetString(rate, 10)
+	if !ok {
+		panic("Failed to make validator info due to invalid rate")
+	}
+	stakeNum, ok := new(big.Int).SetString(stake, 10)
+	if !ok {
+		panic("Failed to make validator info due to invalid stake")
+	}
+
+	return ValidatorInfo{
+		Address:          common.HexToAddress(address),
+		Manager:          common.HexToAddress(manager),
+		Rate:             rateNum,
+		Stake:            stakeNum,
+		AcceptDelegation: acceptDelegation,
+	}
 }
 
 // field type overrides for gencodec
@@ -356,21 +376,19 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	}
 
 	// init system contract
-	gVMEnv := &genesisVMEnv{statedb, head, g}
-	if err = gVMEnv.initStaking(); err != nil {
-		log.Crit("Failed to init staking contract", "err", err)
+	gInit := &genesisInit{statedb, head, g}
+	sysContractsInitMap := map[string]func() error{"Staking": gInit.initStaking, "CommunityPool": gInit.initCommunityPool,
+		"BonusPool": gInit.initBonusPool, "GenesisLock": gInit.initGenesisLock}
+
+	for name, initFunc := range sysContractsInitMap {
+		if err = initFunc(); err != nil {
+			log.Crit("Failed to init system contract", "contract", name, "err", err)
+		}
 	}
-	if err = gVMEnv.initCommunityPool(); err != nil {
-		log.Crit("Failed to init staking contract", "err", err)
-	}
-	if err = gVMEnv.initBonusPool(); err != nil {
-		log.Crit("Failed to init staking contract", "err", err)
-	}
-	if err = gVMEnv.initGenesisLock(); err != nil {
-		log.Crit("Failed to init staking contract", "err", err)
-	}
-	if head.Extra, err = gVMEnv.initValidators(); err != nil {
-		log.Crit("Failed to init staking contract", "err", err)
+
+	// Set validoter info
+	if head.Extra, err = gInit.initValidators(); err != nil {
+		log.Crit("Failed to init Validators", "err", err)
 	}
 
 	// Update root after execution
@@ -435,10 +453,13 @@ func DefaultGenesisBlock() *Genesis {
 		Config:     params.MainnetChainConfig,
 		Nonce:      0,
 		Timestamp:  0x5fc58968,
-		ExtraData:  hexutil.MustDecode("0x0000000000000000000000000000000000000000000000000000000000000000fc20f6a8a1a65a91f838247b4f460437a5a68bca0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
 		GasLimit:   0x280de80,
 		Difficulty: big.NewInt(1),
 		Alloc:      decodePrealloc(mainnetAllocData),
+		Validators: []ValidatorInfo{
+			makeValidator("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0", "0x352BbF453fFdcba6b126a73eD684260D7968dDc8", "20", "350000000000000000000", true),
+		},
 	}
 }
 
@@ -446,11 +467,14 @@ func DefaultTestnetGenesisBlock() *Genesis {
 	return &Genesis{
 		Config: params.TestnetChainConfig,
 		//Timestamp:  0x5fc58968,
-		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000006301cdf018e8678067cf8f14ab99f6f2a906db44ba15350a03e67247704925fdec4f4f4ca844f45897205d7a7181d3918b27050c3be5e9dcbb6d21b257ba191a2ca47436e6444b6822f07fbdc613265db5f5493bcde2e1b179db904ed89ec5368e444d500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
 		GasLimit:   0x280de80,
 		Difficulty: big.NewInt(1),
 		Alloc:      decodePrealloc(testnetAllocData),
 		Mixhash:    common.Hash{},
+		Validators: []ValidatorInfo{
+			makeValidator("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0", "0x352BbF453fFdcba6b126a73eD684260D7968dDc8", "20", "350000000000000000000", true),
+		},
 	}
 }
 
@@ -520,17 +544,71 @@ func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 }
 
 func decodePrealloc(data string) GenesisAlloc {
+	type locked struct {
+		UserAddress  *big.Int
+		TypeId       *big.Int
+		LockedAmount *big.Int
+		LockedTime   *big.Int
+		PeriodAmount *big.Int
+	}
+
+	type initArgs struct {
+		Admin           *big.Int
+		StakingContract *big.Int
+		FirstLockPeriod *big.Int
+		ReleasePeriod   *big.Int
+		ReleaseCnt      *big.Int
+		TotalRewards    *big.Int
+		RewardsPerBlock *big.Int
+		Epoch           *big.Int
+		RuEpoch         *big.Int
+		CommunityPool   *big.Int
+		BonusPool       *big.Int
+		LockedAccounts  []locked
+	}
+
 	var p []struct {
 		Addr    *big.Int
 		Balance *big.Int
 		Code    []byte
+		Init    *initArgs
 	}
+
 	if err := rlp.NewStream(strings.NewReader(data), 0).Decode(&p); err != nil {
 		panic(err)
 	}
 	ga := make(GenesisAlloc, len(p))
 	for _, account := range p {
-		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance, Code: account.Code}
+		var init *Init
+		if account.Init != nil {
+			init = &Init{
+				Admin:           common.BigToAddress(account.Init.Admin),
+				StakingContract: common.BigToAddress(account.Init.StakingContract),
+				FirstLockPeriod: account.Init.FirstLockPeriod,
+				ReleasePeriod:   account.Init.ReleasePeriod,
+				ReleaseCnt:      account.Init.ReleaseCnt,
+				TotalRewards:    account.Init.TotalRewards,
+				RewardsPerBlock: account.Init.RewardsPerBlock,
+				Epoch:           account.Init.Epoch,
+				RuEpoch:         account.Init.RuEpoch,
+				CommunityPool:   common.BigToAddress(account.Init.CommunityPool),
+				BonusPool:       common.BigToAddress(account.Init.BonusPool),
+			}
+			if len(account.Init.LockedAccounts) > 0 {
+				init.LockedAccounts = make([]LockedAccount, 0, len(account.Init.LockedAccounts))
+				for _, locked := range account.Init.LockedAccounts {
+					init.LockedAccounts = append(init.LockedAccounts,
+						LockedAccount{
+							UserAddress:  common.BigToAddress(locked.UserAddress),
+							TypeId:       locked.TypeId,
+							LockedAmount: locked.LockedAmount,
+							LockedTime:   locked.LockedTime,
+							PeriodAmount: locked.PeriodAmount,
+						})
+				}
+			}
+		}
+		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance, Code: account.Code, Init: init}
 	}
 	return ga
 }

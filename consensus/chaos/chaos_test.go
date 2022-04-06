@@ -14,7 +14,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/sysabi"
+	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -91,7 +92,7 @@ func (ap *testerAccountPool) checkpoint(header *types.Header, signers []string) 
 	for i, signer := range signers {
 		auths[i] = ap.address(signer)
 	}
-	sort.Sort(validatorsAscending(auths))
+	sort.Sort(systemcontract.AddrAscend(auths))
 	for i, auth := range auths {
 		copy(header.Extra[extraVanity+i*common.AddressLength:], auth.Bytes())
 	}
@@ -143,7 +144,7 @@ func (ap *testerAccountPool) genTx(change testerValidatorChange, nonce uint64, s
 		if err != nil {
 			return nil, err
 		}
-		return types.SignTx(types.NewTransaction(nonce, sysabi.ValidatorsV1ContractAddr, nil, 3000000, big.NewInt(params.GWei), data), signer, ap.admin)
+		return types.SignTx(types.NewTransaction(nonce, system.StakingContract, nil, 3000000, big.NewInt(params.GWei), data), signer, ap.admin)
 	case validatorInc:
 		method := "addMargin"
 		data, err := votepoolV2abi.Pack(method)
@@ -337,9 +338,8 @@ func TestChaos(t *testing.T) {
 			epoch = 2
 		}
 		config.Chaos = &params.ChaosConfig{
-			Period:           1,
-			Epoch:            epoch,
-			SysContractAdmin: accounts.adminAddr,
+			Period: 1,
+			Epoch:  epoch,
 		}
 
 		// Create the genesis block with the initial set of signers

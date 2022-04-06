@@ -12,32 +12,279 @@ import (
 
 const (
 	// StakingABI contains methods to interactive with Staking contract.
-	StakingABI = `
-	[
-		
-	]
-	`
+	StakingABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_admin",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_firstLockPeriod",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_releasePeriod",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_releaseCnt",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_totalRewards",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_rewardsPerBlock",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_epoch",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_ruEpoch",
+					"type": "uint256"
+				},
+				{
+					"internalType": "address payable",
+					"name": "_communityPool",
+					"type": "address"
+				},
+				{
+					"internalType": "contract IBonusPool",
+					"name": "_bonusPool",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_val",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "_manager",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_rate",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "_stakeEth",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bool",
+					"name": "_acceptDelegation",
+					"type": "bool"
+				}
+			],
+			"name": "initValidator",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint8",
+					"name": "_count",
+					"type": "uint8"
+				}
+			],
+			"name": "getTopValidators",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address[]",
+					"name": "newSet",
+					"type": "address[]"
+				}
+			],
+			"name": "updateActiveValidatorSet",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "decreaseMissedBlocksCounter",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "_rewardsPerBlock",
+					"type": "uint256"
+				}
+			],
+			"name": "updateRewardsInfo",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "distributeBlockFee",
+			"outputs": [],
+			"stateMutability": "payable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "bytes32",
+					"name": "punishHash",
+					"type": "bytes32"
+				}
+			],
+			"name": "isDoubleSignPunished",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_val",
+					"type": "address"
+				}
+			],
+			"name": "lazyPunish",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "bytes32",
+					"name": "_punishHash",
+					"type": "bytes32"
+				},
+				{
+					"internalType": "address",
+					"name": "_val",
+					"type": "address"
+				}
+			],
+			"name": "doubleSignPunish",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]`
 
 	// CommunityPoolABI contains methods to interactive with CommunityPool contract.
-	CommunityPoolABI = `
-	[
-		
-	]
-	`
+	CommunityPoolABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_admin",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]`
 
 	// BonusPoolABI contains methods to interactive with BonusPool contract.
-	BonusPoolABI = `
-	[
-		
-	]
-	`
+	BonusPoolABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_stakingContract",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "payable",
+			"type": "function"
+		}
+	]`
 
 	// GenesisLockABI contains methods to interactive with GenesisLock contract.
-	GenesisLockABI = `
-	[
-		
-	]
-	`
+	GenesisLockABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address[]",
+					"name": "userAddress",
+					"type": "address[]"
+				},
+				{
+					"internalType": "uint256[]",
+					"name": "typeId",
+					"type": "uint256[]"
+				},
+				{
+					"internalType": "uint256[]",
+					"name": "lockedAmount",
+					"type": "uint256[]"
+				},
+				{
+					"internalType": "uint256[]",
+					"name": "lockedTime",
+					"type": "uint256[]"
+				},
+				{
+					"internalType": "uint256[]",
+					"name": "periodAmount",
+					"type": "uint256[]"
+				}
+			],
+			"name": "init",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]`
 )
 
 var (
@@ -53,17 +300,16 @@ var (
 func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
 
-	stakingABI, _ := abi.JSON(strings.NewReader(StakingABI))
-	abiMap[StakingContract] = stakingABI
+	rawAbiMap := map[common.Address]string{StakingContract: StakingABI, CommunityPoolContract: CommunityPoolABI,
+		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI}
 
-	communityPoolABI, _ := abi.JSON(strings.NewReader(CommunityPoolABI))
-	abiMap[CommunityPoolContract] = communityPoolABI
-
-	bonusPoolABI, _ := abi.JSON(strings.NewReader(BonusPoolABI))
-	abiMap[BonusPoolContract] = bonusPoolABI
-
-	genesisLockABI, _ := abi.JSON(strings.NewReader(GenesisLockABI))
-	abiMap[GenesisLockContract] = genesisLockABI
+	for addr, rawAbi := range rawAbiMap {
+		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {
+			panic(err)
+		} else {
+			abiMap[addr] = abi
+		}
+	}
 }
 
 // ABI return abi for given contract calling

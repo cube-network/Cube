@@ -2,15 +2,13 @@ package chaos
 
 import (
 	"errors"
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/sysabi"
-	v3 "github.com/ethereum/go-ethereum/consensus/chaos/systemcontract/v3"
-	"github.com/ethereum/go-ethereum/consensus/chaos/vmcaller"
+	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -167,7 +165,7 @@ func (c *Chaos) executeDoubleSignPunish(chain consensus.ChainHeaderReader, heade
 		return nil, nil, errors.New("signTxFn not set")
 	}
 
-	p.PunishAddr = *sysabi.GetPunishAddr(header.Number, c.chainConfig)
+	p.PunishAddr = system.StakingContract
 	p.Plaintiff = c.validator
 	signer, err := p.RecoverSigner()
 	if err != nil {
@@ -184,7 +182,7 @@ func (c *Chaos) executeDoubleSignPunish(chain consensus.ChainHeaderReader, heade
 	nonce := state.GetNonce(c.validator)
 
 	// Special to address for filtering transactions
-	tx := types.NewTransaction(nonce, sysabi.DoubleSignPunishToAddr, new(big.Int), header.GasLimit, new(big.Int), pRLP)
+	tx := types.NewTransaction(nonce, system.StakingContract, new(big.Int), header.GasLimit, new(big.Int), pRLP)
 	tx, err = c.signTxFn(accounts.Account{Address: c.validator}, tx, chain.Config().ChainID)
 	if err != nil {
 		return nil, nil, err
@@ -237,36 +235,12 @@ func (c *Chaos) replayDoubleSignPunish(chain consensus.ChainHeaderReader, header
 // IsDoubleSignPunished Execute the query of punishment contract to judge whether the punishment hash of the current query has been punished
 func (c *Chaos) IsDoubleSignPunished(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, punishHash common.Hash) (bool, error) {
 	// isDoubleSignPunished(bytes32 punishHash) public view returns (bool)
-	method := "isDoubleSignPunished"
-	contractAddr := sysabi.GetPunishAddr(header.Number, c.chainConfig)
-	data, err := v3.GetPunishContractAbi().Pack(method, punishHash)
-	if err != nil {
-		log.Error("Can't pack data for getPassedProposalCount", "error", err)
-		return false, err
-	}
-
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, contractAddr, 0, new(big.Int), math.MaxUint64, new(big.Int), data, false)
-
-	// use parent
-	result, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig)
-	if err != nil {
-		return false, err
-	}
-
-	// unpack data
-	ret, err := v3.GetPunishContractAbi().Unpack(method, result)
-	if err != nil {
-		return false, err
-	}
-	if len(ret) != 1 {
-		return false, errors.New("invalid output length")
-	}
-	bResult, ok := ret[0].(bool)
-	if !ok {
-		return false, errors.New("invalid count format")
-	}
-
-	return bResult, nil
+	return systemcontract.IsDoubleSignPunished(&systemcontract.CallContext{
+		Statedb:      state,
+		Header:       header,
+		ChainContext: newChainContext(chain, c),
+		ChainConfig:  c.chainConfig,
+	}, punishHash)
 }
 
 // Execute multi sign penalty transaction in EVM
@@ -275,7 +249,7 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 
 	state.Prepare(txHash, totalTxIndex)
 	pLog := &types.Log{
-		Address:     sysabi.DoubleSignPunishToAddr,
+		Address:     system.StakingContract,
 		Topics:      []common.Hash{executedDoubleSignPunishTopic, p.Plaintiff.Hash(), p.Defendant.Hash(), common.BigToHash(p.PunishType)},
 		Data:        p.Data,
 		BlockNumber: header.Number.Uint64(),
@@ -283,10 +257,16 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 	state.AddLog(pLog)
 
 	// must succeed
-	err := c.doubleSignPunish(chain, header, state, p.Hash(), p.Defendant)
+	err := systemcontract.DoubleSignPunish(&systemcontract.CallContext{
+		Statedb:      state,
+		Header:       header,
+		ChainContext: newChainContext(chain, c),
+		ChainConfig:  c.chainConfig,
+	}, p.Hash(), p.Defendant)
 	if err != nil {
 		return nil, err
 	}
+
 	receipt = types.NewReceipt([]byte{}, err != nil, header.GasUsed)
 	log.Info("executeDoubleSignPunishMsg", "Plaintiff", p.Plaintiff, "Defendant", p.Defendant, "pushHash", p.Hash().String(), "success", true)
 
@@ -300,43 +280,23 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 	return receipt, nil
 }
 
-// function doubleSignPunish(bytes32 punishHash, address val)
-func (c *Chaos) doubleSignPunish(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, punishHash common.Hash, val common.Address) error {
-	// method
-	method := "doubleSignPunish"
-	data, err := v3.GetPunishContractAbi().Pack(method, punishHash, val)
-	if err != nil {
-		log.Error("Can't pack data for doubleSignPunish", "error", err)
-		return err
-	}
-
-	// call contract
-	nonce := state.GetNonce(header.Coinbase)
-	msg := vmcaller.NewLegacyMessage(header.Coinbase, sysabi.GetPunishAddr(header.Number, c.chainConfig), nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-	if _, err := vmcaller.ExecuteMsg(msg, state, header, newChainContext(chain, c), c.chainConfig); err != nil {
-		log.Error("Can't decrease double sign counter for validator", "err", err)
-		return err
-	}
-
-	return nil
-}
-
 // IsDoubleSignPunishTransaction Judge whether the transaction is a multi sign penalty transaction.
 // Due to the particularity of transaction data, a special to address is used to distinguish
 func (c *Chaos) IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error) {
-	if tx.To() == nil {
+	if tx.To() == nil || len(tx.Data()) < 4 {
 		return false, nil
 	}
 
 	to := tx.To()
-	if sender == header.Coinbase && *to == sysabi.DoubleSignPunishToAddr && tx.GasPrice().Sign() == 0 {
+	if sender == header.Coinbase && *to == system.StakingContract && tx.GasPrice().Sign() == 0 &&
+		systemcontract.IsCallingDoubleSignPunish(header, c.chainConfig, tx.Data()) {
 		return true, nil
 	}
 	return false, nil
 }
 
 // ApplyDoubleSignPunishTx TODO
-func (c *Chaos) ApplyDoubleSignPunishTx(evm *vm.EVM, state *state.StateDB, txIndex int, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error) {
+func (c *Chaos) ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error) {
 	p := &types.ViolateCasperFFGPunish{}
 	if err = rlp.DecodeBytes(tx.Data(), p); err != nil {
 		return
@@ -344,23 +304,10 @@ func (c *Chaos) ApplyDoubleSignPunishTx(evm *vm.EVM, state *state.StateDB, txInd
 	nonce := evm.StateDB.GetNonce(sender)
 	//add nonce for validator
 	evm.StateDB.SetNonce(sender, nonce+1)
-
-	// method
-	method := "doubleSignPunish"
-	data, err := v3.GetPunishContractAbi().Pack(method, p.Hash(), p.Defendant)
-	if err != nil {
-		log.Error("Can't pack data for doubleSignPunish", "error", err)
-		return nil, nil, err
-	}
-
-	// call contract
-	msg := vmcaller.NewLegacyMessage(p.Plaintiff, &p.PunishAddr, nonce, new(big.Int), math.MaxUint64, new(big.Int), data, true)
-	state.Prepare(tx.Hash(), txIndex)
 	evm.TxContext = vm.TxContext{
-		Origin:   msg.From(),
-		GasPrice: new(big.Int).Set(msg.GasPrice()),
+		Origin:   p.Plaintiff,
+		GasPrice: new(big.Int).Set(big.NewInt(0)),
 	}
-	ret, _, vmerr = evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
-	state.Finalise(true)
-	return nil, nil, nil
+	err = systemcontract.DoubleSignPunishGivenEVM(evm, p.Plaintiff, p.Hash(), p.Defendant)
+	return nil, nil, err
 }

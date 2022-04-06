@@ -135,8 +135,8 @@ type PoW interface {
 	Hashrate() float64
 }
 
-// PoSA is a consensus engine based on proof-of-stake-authority.
-type PoSA interface {
+// ChaosEngine is a consensus engine based on delegate proof-of-stake and BFT.
+type ChaosEngine interface {
 	Engine
 
 	// PreHandle runs any pre-transaction state modifications (e.g. apply hard fork rules).
@@ -173,8 +173,10 @@ type PoSA interface {
 	VerifyCasperFFGRule(beforeSourceNum uint64, beforeTargetNum uint64, afterSourceNum uint64, afterTargetNum uint64) int
 	// IsDoubleSignPunishTransaction checks whether a specific transaction is a system transaction.
 	IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error)
+
 	IsDoubleSignPunished(chain ChainHeaderReader, header *types.Header, state *state.StateDB, punishHash common.Hash) (bool, error)
-	ApplyDoubleSignPunishTx(evm *vm.EVM, state *state.StateDB, txIndex int, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
+
+	ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
 }
 
 type StateReader interface {

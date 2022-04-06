@@ -84,9 +84,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
 	// Iterate over and process the individual transactions
-	posa, isPoSA := p.engine.(consensus.PoSA)
-	if isPoSA {
-		if err := posa.PreHandle(p.bc, header, statedb); err != nil {
+	chaosEngine, isChaosEngine := p.engine.(consensus.ChaosEngine)
+	if isChaosEngine {
+		if err := chaosEngine.PreHandle(p.bc, header, statedb); err != nil {
 			return nil, nil, 0, err
 		}
 	}
@@ -106,12 +106,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	commonTxs := make([]*types.Transaction, 0, len(block.Transactions()))
 	punishTxs := make([]*types.Transaction, 0)
 	for i, tx := range block.Transactions() {
-		if isPoSA {
+		if isChaosEngine {
 			sender, err := types.Sender(signer, tx)
 			if err != nil {
 				return nil, nil, 0, err
 			}
-			ok, err := posa.IsDoubleSignPunishTransaction(sender, tx, header)
+			ok, err := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
 			if err != nil {
 				return nil, nil, 0, err
 			}

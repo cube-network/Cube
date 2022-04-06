@@ -107,7 +107,7 @@ func (bc *BlockChain) attestationHandleLoop() {
 // When enough new block certificates are not received, the node continues to create the above certificates until the
 // qualified or finalized block state of the new block is received, and then the network returns to normal
 func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attestation, error) {
-	currentNeedHandleHeight, err := bc.Posa.CurrentNeedHandleHeight(headNum.Uint64())
+	currentNeedHandleHeight, err := bc.ChaosEngine.CurrentNeedHandleHeight(headNum.Uint64())
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +125,7 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 			Hash:   targetBlock.Hash(),
 			Number: targetBlock.Number(),
 		}
-		return bc.Posa.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), re, target)
+		return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), re, target)
 	}
 	// Self recovery
 	if currentNeedHandleHeight > unableSureBlockStateInterval {
@@ -138,7 +138,7 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 				Hash:   targetBlock.Hash(),
 				Number: targetBlock.Number(),
 			}
-			return bc.Posa.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
+			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
 		}
 	}
 	// TODO retry
@@ -159,7 +159,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 		log.Error(err.Error())
 		return
 	}
-	if bc.Posa.IsReadyAttest(head.Number) {
+	if bc.ChaosEngine.IsReadyAttest(head.Number) {
 		// From the perspective of the current node itself, all it can do is create
 		// attestation in turn, and it cannot initiate across heights
 		a, err := bc.bestAttestationToProcessed(head.Number)
@@ -180,12 +180,12 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 		}
 		log.Debug("Create a attestation", "SourceNum", a.SourceRangeEdge.Number.Uint64(),
 			"TargetNum", a.TargetRangeEdge.Number.Uint64())
-		threshold, err := bc.Posa.AttestationThreshold(bc, a.TargetRangeEdge.Hash, a.TargetRangeEdge.Number.Uint64())
+		threshold, err := bc.ChaosEngine.AttestationThreshold(bc, a.TargetRangeEdge.Hash, a.TargetRangeEdge.Number.Uint64())
 		if err != nil {
 			log.Error(err.Error())
 			return
 		}
-		err = bc.AddOneValidAttestationToRecentCache(a, threshold, bc.Posa.CurrentValidator())
+		err = bc.AddOneValidAttestationToRecentCache(a, threshold, bc.ChaosEngine.CurrentValidator())
 		if err != nil {
 			log.Error(err.Error())
 			return
@@ -230,7 +230,7 @@ func (bc *BlockChain) StoreLastAttested(num *big.Int) {
 	if num.Cmp(last) <= 0 {
 		return
 	}
-	rawdb.WriteLastAttestNumber(bc.db, bc.Posa.CurrentValidator(), num)
+	rawdb.WriteLastAttestNumber(bc.db, bc.ChaosEngine.CurrentValidator(), num)
 	bc.currentAttestedNumber.Store(new(big.Int).Set(num))
 }
 
@@ -253,7 +253,7 @@ func (bc *BlockChain) AddOneAttestationToRecentCache(a *types.Attestation, signe
 	if isExist {
 		return nil
 	}
-	_, threshold, err := bc.Posa.VerifyAttestation(bc, a)
+	_, threshold, err := bc.ChaosEngine.VerifyAttestation(bc, a)
 	if err != nil && !isTest {
 		return err
 	}
@@ -442,7 +442,7 @@ func (bc *BlockChain) VerifyCasperFFGRecentCache(a *types.Attestation, signer co
 	if found {
 		cfhList := blob.(types.CasperFFGHistoryList)
 		for _, h := range cfhList {
-			ruleType := bc.Posa.VerifyCasperFFGRule(a.SourceRangeEdge.Number.Uint64(), a.TargetRangeEdge.Number.Uint64(),
+			ruleType := bc.ChaosEngine.VerifyCasperFFGRule(a.SourceRangeEdge.Number.Uint64(), a.TargetRangeEdge.Number.Uint64(),
 				h.SourceNum.Uint64(), h.TargetNum.Uint64())
 			if ruleType != types.PunishNone {
 				p, err := bc.GetHistoryOneAttestation(h.TargetNum, h.TargetHash, h.AttestationHash)
@@ -479,7 +479,7 @@ func (bc *BlockChain) VerifyCasperFFGRecentCache(a *types.Attestation, signer co
 // ViolationCasperFFGExecutePunish The proof data to be punished will be stored persistently. When mining blocks at the current node,
 // the data to be punished will be assembled into corresponding punishment transactions and placed in the new block
 func (bc *BlockChain) ViolationCasperFFGExecutePunish(before *types.Attestation, after *types.Attestation, punishType int, blockNum *big.Int) error {
-	return rawdb.WriteViolateCasperFFGPunish(bc.Posa.GetDb(), before, after, punishType, blockNum)
+	return rawdb.WriteViolateCasperFFGPunish(bc.ChaosEngine.GetDb(), before, after, punishType, blockNum)
 }
 
 func (bc *BlockChain) VerifyLowerLimit(num uint64, currentNum uint64) bool {
@@ -524,7 +524,7 @@ func (bc *BlockChain) IsExistsFutureCache(a *types.Attestation) bool {
 }
 
 func (bc *BlockChain) IsReadyProcessAttestation(num *big.Int) bool {
-	return bc.isPosa
+	return bc.isChaosEngine
 }
 
 func (bc *BlockChain) VerifyLocalDataCheck(a *types.Attestation, number uint64) bool {
@@ -563,7 +563,7 @@ func (bc *BlockChain) UpdateCurrentEpochBPList(hash common.Hash, number uint64) 
 	}
 	newCurrentEpochIndex := bc.CalculateCurrentEpochIndex(number)
 	if last == nil || last.CurrentEpochIndex.Uint64() < newCurrentEpochIndex {
-		bps, err := bc.Posa.Validators(bc, hash, number)
+		bps, err := bc.ChaosEngine.Validators(bc, hash, number)
 		if err != nil {
 			return err
 		}
@@ -576,7 +576,7 @@ func (bc *BlockChain) UpdateCurrentEpochBPList(hash common.Hash, number uint64) 
 			epoch := bc.chainConfig.Chaos.Epoch
 			if number > epoch {
 				block := bc.GetBlockByNumber(number - epoch)
-				lastBps, err := bc.Posa.Validators(bc, block.Hash(), block.NumberU64())
+				lastBps, err := bc.ChaosEngine.Validators(bc, block.Hash(), block.NumberU64())
 				if err != nil {
 					return err
 				}

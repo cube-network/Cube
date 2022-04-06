@@ -39,10 +39,35 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+type initArgs struct {
+	Admin           *big.Int
+	StakingContract *big.Int
+	FirstLockPeriod *big.Int
+	ReleasePeriod   *big.Int
+	ReleaseCnt      *big.Int
+	TotalRewards    *big.Int
+	RewardsPerBlock *big.Int
+	Epoch           *big.Int
+	RuEpoch         *big.Int
+	CommunityPool   *big.Int
+	BonusPool       *big.Int
+	LockedAccounts  []lockedAccount
+}
+
+// LockedAccount represents the info of the locked account
+type lockedAccount struct {
+	UserAddress  *big.Int
+	TypeId       *big.Int
+	LockedAmount *big.Int
+	LockedTime   *big.Int
+	PeriodAmount *big.Int
+}
+
 type allocItem struct {
 	Addr    *big.Int
 	Balance *big.Int
 	Code    []byte
+	Init    *initArgs
 }
 
 type allocList []allocItem
@@ -57,8 +82,30 @@ func makelist(g *core.Genesis) allocList {
 		if len(account.Storage) > 0 || account.Nonce != 0 {
 			panic(fmt.Sprintf("can't encode account %x", addr))
 		}
+		init := &initArgs{}
+		if account.Init != nil {
+			init.Admin = new(big.Int).SetBytes(account.Init.Admin.Bytes())
+			init.StakingContract = new(big.Int).SetBytes(account.Init.StakingContract.Bytes())
+			init.FirstLockPeriod = account.Init.FirstLockPeriod
+			init.ReleasePeriod = account.Init.ReleasePeriod
+			init.ReleaseCnt = account.Init.ReleaseCnt
+			init.TotalRewards = account.Init.TotalRewards
+			init.RewardsPerBlock = account.Init.RewardsPerBlock
+			init.Epoch = account.Init.Epoch
+			init.RuEpoch = account.Init.RuEpoch
+			init.CommunityPool = new(big.Int).SetBytes(account.Init.CommunityPool.Bytes())
+			init.BonusPool = new(big.Int).SetBytes(account.Init.BonusPool.Bytes())
+			if len(account.Init.LockedAccounts) > 0 {
+				lockeds := make([]lockedAccount, 0, len(account.Init.LockedAccounts))
+				for _, locked := range account.Init.LockedAccounts {
+					lockeds = append(lockeds, lockedAccount{new(big.Int).SetBytes(locked.UserAddress.Bytes()),
+						locked.TypeId, locked.LockedAmount, locked.LockedTime, locked.PeriodAmount})
+				}
+				init.LockedAccounts = lockeds
+			}
+		}
 		bigAddr := new(big.Int).SetBytes(addr.Bytes())
-		a = append(a, allocItem{bigAddr, account.Balance, account.Code})
+		a = append(a, allocItem{bigAddr, account.Balance, account.Code, init})
 	}
 	sort.Sort(a)
 	return a

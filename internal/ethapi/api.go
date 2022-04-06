@@ -816,31 +816,31 @@ func (s *PublicBlockChainAPI) GetBlockByHash(ctx context.Context, hash common.Ha
 }
 
 func (s *PublicBlockChainAPI) GetDoubleSignPunishTransactionsByBlockNumber(ctx context.Context, number rpc.BlockNumber) ([]*RPCTransaction, error) {
-	posa, isPoSA := s.b.Engine().(consensus.PoSA)
-	if !isPoSA {
-		return nil, errors.New("not a PoSA engine")
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a ChaosEngine engine")
 	}
 
 	block, err := s.b.BlockByNumber(ctx, number)
 	if err != nil || block == nil {
 		return nil, err
 	}
-	return s.getDoubleSignPunishTransactions(block, posa)
+	return s.getDoubleSignPunishTransactions(block, chaosEngine)
 }
 
 func (s *PublicBlockChainAPI) GetDoubleSignPunishTransactionsByBlockHash(ctx context.Context, hash common.Hash) ([]*RPCTransaction, error) {
-	posa, isPoSA := s.b.Engine().(consensus.PoSA)
-	if !isPoSA {
-		return nil, errors.New("not a PoSA engine")
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a ChaosEngine engine")
 	}
 	block, err := s.b.BlockByHash(ctx, hash)
 	if err != nil || block == nil {
 		return nil, err
 	}
-	return s.getDoubleSignPunishTransactions(block, posa)
+	return s.getDoubleSignPunishTransactions(block, chaosEngine)
 }
 
-func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block, posa consensus.PoSA) ([]*RPCTransaction, error) {
+func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block, chaosEngine consensus.ChaosEngine) ([]*RPCTransaction, error) {
 	header := block.Header()
 	bhash := block.Hash()
 	bnumber := block.NumberU64()
@@ -849,7 +849,7 @@ func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block
 	signer := types.MakeSigner(s.b.ChainConfig(), header.Number)
 	for i, tx := range txs {
 		sender, _ := types.Sender(signer, tx)
-		if yes, _ := posa.IsDoubleSignPunishTransaction(sender, tx, header); yes {
+		if yes, _ := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); yes {
 			transactions = append(transactions, newRPCTransaction(tx, bhash, bnumber, uint64(i), nil, s.b.ChainConfig()))
 		}
 	}

@@ -17,13 +17,13 @@
 package chaos
 
 import (
-	"bytes"
 	"encoding/json"
 	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
@@ -40,13 +40,6 @@ type Snapshot struct {
 	Validators map[common.Address]struct{} `json:"validators"` // Set of authorized validators at this moment
 	Recents    map[uint64]common.Address   `json:"recents"`    // Set of recent validators for spam protections
 }
-
-// validatorsAscending implements the sort interface to allow sorting a list of addresses
-type validatorsAscending []common.Address
-
-func (s validatorsAscending) Len() int           { return len(s) }
-func (s validatorsAscending) Less(i, j int) bool { return bytes.Compare(s[i][:], s[j][:]) < 0 }
-func (s validatorsAscending) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 // newSnapshot creates a new snapshot with the specified startup parameters. This
 // method does not initialize the set of recent validators, so only ever use if for
@@ -221,7 +214,7 @@ func (s *Snapshot) validators() []common.Address {
 	for sig := range s.Validators {
 		sigs = append(sigs, sig)
 	}
-	sort.Sort(validatorsAscending(sigs))
+	sort.Sort(systemcontract.AddrAscend(sigs))
 	return sigs
 }
 

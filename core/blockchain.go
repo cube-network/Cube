@@ -214,8 +214,8 @@ type BlockChain struct {
 
 	shouldPreserve func(*types.Block) bool // Function used to determine whether should preserve the given block.
 
-	Posa                  consensus.PoSA
-	isPosa                bool
+	ChaosEngine           consensus.ChaosEngine
+	isChaosEngine         bool
 	currentAttestedNumber atomic.Value // Currently the latest attested block number that is stored in db
 	FutureAttessCache     *lru.Cache   // Future attestations are attestations added for later processing
 	RecentAttessCache     *lru.Cache   // Cache for the most recent attestations hashes, use it to skip duplicate-processing.
@@ -274,10 +274,10 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
 
-	bc.Posa, bc.isPosa = engine.(consensus.PoSA)
-	if bc.isPosa {
+	bc.ChaosEngine, bc.isChaosEngine = engine.(consensus.ChaosEngine)
+	if bc.isChaosEngine {
 		// load stored last attested number
-		currentAttested := rawdb.ReadLastAttestNumber(bc.db, bc.Posa.CurrentValidator()) // TODO db?
+		currentAttested := rawdb.ReadLastAttestNumber(bc.db, bc.ChaosEngine.CurrentValidator()) // TODO db?
 		bc.currentAttestedNumber.Store(currentAttested)
 		log.Info("last stored attested number", "num", currentAttested)
 
@@ -421,7 +421,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	go bc.futureBlocksLoop()
 
 	// Start attestation processor
-	if bc.isPosa {
+	if bc.isChaosEngine {
 		bc.wg.Add(1)
 		go bc.attestationHandleLoop()
 	}

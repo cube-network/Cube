@@ -86,14 +86,14 @@ type Backend interface {
 type API struct {
 	backend Backend
 
-	isPoSA bool
-	posa   consensus.PoSA
+	isChaosEngine bool
+	chaosEngine   consensus.ChaosEngine
 }
 
 // NewAPI creates a new API definition for the tracing methods of the Ethereum service.
 func NewAPI(backend Backend) *API {
-	posa, isPoSA := backend.Engine().(consensus.PoSA)
-	return &API{backend: backend, isPoSA: isPoSA, posa: posa}
+	chaosEngine, isChaosEngine := backend.Engine().(consensus.ChaosEngine)
+	return &API{backend: backend, isChaosEngine: isChaosEngine, chaosEngine: chaosEngine}
 }
 
 type chainContext struct {
@@ -221,7 +221,7 @@ type blockTraceResult struct {
 type txTraceTask struct {
 	statedb              *state.StateDB // Intermediate state prepped for tracing
 	index                int            // Transaction offset in the block
-	isDoubleSignPunishTx bool           // Is posa punish double sign transaction
+	isDoubleSignPunishTx bool           // Is chaos punish double sign transaction
 }
 
 // TraceChain returns the structured logs created during the execution of EVM
@@ -279,8 +279,8 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 				signer := types.MakeSigner(api.backend.ChainConfig(), task.block.Number())
 				header := task.block.Header()
 				blockCtx := core.NewEVMBlockContext(header, api.chainContext(localctx), nil)
-				if api.isPoSA {
-					_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
+				if api.isChaosEngine {
+					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
 				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
@@ -295,11 +295,11 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 						err                  error
 						isDoubleSignPunishTx bool
 					)
-					if api.isPoSA {
-						isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+					if api.isChaosEngine {
+						isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
 					}
 					if isDoubleSignPunishTx {
-						res, err = api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+						res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
 					} else {
 						res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 					}
@@ -616,8 +616,8 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		threads = len(txs)
 	}
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
-	if api.isPoSA {
-		_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+	if api.isChaosEngine {
+		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 	}
 	blockHash := block.Hash()
 	for th := 0; th < threads; th++ {
@@ -636,7 +636,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 				var err error
 				if task.isDoubleSignPunishTx {
 					tx := txs[task.index]
-					res, err = api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
 				} else {
 					res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 				}
@@ -652,9 +652,9 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	var failed error
 	for i, tx := range txs {
 		var isDoubleSignPunishTx bool
-		if api.isPoSA {
+		if api.isChaosEngine {
 			sender, _ := types.Sender(signer, tx)
-			isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(sender, tx, header)
+			isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
 		}
 		// Send the trace task over for execution
 		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i, isDoubleSignPunishTx: isDoubleSignPunishTx}
@@ -662,14 +662,14 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, api.backend.ChainConfig(), vm.Config{})
+		statedb.Prepare(tx.Hash(), i)
 		if isDoubleSignPunishTx {
-			if _, _, err := api.posa.ApplyDoubleSignPunishTx(vmenv, statedb, i, msg.From(), tx); err != nil {
+			if _, _, err := api.chaosEngine.ApplyDoubleSignPunishTx(vmenv, msg.From(), tx); err != nil {
 				failed = err
 				break
 			}
 			continue
 		}
-		statedb.Prepare(tx.Hash(), i)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
 			failed = err
 			break
@@ -733,8 +733,8 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		canon       = true
 		header      = block.Header()
 	)
-	if api.isPoSA {
-		_ = api.posa.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+	if api.isChaosEngine {
+		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 	}
 
 	// Check if there are any overrides: the caller may wish to enable a future
@@ -787,14 +787,14 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		}
 		// Execute the transaction and flush any traces to disk
 		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf)
+		statedb.Prepare(tx.Hash(), i)
 		var isDoubleSignPunishTx bool
-		if api.isPoSA {
-			isDoubleSignPunishTx, _ = api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+		if api.isChaosEngine {
+			isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
 		}
 		if isDoubleSignPunishTx {
-			_, _, err = api.posa.ApplyDoubleSignPunishTx(vmenv, statedb, i, msg.From(), tx)
+			_, _, err = api.chaosEngine.ApplyDoubleSignPunishTx(vmenv, msg.From(), tx)
 		} else {
-			statedb.Prepare(tx.Hash(), i)
 			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
 		}
 		if writer != nil {
@@ -858,10 +858,10 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 		TxIndex:   int(index),
 		TxHash:    hash,
 	}
-	if api.isPoSA {
+	if api.isChaosEngine {
 		tx := block.Transactions()[int(index)]
-		if ok, _ := api.posa.IsDoubleSignPunishTransaction(msg.From(), tx, block.Header()); ok {
-			return api.tracePoSAApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, vmctx, statedb, config)
+		if ok, _ := api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, block.Header()); ok {
+			return api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, vmctx, statedb, config)
 		}
 	}
 	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
@@ -972,7 +972,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 }
 
 // TODO Reuse code
-func (api *API) tracePoSAApplyDoubleSignPunishTx(ctx context.Context, sender common.Address, tx *types.Transaction, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
+func (api *API) traceChaosApplyDoubleSignPunishTx(ctx context.Context, sender common.Address, tx *types.Transaction, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
 	// Assemble the structured logger or the JavaScript tracer
 	var (
 		tracer vm.EVMLogger
@@ -1009,8 +1009,9 @@ func (api *API) tracePoSAApplyDoubleSignPunishTx(ctx context.Context, sender com
 	}
 	// Run the transaction with tracing enabled.
 	vmenvWithoutTxCtx := vm.NewEVM(vmctx, vm.TxContext{}, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
-
-	ret, vmerr, err := api.posa.ApplyDoubleSignPunishTx(vmenvWithoutTxCtx, statedb, txctx.TxIndex, sender, tx)
+	// Call Prepare to clear out the statedb access list
+	statedb.Prepare(txctx.TxHash, txctx.TxIndex)
+	ret, vmerr, err := api.chaosEngine.ApplyDoubleSignPunishTx(vmenvWithoutTxCtx, sender, tx)
 	if err != nil {
 		return nil, fmt.Errorf("tracing failed: %w", err)
 	}

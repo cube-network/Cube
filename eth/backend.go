@@ -82,8 +82,8 @@ type Ethereum struct {
 	engine         consensus.Engine
 	accountManager *accounts.Manager
 
-	isPoSA bool
-	posa   consensus.PoSA
+	isChaosEngine bool
+	chaosEngine   consensus.ChaosEngine
 
 	bloomRequests     chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
 	bloomIndexer      *core.ChainIndexer             // Bloom indexer operating during block imports
@@ -160,7 +160,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
 	}
-	eth.posa, eth.isPoSA = eth.engine.(consensus.PoSA)
+	eth.chaosEngine, eth.isChaosEngine = eth.engine.(consensus.ChaosEngine)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"

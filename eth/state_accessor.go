@@ -172,8 +172,8 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 	// Lookup the statedb of parent block from the live database,
 	// otherwise regenerate it on the flight.
 	statedb, err := eth.stateAtBlock(parent, reexec, nil, true, false)
-	if err == nil && eth.isPoSA {
-		err = eth.posa.PreHandle(eth.blockchain, block.Header(), statedb)
+	if err == nil && eth.isChaosEngine {
+		err = eth.chaosEngine.PreHandle(eth.blockchain, block.Header(), statedb)
 	}
 	if err != nil {
 		return nil, vm.BlockContext{}, nil, err
@@ -190,24 +190,25 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
 		if idx == txIndex {
-			// Notice: for a posa system transaction, the `msg` and `context` should not be used
+			// Notice: for a chaos system transaction, the `msg` and `context` should not be used
 			return msg, context, statedb, nil
 		}
 		// Not yet the searched for transaction, execute on top of the current state
 		vmenv := vm.NewEVM(context, txContext, statedb, eth.blockchain.Config(), vm.Config{})
 
-		if eth.isPoSA {
+		statedb.Prepare(tx.Hash(), idx)
+
+		if eth.isChaosEngine {
 			sender, _ := types.Sender(signer, tx)
-			ok, _ := eth.posa.IsDoubleSignPunishTransaction(sender, tx, header)
+			ok, _ := eth.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
 			if ok {
-				if _, _, err := eth.posa.ApplyDoubleSignPunishTx(vmenv, statedb, idx, sender, tx); err != nil {
+				if _, _, err := eth.chaosEngine.ApplyDoubleSignPunishTx(vmenv, sender, tx); err != nil {
 					return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 				}
 				continue
 			}
 		}
 
-		statedb.Prepare(tx.Hash(), idx)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
 			return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 		}

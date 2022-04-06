@@ -132,9 +132,8 @@ type worker struct {
 	eth         Backend
 	chain       *core.BlockChain
 
-	// Is the engine a PoSA engine?
-	posa   consensus.PoSA
-	isPoSA bool
+	chaosEngine   consensus.ChaosEngine
+	isChaosEngine bool
 
 	// Feeds
 	pendingLogsFeed event.Feed
@@ -198,13 +197,13 @@ type worker struct {
 }
 
 func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(*types.Block) bool, init bool) *worker {
-	posa, isPoSA := engine.(consensus.PoSA)
+	chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine)
 	worker := &worker{
 		config:             config,
 		chainConfig:        chainConfig,
 		engine:             engine,
-		isPoSA:             isPoSA,
-		posa:               posa,
+		isChaosEngine:      isChaosEngine,
+		chaosEngine:        chaosEngine,
 		eth:                eth,
 		mux:                mux,
 		chain:              eth.BlockChain(),
@@ -800,8 +799,8 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 	gasLimit := w.current.header.GasLimit
 	if w.current.gasPool == nil {
-		if w.isPoSA {
-			w.current.gasPool = new(core.GasPool).AddGas(w.posa.CalculateGasPool(w.current.header))
+		if w.isChaosEngine {
+			w.current.gasPool = new(core.GasPool).AddGas(w.chaosEngine.CalculateGasPool(w.current.header))
 		} else {
 			w.current.gasPool = new(core.GasPool).AddGas(gasLimit)
 		}
@@ -974,8 +973,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 	// Create the current work task and check any fork transitions needed
 	env := w.current
-	if w.isPoSA {
-		if err := w.posa.PreHandle(w.chain, header, env.state); err != nil {
+	if w.isChaosEngine {
+		if err := w.chaosEngine.PreHandle(w.chain, header, env.state); err != nil {
 			log.Error("Failed to apply system contract upgrade", "err", err)
 			return
 		}

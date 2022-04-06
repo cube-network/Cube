@@ -181,9 +181,8 @@ func MakeFakeChain() (*core.BlockChain, error) {
 			epoch = 200
 		}
 		config.Chaos = &params.ChaosConfig{
-			Period:           1,
-			Epoch:            epoch,
-			SysContractAdmin: accounts.adminAddr,
+			Period: 1,
+			Epoch:  epoch,
 		}
 		// Create the genesis block with the initial set of signers
 		genesis := core.BasicChaosGenesisBlock(&config, signers, accounts.adminAddr)
@@ -282,7 +281,7 @@ func TestAddOneAttestationToFutureCache(t *testing.T) {
 	require.True(t, len(cAs.Attestations) == 10)
 }
 
-// Shield it in advance -> bc.posa.VerifyAttestation(bc, a)
+// Shield it in advance -> bc.chaosEngine.VerifyAttestation(bc, a)
 func TestAddOneAttestationToRecentCache(t *testing.T) {
 	chain, err := MakeFakeChain()
 	require.NoError(t, err)
@@ -540,7 +539,7 @@ func TestVerifyCasperFFGRule(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, tt := range tests {
-		result := chain.Posa.VerifyCasperFFGRule(tt.before.SourceRangeEdge.Number.Uint64(), tt.before.TargetRangeEdge.Number.Uint64(),
+		result := chain.ChaosEngine.VerifyCasperFFGRule(tt.before.SourceRangeEdge.Number.Uint64(), tt.before.TargetRangeEdge.Number.Uint64(),
 			tt.after.SourceRangeEdge.Number.Uint64(), tt.after.TargetRangeEdge.Number.Uint64())
 		require.True(t, result == tt.result)
 	}

@@ -215,15 +215,39 @@ func TestGenesisUnmarshal(t *testing.T) {
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		t.Fatalf("invalid genesis file: %v", err)
 	}
-	init := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F002")].Init
+	init := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F000")].Init
 	t.Log(init)
 
 	init = genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init
 	t.Log(init.LockedAccounts[0])
 
-	validator := genesis.Validators[2]
+	validator := genesis.Validators[0]
 	t.Log(validator.AcceptDelegation)
 
-	code := genesis.Alloc[common.HexToAddress("0x0000000000000000000000000000000000000000")].Code
-	t.Log(code == nil)
+	acc := genesis.Alloc[common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8")]
+	t.Log(acc.Code == nil)
+	t.Log(acc.Init == nil)
+}
+
+func TestDecodePrealloc(t *testing.T) {
+	alloc := decodePrealloc(mainnetAllocData)
+	for addr, account := range alloc {
+		t.Logf("addr : %v", addr)
+		account.Code = nil
+		t.Logf("acc.Init : %v", account.Init)
+	}
+}
+
+func TestGenesisInit(t *testing.T) {
+	file, err := os.Open("testdata/test-genesis.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	genesis := new(Genesis)
+	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+		t.Fatalf("invalid genesis file: %v", err)
+	}
+	block := genesis.ToBlock(nil)
+	t.Log(block.Hash())
 }

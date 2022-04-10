@@ -1084,7 +1084,7 @@ func ReadAllViolateCasperFFGPunish(db ethdb.Reader) []*types.ViolateCasperFFGPun
 	return vcfList
 }
 
-func DeleteViolateCasperFFGPunishList(db ethdb.KeyValueStore, punishList *[]*types.ViolateCasperFFGPunish) {
+func DeleteViolateCasperFFGPunish(db ethdb.KeyValueStore, p *types.ViolateCasperFFGPunish) {
 	blob, err := db.Get(violateCasperFFGPunishKey)
 	if err != nil {
 		log.Warn("Failed to load violate casperFFG punish", "error", err)
@@ -1096,12 +1096,10 @@ func DeleteViolateCasperFFGPunishList(db ethdb.KeyValueStore, punishList *[]*typ
 		}
 	}
 
-	for _, p := range *punishList {
-		for i, v := range vcfList {
-			if p.Hash() == v.Hash() {
-				vcfList = append(vcfList[:i], vcfList[i+1:]...)
-				break
-			}
+	for i, v := range vcfList {
+		if p.Hash() == v.Hash() {
+			vcfList = append(vcfList[:i], vcfList[i+1:]...)
+			break
 		}
 	}
 

@@ -944,11 +944,9 @@ func TestWriteAndReadAndDeleteAndClearViolateCasperFFGPunish(t *testing.T) {
 	pushList := ReadAllViolateCasperFFGPunish(db)
 	require.True(t, len(pushList) == casperFFGPunishToKeep)
 
-	var deleteList []*types.ViolateCasperFFGPunish
 	for j := 0; j < 10; j++ {
-		deleteList = append(deleteList, pushList[j])
+		DeleteViolateCasperFFGPunish(db, pushList[j])
 	}
-	DeleteViolateCasperFFGPunishList(db, &deleteList)
 
 	pushList = ReadAllViolateCasperFFGPunish(db)
 	require.True(t, len(pushList) == casperFFGPunishToKeep-10)

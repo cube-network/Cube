@@ -2,6 +2,7 @@ package chaos
 
 import (
 	"errors"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -210,6 +211,8 @@ func (c *Chaos) replayDoubleSignPunish(chain consensus.ChainHeaderReader, header
 	if err := rlp.DecodeBytes(tx.Data(), &p); err != nil {
 		return nil, err
 	}
+	// Clear your own records at the first time after receiving them to avoid data error accumulation
+	rawdb.DeleteViolateCasperFFGPunish(c.db, &p)
 	copy(p.Data, tx.Data())
 	if b, err := c.IsDoubleSignPunished(chain, header, state, p.Hash()); err != nil || b {
 		return nil, errors.New("is double sign punished")

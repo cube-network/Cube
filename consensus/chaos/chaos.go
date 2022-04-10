@@ -794,7 +794,6 @@ func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *type
 		// Add penalty transactions for violating CasperFFG rules
 		punishList := rawdb.ReadAllViolateCasperFFGPunish(c.db)
 		if len(punishList) > 0 {
-			var punishNeedDelList []*types.ViolateCasperFFGPunish
 			for _, p := range punishList {
 				val, err := p.RecoverSigner()
 				if err != nil {
@@ -815,10 +814,10 @@ func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *type
 					*txs = append(*txs, tx)
 					*receipts = append(*receipts, receipt)
 					log.Debug("executeDoubleSignPunish", "Violator", val, "Number", header.Number.Uint64())
+				} else {
+					rawdb.DeleteViolateCasperFFGPunish(c.db, p)
 				}
-				punishNeedDelList = append(punishNeedDelList, p)
 			}
-			rawdb.DeleteViolateCasperFFGPunishList(c.db, &punishNeedDelList) // TODO Will asynchronous data inconsistency be involved? Cause asynchronous newly inserted data to be deleted?
 		}
 	}
 	return nil

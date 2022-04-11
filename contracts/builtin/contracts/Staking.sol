@@ -346,7 +346,9 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
 
     function doubleSignPunish(bytes32 _punishHash, address _val)
     external
+        // #if Mainnet
     onlyMiner
+        // #endif
     onlyExists(_val)
     onlyNotDoubleSignPunished(_punishHash)
     {
@@ -727,4 +729,30 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
     function gweiToWei(uint256 gweiAmount) private pure returns (uint) {
         return gweiAmount.mul(1 gwei);
     }
+
+    // #if !Mainnet
+    function getBasicLockEnd() public view returns(uint256) {
+        return basicLockEnd;
+    }
+
+    function getReleasePeriod() public view returns(uint256) {
+        return releasePeriod;
+    }
+
+    function getReleaseCount() public view returns(uint256) {
+        return releaseCount;
+    }
+
+    function getTotalStakingRewards() public view returns(uint256) {
+        return totalStakingRewards;
+    }
+
+    function simulateUpdateRewardsRecord() public view returns(uint256) {
+        uint deltaBlock = block.number - lastUpdateAccBlock;
+        if (deltaBlock > 0) {
+            return  accRewardsPerStake + (currRewardsPerBlock * deltaBlock) / totalStakeGWei;
+        }
+        return  accRewardsPerStake;
+    }
+    // #endif
 }

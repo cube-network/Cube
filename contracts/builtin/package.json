@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "NET=devnet yarn run hardhat test ",
-    "testdev": "NET=devnet yarn run hardhat test test/validator.js",
+    "testdev": "NET=devnet yarn run hardhat test test/staking.js",
     "clean": "yarn run hardhat clean",
     "compile": "NET=mainnet yarn run hardhat compile",
     "size": "yarn run hardhat size-contracts"

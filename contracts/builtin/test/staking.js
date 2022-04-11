@@ -12,6 +12,8 @@ const State = {
 }
 
 const params = {
+    MaxValidators: 21,
+
     MaxStakes: 24000000,
     OverMaxStakes: 24000001,
     ThresholdStakes: 2000000,
@@ -28,6 +30,14 @@ const params = {
 
     singleValStake: utils.ethToWei("2000000"),
     singleValStakeEth: 2000000,
+
+    ValidatorFeePercent: 80,
+    LazyPunishThreshold: 3,
+    DecreaseRate: 1,
+
+    LazyPunishFactor: 1,
+    EvilPunishFactor: 10,
+    PunishBase: 1000,
 }
 
 describe("Staking test", function () {
@@ -72,7 +82,7 @@ describe("Staking test", function () {
     });
 
     it('1. initialize', async () => {
-        let balance = params.singleValStake.mul(3);
+        let balance = params.singleValStake.mul(24);
         balance = balance.add(params.totalRewards);
         // console.log(utils.weiToEth(balance))
         await staking.initialize(owner.address, params.FounderLock, params.releasePeriod, params.releaseCount,
@@ -80,6 +90,16 @@ describe("Staking test", function () {
             communityPool.address, bonusPool.address, {value: balance});
 
         expect(await staking.admin()).to.eq(owner.address);
+        let timestamp = await utils.getLatestTimestamp();
+        expect(await staking.getBasicLockEnd()).to.eq(parseInt(timestamp, 16) + params.FounderLock);
+        expect(await staking.getReleasePeriod()).to.eq(params.releasePeriod);
+        expect(await staking.getReleaseCount()).to.eq(params.releaseCount);
+        expect(await staking.getTotalStakingRewards()).to.eq(params.totalRewards);
+        expect(await staking.currRewardsPerBlock()).to.eq(params.rewardsPerBlock);
+        expect(await staking.blockEpoch()).to.eq(params.epoch);
+        expect(await staking.rewardsUpdateEpoch()).to.eq(params.ruEpoch);
+        expect(await staking.bonusPool()).to.eq(bonusPool.address);
+        expect(await staking.communityPool()).to.eq(communityPool.address);
         expect(await ethers.provider.getBalance(staking.address)).to.eq(balance);
     });
 
@@ -87,21 +107,56 @@ describe("Staking test", function () {
         // let balance = await ethers.provider.getBalance(staking.address);
         // console.log(utils.weiToEth(balance));
 
-        for (let i = 1; i < 4; i++) {
+        for (let i = 1; i < 25; i++) {
             let val = signers[i].address;
             let tx = await staking.initValidator(val, val, 50, params.singleValStakeEth, true);
             let receipt = await tx.wait();
             expect(receipt.status).equal(1);
             currTotalStakeGwei = currTotalStakeGwei.add(utils.ethToGwei(params.singleValStakeEth))
-            // console.log(currTotalStakeGwei);
+        }
+        expect(await staking.totalStakeGWei()).to.eq(currTotalStakeGwei);
+
+        for (let i = 1; i < 4; i++) {
+            let addr = await staking.allValidatorAddrs(i - 1);
+            expect(signers[i].address).to.eq(addr);
+            expect(await staking.valMaps(addr)).to.be.properAddress;
+            let info = await staking.valInfos(addr);
+            expect(info.stakeGWei).to.eq(utils.ethToGwei(params.singleValStakeEth));
+            expect(info.debt).to.eq(0);
+            expect(info.unWithdrawn).to.eq(utils.ethToGwei(params.singleValStakeEth));
+
+            let founderLock = await staking.founders(addr);
+            expect(founderLock.initialStakeGWei).to.eq(utils.ethToGwei(params.singleValStakeEth));
+            expect(founderLock.unboundStakeGWei).to.eq(0);
+            expect(founderLock.locking).to.eq(true);
         }
 
         await expect(staking.initValidator(signers[1].address, signers[1].address, 50, params.singleValStakeEth, true)).to.be.revertedWith("E07");
-        await expect(staking.initValidator(signers[4].address, signers[4].address, 50, params.singleValStakeEth, true)).to.be.revertedWith("E15");
-        console.log(await ethers.provider.getBlockNumber());
+        await expect(staking.initValidator(signers[25].address, signers[25].address, 50, params.singleValStakeEth, true)).to.be.revertedWith("E15");
+        //console.log(await ethers.provider.getBlockNumber());
     });
 
-    it('3. check Validator contract', async () => {
+    it('3. check removePermission', async () => {
+        expect(await staking.isOpened()).to.eq(false);
+        await expect(staking.removePermission()).to
+            .emit(staking, "PermissionLess")
+            .withArgs(true);
+        expect(await staking.isOpened()).to.eq(true);
+        await expect(staking.removePermission()).to.be.revertedWith("E16");
+    });
+
+    it('4. check getTopValidators', async () => {
+        let topValidators = await staking.getTopValidators(0);
+        expect(topValidators.length).to.eq(params.MaxValidators);
+        topValidators = await staking.getTopValidators(10);
+        expect(topValidators.length).to.eq(10);
+        topValidators = await staking.getTopValidators(24);
+        expect(topValidators.length).to.eq(24);
+        topValidators = await staking.getTopValidators(100);
+        expect(topValidators.length).to.eq(24);
+    });
+
+    it('5. check Validator contract', async () => {
         for (let i = 0; i < 3; i++) {
             let valAddress = signers[i + 1].address;
             let valContractAddr = await staking.valMaps(valAddress);
@@ -115,7 +170,27 @@ describe("Staking test", function () {
             expect(await val.state()).to.eq(State.Ready);
         }
     });
-    it('4. calc rewards', async () => {
+
+    it('6. check updateActiveValidatorSet', async () => {
+        let activeValidators = await staking.getActiveValidators();
+        expect(activeValidators.length).to.eq(0);
+        let topValidators = await staking.getTopValidators(0);
+        expect(topValidators.length).to.eq(params.MaxValidators);
+        while (true) {
+            let number = await ethers.provider.getBlockNumber();
+            if ((number + 1) % params.epoch !== 0) {
+                await utils.mineEmptyBlock();
+            } else {
+                break;
+            }
+        }
+
+        await staking.updateActiveValidatorSet(topValidators);
+        activeValidators = await staking.getActiveValidators();
+        expect(activeValidators.length).to.eq(params.MaxValidators);
+    });
+
+    it('7. calc rewards', async () => {
         // update accRewardsPerStake by updateRewardsInfo
         while (true) {
             let number = await ethers.provider.getBlockNumber();
@@ -135,7 +210,7 @@ describe("Staking test", function () {
         let expectAccRPS = params.rewardsPerBlock.mul(number);
         expectAccRPS =  expectAccRPS.div(BigNumber.from(currTotalStakeGwei));
 
-        console.log(expectAccRPS)
+        //console.log(expectAccRPS)
         // validator claimable
         let claimable = expectAccRPS.mul(stakeGwei);
         expect(await staking.anyClaimable(signers[1].address,signers[1].address)).to.eq(claimable);
@@ -147,14 +222,14 @@ describe("Staking test", function () {
         // so to avoids the inaccurate integer calculation. For example: 300/3 == 100, but 100/3 + 100/3 + 100/3 == 99
         expectAccRPS = params.rewardsPerBlock.mul(number + 1)
         expectAccRPS =  expectAccRPS.div(BigNumber.from(currTotalStakeGwei));
-        console.log(expectAccRPS)
+        //console.log(expectAccRPS)
         let valContractAddr = await staking.valMaps(signers[1].address);
         let val = valFactory.attach(valContractAddr);
 
         let staking2 = staking.connect(signers[1]);
         claimable = expectAccRPS.mul(stakeGwei);
         tx = await staking2.validatorClaimAny(signers[1].address);
-        console.log("accRewardsPerStake ", await staking2.accRewardsPerStake());
+        //console.log("accRewardsPerStake ", await staking2.accRewardsPerStake());
         await expect(tx).to
             .emit(val, "RewardsWithdrawn")
             .withArgs(signers[1].address,signers[1].address, claimable);
@@ -163,4 +238,156 @@ describe("Staking test", function () {
             .withArgs(signers[1].address)
     });
 
+    it('8. check distributeBlockFee', async () => {
+        let activeValidators = await staking.getActiveValidators();
+        let cnt = activeValidators.length;
+        let balances = [];
+        for (let i = 0; i < cnt; i++) {
+            let val = await staking.valMaps(activeValidators[i]);
+            balances[i] = await ethers.provider.getBalance(val);
+        }
+        let communityPoolbalances = await ethers.provider.getBalance(communityPool.address);
+
+        let stake = utils.ethToGwei(100);
+        let blockFee = stake.mul(cnt);
+
+        let tx = await staking.distributeBlockFee({value: blockFee});
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        let feePerValidator = blockFee.mul(params.ValidatorFeePercent).div(100).div(cnt)
+
+        for (let i = 0; i < activeValidators.length; i++) {
+            let val = await staking.valMaps(activeValidators[i]);
+            let balance = await ethers.provider.getBalance(val);
+            expect(balance.sub(balances[i])).equal(feePerValidator);
+        }
+        let newCommunityPoolbalances = communityPoolbalances.add(blockFee.mul(100 - params.ValidatorFeePercent).div(100));
+        expect(await ethers.provider.getBalance(communityPool.address)).equal(newCommunityPoolbalances);
+    });
+
+    it('9. check lazyPunish', async () => {
+        let activeValidators = await staking.getActiveValidators();
+        let cnt = activeValidators.length;
+
+        for (let i = 0; i < cnt; i++) {
+            let tx = await staking.lazyPunish(activeValidators[i]);
+            let receipt = await tx.wait();
+            expect(receipt.status).equal(1);
+        }
+
+        for (let i = 0; i < cnt; i++) {
+            let lazyVal = await staking.lazyPunishedValidators(i);
+            expect(await staking.getPunishRecord(activeValidators[i])).equal(1);
+            expect(lazyVal).equal(activeValidators[i]);
+        }
+        /*while (true) {
+            let number = await ethers.provider.getBlockNumber();
+            if ((number + 1) % params.ruEpoch !== 0) {
+                await utils.mineEmptyBlock();
+            } else {
+                break;
+            }
+        }*/
+        let topVals = await staking.getTopValidators(100);
+        let oldInfo = await staking.valInfos(activeValidators[0]);
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let valContractAddr = await staking.valMaps(activeValidators[0]);
+        let oldBalance = await ethers.provider.getBalance(valContractAddr);
+        let oldAccRewardsPerStake = await staking.simulateUpdateRewardsRecord();
+        for (let i = 1; i < params.LazyPunishThreshold; i++) {
+            let tx = await staking.lazyPunish(activeValidators[0]);
+            let receipt = await tx.wait();
+            expect(receipt.status).equal(1);
+            if (i < params.LazyPunishThreshold - 1) {
+                let missedBlocksCounter = await staking.getPunishRecord(activeValidators[0]);
+                expect(missedBlocksCounter).equal(i + 1);
+            } else { // doSlash
+                // console.log("doSlash")
+                // remove from ranking immediately
+                expect(await staking.getPunishRecord(activeValidators[0])).equal(0);
+                let newTopVals = await staking.getTopValidators(100);
+                expect(newTopVals.length).equal(topVals.length - 1);
+                for (let i = 0; i < newTopVals.length; i++) {
+                    expect(activeValidators[0] !== newTopVals[i]).equal(true);
+                }
+
+                let slashAmount = oldInfo.unWithdrawn.mul(params.LazyPunishFactor).div(params.PunishBase);
+                let amountFromCurrStakes = slashAmount;
+                if (oldInfo.stakeGWei < slashAmount) {
+                    amountFromCurrStakes = oldInfo.stakeGWei;
+                }
+                let newInfo = await staking.valInfos(activeValidators[0]);
+                expect(newInfo.stakeGWei).to.eq(oldInfo.stakeGWei.sub(amountFromCurrStakes));
+                let accRewardsPerStake = await staking.accRewardsPerStake();
+                expect(newInfo.debt).to.eq(accRewardsPerStake.mul(newInfo.stakeGWei));
+                expect(newInfo.unWithdrawn).to.eq(oldInfo.unWithdrawn.sub(slashAmount));
+                expect(await staking.totalStakeGWei()).to.eq(oldTotalStakeGWei.sub(amountFromCurrStakes));
+                // Only the test token has been transferred. The detailed test is checked by the verifier's contract test case
+                // let newBalance = await ethers.provider.getBalance(valContractAddr);
+                // let settledRewards = oldAccRewardsPerStake.mul(oldInfo.stakeGWei).sub(oldInfo.debt);
+                // expect(newBalance).to.eq(oldBalance.add(settledRewards));
+                // TODO
+            }
+        }
+    });
+
+    it('10. check doubleSignPunish', async () => {
+        let activeValidators = await staking.getActiveValidators();
+        let val = activeValidators[1];
+
+        let topVals = await staking.getTopValidators(100);
+        let oldInfo = await staking.valInfos(val);
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let valContractAddr = await staking.valMaps(val);
+        let testPunishHash = "0x47e6e9803bc15fb3fd83a29013a2b264dae9df41fe0272d0fa73f35a727c2f55";
+
+        let tx = await staking.doubleSignPunish(testPunishHash, val);
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        expect(await staking.isDoubleSignPunished(testPunishHash)).equal(true);
+
+        let newTopVals = await staking.getTopValidators(100);
+        expect(newTopVals.length).equal(topVals.length - 1);
+        for (let i = 0; i < newTopVals.length; i++) {
+            expect(val !== newTopVals[i]).equal(true);
+        }
+
+        let slashAmount = oldInfo.unWithdrawn.mul(params.EvilPunishFactor).div(params.PunishBase);
+        let amountFromCurrStakes = slashAmount;
+        if (oldInfo.stakeGWei < slashAmount) {
+            amountFromCurrStakes = oldInfo.stakeGWei;
+        }
+        let newInfo = await staking.valInfos(val);
+        expect(newInfo.stakeGWei).to.eq(oldInfo.stakeGWei.sub(amountFromCurrStakes));
+        let accRewardsPerStake = await staking.accRewardsPerStake();
+        expect(newInfo.debt).to.eq(accRewardsPerStake.mul(newInfo.stakeGWei));
+        expect(newInfo.unWithdrawn).to.eq(oldInfo.unWithdrawn.sub(slashAmount));
+        expect(await staking.totalStakeGWei()).to.eq(oldTotalStakeGWei.sub(amountFromCurrStakes));
+
+        await expect(staking.doubleSignPunish(testPunishHash, val)).to.be.revertedWith("E06");
+    });
+
+    it('11. Multiple crimes during punishment', async () => {
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let activeValidators = await staking.getActiveValidators();
+        let val = activeValidators[1];
+        let oldInfo = await staking.valInfos(val);
+        for (let i = 0; i < params.LazyPunishThreshold; i++) {
+            let tx = await staking.lazyPunish(val);
+            let receipt = await tx.wait();
+            expect(receipt.status).equal(1);
+        }
+        let slashAmount = oldInfo.unWithdrawn.mul(params.LazyPunishFactor).div(params.PunishBase);
+        let amountFromCurrStakes = slashAmount;
+        if (oldInfo.stakeGWei < slashAmount) {
+            amountFromCurrStakes = oldInfo.stakeGWei;
+        }
+        let newInfo = await staking.valInfos(val);
+        expect(newInfo.stakeGWei).to.eq(oldInfo.stakeGWei.sub(amountFromCurrStakes));
+        let accRewardsPerStake = await staking.accRewardsPerStake();
+        expect(newInfo.debt).to.eq(accRewardsPerStake.mul(newInfo.stakeGWei));
+        expect(newInfo.unWithdrawn).to.eq(oldInfo.unWithdrawn.sub(slashAmount));
+        expect(await staking.totalStakeGWei()).to.eq(oldTotalStakeGWei.sub(amountFromCurrStakes));
+    });
 })

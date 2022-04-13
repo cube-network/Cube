@@ -50,9 +50,12 @@ func (env *genesisInit) callContract(contract common.Address, method string, arg
 	if err != nil {
 		return nil, err
 	}
-
 	// Create EVM calling message
 	msg := types.NewMessage(env.genesis.Coinbase, &contract, 0, big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
+	// Set up the initial access list.
+	if rules := env.genesis.Config.Rules(env.header.Number); rules.IsBerlin {
+		env.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
+	}
 	// Create EVM
 	evm := vm.NewEVM(NewEVMBlockContext(env.header, nil, &env.header.Coinbase), NewEVMTxContext(msg), env.state, env.genesis.Config, vm.Config{})
 	// Run evm call

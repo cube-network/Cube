@@ -2,8 +2,9 @@ package chaos
 
 import (
 	"errors"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"math/big"
+
+	"github.com/ethereum/go-ethereum/core/rawdb"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -205,7 +206,7 @@ func (c *Chaos) replayDoubleSignPunish(chain consensus.ChainHeaderReader, header
 		return nil, err
 	}
 	if sender != header.Coinbase {
-		return nil, errors.New("invalid sender for system governance transaction")
+		return nil, errors.New("invalid sender for system transaction")
 	}
 	var p types.ViolateCasperFFGPunish
 	if err := rlp.DecodeBytes(tx.Data(), &p); err != nil {

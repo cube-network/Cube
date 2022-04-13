@@ -142,7 +142,8 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 		}
 	}
 	// TODO retry
-	return nil, errors.New("no attestation found to process")
+	log.Debug("no attestation found to process")
+	return nil, nil
 }
 
 // Subscribe to the ChainHeadEvent message. After obtaining the new block event, first check whether it meets

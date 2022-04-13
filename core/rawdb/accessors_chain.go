@@ -973,7 +973,7 @@ func WriteLastAttestNumber(db ethdb.KeyValueWriter, val common.Address, num *big
 func ReadAllBlockStatus(db ethdb.Reader) []*types.BlockStatus {
 	blob, err := db.Get(blockStatusKey)
 	if err != nil {
-		log.Warn("Failed to load block status", "error", err)
+		log.Info("Failed to load block status", "error", err)
 	}
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
@@ -1003,7 +1003,7 @@ func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
 func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash) {
 	blob, err := db.Get(blockStatusKey)
 	if err != nil {
-		log.Warn("Failed to Read block status", "error", err)
+		log.Info("Failed to Read block status", "error", err)
 	}
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
@@ -1025,7 +1025,7 @@ func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash
 func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status *big.Int) error {
 	blob, err := db.Get(blockStatusKey)
 	if err != nil {
-		log.Warn("Failed to Write block status", "error", err)
+		log.Info("Failed to Write block status", "error", err)
 	}
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
@@ -1087,7 +1087,7 @@ func ReadAllViolateCasperFFGPunish(db ethdb.Reader) []*types.ViolateCasperFFGPun
 func DeleteViolateCasperFFGPunish(db ethdb.KeyValueStore, p *types.ViolateCasperFFGPunish) {
 	blob, err := db.Get(violateCasperFFGPunishKey)
 	if err != nil {
-		log.Warn("Failed to load violate casperFFG punish", "error", err)
+		log.Info("Failed to load violate casperFFG punish", "error", err)
 	}
 	var vcfList types.ViolateCasperFFGPunishList
 	if len(blob) > 0 {
@@ -1121,7 +1121,7 @@ func ClearAllViolateCasperFFGPunish(db ethdb.KeyValueStore) {
 func WriteViolateCasperFFGPunish(db ethdb.KeyValueStore, before *types.Attestation, after *types.Attestation, pType int, blockNum *big.Int) error {
 	blob, err := db.Get(violateCasperFFGPunishKey)
 	if err != nil {
-		log.Warn("Failed to load violate casperFFG punish", "error", err)
+		log.Info("Failed to load violate casperFFG punish", "error", err)
 	}
 	var vcfList types.ViolateCasperFFGPunishList
 	if len(blob) > 0 {

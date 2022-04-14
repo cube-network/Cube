@@ -441,7 +441,9 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
         }
         // 3. Jail => Idle, Noop; Jail => Ready, Up.
         if (state == State.Jail) {
-            if (totalStake < ThresholdStakes) {
+            // We also need to check whether the selfStakeGWei is less than MinSelfStakes or not.
+            // It may happen due to stakes slashing.
+            if (totalStake < ThresholdStakes || selfStakeGWei < MinSelfStakes) {
                 emit StateChanged(validator, _changer, state, State.Idle);
                 state = State.Idle;
             } else {

@@ -395,20 +395,20 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
         if (msg.value > 0) {
             stakeEth = mustConvertStake(msg.value);
         }
+        uint stakeGWei = ethToGwei(stakeEth);
         if (isOpened) {
             // need minimal self stakes on permission-less stage
-            require(stakeEth >= MinSelfStakes, "E20");
+            require(stakeGWei >= MinSelfStakes, "E20");
         } else {
             // admin only on permission stage
             require(msg.sender == admin, "E21");
         }
         // Default state is Idle, when the stakes >= ThresholdStakes, then the validator will be Ready immediately.
         State vState = State.Idle;
-        if (stakeEth >= ThresholdStakes) {
+        if (stakeGWei >= ThresholdStakes) {
             vState = State.Ready;
         }
         // Create a validator with given info, and updates allValAddrs, valMaps, totalStake
-        uint stakeGWei = ethToGwei(stakeEth);
         IValidator val = new Validator(_val, _manager, _rate, stakeGWei, _acceptDelegation, vState);
         allValidatorAddrs.push(_val);
         valMaps[_val] = val;

@@ -46,7 +46,7 @@ module.exports = {
       allowUnlimitedContractSize: true,
       accounts: {
         mnemonic: "test test test test test test test test test test test junk",
-        count: 26,
+        count: 100,
         accountsBalance: "1000000000000000000000000000"
       },
       hardfork: "berlin"

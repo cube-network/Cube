@@ -754,5 +754,14 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
         }
         return  accRewardsPerStake;
     }
+
+    function testMustConvertStake(uint256 _value) public pure returns (uint256) {
+        return mustConvertStake(_value);
+    }
+
+    function testReduceBasicLockEnd(uint256 _value) public returns (uint256) {
+        basicLockEnd = block.timestamp - _value;
+        return basicLockEnd;
+    }
     // #endif
 }

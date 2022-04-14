@@ -21,7 +21,7 @@ const params = {
     StakeUnit: 1,
     FounderLock: 3600,
     releasePeriod: 60,
-    releaseCount: 24,
+    releaseCount: 100,
 
     totalRewards: utils.ethToWei("25000000"),
     rewardsPerBlock: utils.ethToWei("10"),
@@ -109,7 +109,8 @@ describe("Staking test", function () {
 
         for (let i = 1; i < 25; i++) {
             let val = signers[i].address;
-            let tx = await staking.initValidator(val, val, 50, params.singleValStakeEth, true);
+            let admin = signers[25 + i].address;
+            let tx = await staking.initValidator(val, admin, 50, params.singleValStakeEth, true);
             let receipt = await tx.wait();
             expect(receipt.status).equal(1);
             currTotalStakeGwei = currTotalStakeGwei.add(utils.ethToGwei(params.singleValStakeEth))
@@ -157,13 +158,14 @@ describe("Staking test", function () {
     });
 
     it('5. check Validator contract', async () => {
-        for (let i = 0; i < 3; i++) {
-            let valAddress = signers[i + 1].address;
+        for (let i = 1; i < 25; i++) {
+            let valAddress = signers[i].address;
+            let adminAddress = signers[25 + i].address;
             let valContractAddr = await staking.valMaps(valAddress);
             let val = valFactory.attach(valContractAddr);
             expect(await val.owner()).to.eq(staking.address);
             expect(await val.validator()).to.eq(valAddress);
-            expect(await val.manager()).to.eq(valAddress);
+            expect(await val.manager()).to.eq(adminAddress);
             expect(await val.selfStakeGWei()).to.eq(utils.ethToGwei(params.singleValStakeEth));
             expect(await val.totalStake()).to.eq(utils.ethToGwei(params.singleValStakeEth));
             expect(await val.totalUnWithdrawn()).to.eq(utils.ethToGwei(params.singleValStakeEth));
@@ -213,7 +215,7 @@ describe("Staking test", function () {
         //console.log(expectAccRPS)
         // validator claimable
         let claimable = expectAccRPS.mul(stakeGwei);
-        expect(await staking.anyClaimable(signers[1].address,signers[1].address)).to.eq(claimable);
+        expect(await staking.anyClaimable(signers[1].address,signers[1 + 25].address)).to.eq(claimable);
         // console.log("blockNumber: ", await ethers.provider.getBlockNumber())
 
         // claim any
@@ -226,13 +228,13 @@ describe("Staking test", function () {
         let valContractAddr = await staking.valMaps(signers[1].address);
         let val = valFactory.attach(valContractAddr);
 
-        let staking2 = staking.connect(signers[1]);
+        let staking2 = staking.connect(signers[1 + 25]);
         claimable = expectAccRPS.mul(stakeGwei);
         tx = await staking2.validatorClaimAny(signers[1].address);
         //console.log("accRewardsPerStake ", await staking2.accRewardsPerStake());
         await expect(tx).to
             .emit(val, "RewardsWithdrawn")
-            .withArgs(signers[1].address,signers[1].address, claimable);
+            .withArgs(signers[1].address,signers[1 + 25].address, claimable);
         await expect(tx).to
             .emit(staking,"ClaimWithoutUnboundStake")
             .withArgs(signers[1].address)
@@ -389,5 +391,307 @@ describe("Staking test", function () {
         expect(newInfo.debt).to.eq(accRewardsPerStake.mul(newInfo.stakeGWei));
         expect(newInfo.unWithdrawn).to.eq(oldInfo.unWithdrawn.sub(slashAmount));
         expect(await staking.totalStakeGWei()).to.eq(oldTotalStakeGWei.sub(amountFromCurrStakes));
+    });
+
+    it('12. check registerValidator', async () => {
+        let signer = signers[51];
+        let admin = signers[52];
+        let val = signer.address;
+        let valAdmin = admin.address;
+
+        let stakeWei = utils.ethToWei(params.MinSelfStakes);
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let oldLength = await staking.getAllValidatorsLength();
+        let tx = await staking.registerValidator(val, valAdmin, 50, true, {value: stakeWei});
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(staking, "ValidatorRegistered")
+            .withArgs(val, valAdmin, 50, utils.ethToGwei(params.MinSelfStakes), State.Idle);
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(val, oldTotalStakeGWei, oldTotalStakeGWei.add(utils.ethToGwei(params.MinSelfStakes)))
+        let timestamp = await utils.getLatestTimestamp();
+        await expect(tx).to
+            .emit(bonusPool,"BonusRecordUpdated")
+            .withArgs(val, params.MinSelfStakes, parseInt(timestamp, 16))
+
+        let newLength = await staking.getAllValidatorsLength();
+        expect(newLength).equal(oldLength.add(1));
+
+        let lastAddVal = await staking.allValidatorAddrs(newLength.sub(1));
+        expect(lastAddVal).equal(val);
+    });
+
+    it('13. check addStake', async () => {
+        let signer = signers[1];
+        let admin = signers[25 + 1];
+        let val = signer.address;
+        let valAdmin = admin.address;
+
+
+        let stakeWei = utils.ethToWei(params.MinSelfStakes);
+        let diffWei = utils.ethToWei(params.ThresholdStakes - params.MinSelfStakes);
+        let diffGwei = utils.ethToGwei(params.ThresholdStakes - params.MinSelfStakes);
+
+        let stakingErrorAdmin = staking.connect(signers[2]);
+        await expect(stakingErrorAdmin.addStake("0x0000000000000000000000000000000000000000", {value: diffWei})).to.be.revertedWith("E08");
+        await expect(stakingErrorAdmin.addStake(val, {value: diffWei})).to.be.revertedWith("E02");
+
+        let stakingLocked = staking.connect(admin);
+        await expect(stakingLocked.addStake(val, {value: diffWei})).to.be.revertedWith("E22");
+
+        let signerUnlocked = signers[51];
+        let adminUnlocked = signers[52];
+        let stakingUnlocked = staking.connect(adminUnlocked);
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+
+        let valContractAddr = await staking.valMaps(signerUnlocked.address);
+        let valContract = valFactory.attach(valContractAddr);
+        let oldValTotalStake = await valContract.totalStake();
+
+        let tx = await stakingUnlocked.addStake(signerUnlocked.address, {value: diffWei.div(2)});
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signerUnlocked.address, oldTotalStakeGWei, oldTotalStakeGWei.add(diffGwei.div(2)))
+        await expect(tx).to
+            .emit(valContract,"StakesChanged")
+            .withArgs(signerUnlocked.address, adminUnlocked.address, oldValTotalStake.add(diffGwei.div(2)))
+
+        let delegator = signers[53];
+        let stakingDelegator = staking.connect(delegator);
+
+        await expect(stakingErrorAdmin.addDelegation("0x0000000000000000000000000000000000000000", {value: diffWei})).to.be.revertedWith("E08");
+        tx = await stakingDelegator.addDelegation(signerUnlocked.address, {value: diffWei.div(2)});
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signerUnlocked.address, oldTotalStakeGWei.add(diffGwei.div(2)), oldTotalStakeGWei.add(diffGwei))
+
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signerUnlocked.address, delegator.address, State.Idle, State.Ready)
+
+        await expect(tx).to
+            .emit(valContract,"StakesChanged")
+            .withArgs(signerUnlocked.address, delegator.address, oldValTotalStake.add(diffGwei))
+    });
+
+    it('14. check subStake', async () => {
+        // locking == true
+        let signer2 = signers[2];
+        let admin2 = signers[27];
+        // locking == false
+        let signer50 = signers[51];
+        let admin50 = signers[52];
+
+        let deltaEth = 20000;
+
+        // Do substake when the node is in the locking == true
+        let stakingLocked = staking.connect(admin2);
+        await expect(stakingLocked.subStake("0x0000000000000000000000000000000000000000", deltaEth)).to.be.revertedWith("E08");
+        await expect(stakingLocked.subStake(signer50.address, deltaEth)).to.be.revertedWith("E02");
+        await expect(stakingLocked.subStake(signer2.address, deltaEth)).to.be.revertedWith("E22");
+
+        // Calculate the upper limit of substake in advance
+        // canRelease = 2000000 / 100
+        let forceTimeDiff = params.releasePeriod;
+        let tx = await staking.testReduceBasicLockEnd(forceTimeDiff);
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        let canReleaseCnt = forceTimeDiff / params.releasePeriod;
+        let canReleaseAmount = utils.ethToGwei(params.singleValStakeEth).mul(canReleaseCnt).div(params.releaseCount);
+        expect(canReleaseAmount).to.eq(utils.ethToGwei(params.singleValStakeEth).div(params.releaseCount));
+
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let valContractAddr = await staking.valMaps(signer2.address);
+        let val = valFactory.attach(valContractAddr);
+        expect(await val.state()).equal(2); //Jail
+        await expect(stakingLocked.subStake(signer2.address, deltaEth + 1)).to.be.revertedWith("E22");
+
+        let signer20 = signers[20];
+        let admin20 = signers[45];
+        stakingLocked = staking.connect(admin20);
+        valContractAddr = await staking.valMaps(signer20.address);
+        val = valFactory.attach(valContractAddr);
+        expect(await val.state()).equal(1);
+        tx = await stakingLocked.subStake(signer20.address, deltaEth);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signer20.address, oldTotalStakeGWei, oldTotalStakeGWei.sub(utils.ethToGwei(deltaEth)))
+
+        // The current released amount has exceeded the unlocked amount
+        await expect(stakingLocked.subStake(signer20.address, deltaEth)).to.be.revertedWith("E22");
+
+        // When it expires again, it can release the new amount of tokens
+        tx = await staking.testReduceBasicLockEnd(forceTimeDiff * 2);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        tx = await stakingLocked.subStake(signer20.address, deltaEth);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signer20.address, oldTotalStakeGWei.sub(utils.ethToGwei(deltaEth)), oldTotalStakeGWei.sub(utils.ethToGwei(deltaEth).mul(2)))
+
+        // locking == false; Unlimited amount of subStake
+        oldTotalStakeGWei = await staking.totalStakeGWei();
+        // Do substake when the node is in the locking == false
+        let stakingUnLocked = staking.connect(admin50);
+        tx = await stakingUnLocked.subStake(signer50.address, deltaEth * 2);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signer50.address, oldTotalStakeGWei, oldTotalStakeGWei.sub(utils.ethToGwei(deltaEth * 2)))
+    });
+
+    it('15. check subDelegation', async () => {
+        // It will not be restricted because of the locked state of the node
+        let delegator = signers[53];
+        let stakingDelegator = staking.connect(delegator);
+        let signer20 = signers[20];
+        let admin20 = signers[45];
+        let diffWei = utils.ethToWei(params.ThresholdStakes - params.MinSelfStakes);
+        let diffGwei = utils.ethToGwei(params.ThresholdStakes - params.MinSelfStakes);
+        let diffEther= params.ThresholdStakes - params.MinSelfStakes;
+        let valContractAddr = await staking.valMaps(signer20.address);
+        let valContract = valFactory.attach(valContractAddr);
+        let oldTotalStakeGWei = await staking.totalStakeGWei();
+        let oldValTotalStake = await valContract.totalStake();
+
+        let tx = await stakingDelegator.addDelegation(signer20.address, {value: diffWei.div(2)});
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signer20.address, oldTotalStakeGWei, oldTotalStakeGWei.add(diffGwei.div(2)))
+
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer20.address, delegator.address, State.Idle, State.Ready)
+
+        await expect(tx).to
+            .emit(valContract,"StakesChanged")
+            .withArgs(signer20.address, delegator.address, oldValTotalStake.add(diffGwei.div(2)))
+
+        await expect(stakingDelegator.subDelegation("0x0000000000000000000000000000000000000000", diffEther / 2)).to.be.revertedWith("E08");
+        await expect(stakingDelegator.subDelegation(signer20.address, diffEther)).to.be.revertedWith("E24");
+        await expect(stakingDelegator.subDelegation(signer20.address, 0)).to.be.revertedWith("E23");
+        tx = await stakingDelegator.subDelegation(signer20.address, diffEther / 2);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        await expect(tx).to
+            .emit(staking,"TotalStakeGWeiChanged")
+            .withArgs(signer20.address, oldTotalStakeGWei.add(diffGwei.div(2)), oldTotalStakeGWei)
+    });
+
+    it('16. check exitStaking', async () => {
+        // locking == true && Jail
+        let signer2 = signers[2];
+        let admin2 = signers[27];
+        // locking == true
+        let signer20 = signers[20];
+        let admin20 = signers[45];
+        // locking == false
+        let signer50 = signers[51];
+        let admin50 = signers[52];
+
+        let staking2 = staking.connect(admin2);
+        await expect(staking2.exitStaking(signer2.address)).to.be.revertedWith("E22");
+
+        let staking20 = staking.connect(admin20);
+        await expect(staking20.exitStaking(signer20.address)).to.be.revertedWith("E22");
+
+        /*let staking50 = staking.connect(admin50);
+        let tx = await staking50.exitStaking(signer50.address);
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        let valContractAddr = await staking.valMaps(signer50.address);
+        let valContract = valFactory.attach(valContractAddr);
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer50.address, admin50.address, State.Idle, State.Exit)*/
+
+        // Forced arrival at the end of the lock period
+        tx = await staking.testReduceBasicLockEnd(params.releasePeriod * params.releaseCount);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        // Jail
+        staking2 = staking.connect(admin2);
+        tx = await staking2.exitStaking(signer2.address);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        valContractAddr = await staking.valMaps(signer2.address);
+        valContract = valFactory.attach(valContractAddr);
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer2.address, admin2.address, State.Jail, State.Exit)
+
+        // Idle
+        staking20 = staking.connect(admin20);
+        tx = await staking20.exitStaking(signer20.address);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        valContractAddr = await staking.valMaps(signer20.address);
+        valContract = valFactory.attach(valContractAddr);
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer20.address, admin20.address, State.Idle, State.Exit)
+    });
+
+    it('17. check exitDelegation', async () => {
+        let diffWei = utils.ethToWei(params.ThresholdStakes - params.MinSelfStakes);
+        // Jail
+        let signer2 = signers[2];
+        let admin2 = signers[27];
+        // Exit
+        let signer20 = signers[20];
+        let admin20 = signers[45];
+        // Idle
+        let signer50 = signers[51];
+        let admin50 = signers[52];
+
+        let delegator = signers[53];
+        let stakingDelegator = staking.connect(delegator);
+
+        // Add some data in advance
+        await expect(stakingDelegator.addDelegation(signer2.address, {value: diffWei.div(2)})).to.be.revertedWith("E28");
+        await expect(stakingDelegator.addDelegation(signer20.address, {value: diffWei.div(2)})).to.be.revertedWith("E28");
+
+        tx = await stakingDelegator.addDelegation(signer50.address, {value: diffWei.div(2)});
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        // Jail
+        await expect(stakingDelegator.exitDelegation(signer2.address)).to.be.revertedWith("E28");
+        // Exit
+        await expect(stakingDelegator.exitDelegation(signer20.address)).to.be.revertedWith("E28");
+
+        // Idle
+        tx = await stakingDelegator.exitDelegation(signer50.address);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        valContractAddr = await staking.valMaps(signer50.address);
+        valContract = valFactory.attach(valContractAddr);
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer50.address, delegator.address, State.Ready, State.Idle)
     });
 })

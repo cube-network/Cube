@@ -7,8 +7,10 @@ contract Params {
     uint8 public constant MaxValidators = 21;
 
     uint public constant MaxStakes = 24_000_000 * 1 gwei; // gwei; max total stakes for a validator
-    uint public constant ThresholdStakes = 2_000_000 * 1 gwei; // gwei; min total stakes for a validator to be a valid candidate
-    uint public constant MinSelfStakes = 150_000 * 1 gwei; // gwei, min self stakes for a user to register a validator
+    // gwei; min total stakes for a validator to be a valid candidate.
+    // Note20220412: set it to MinSelfStakes so we can disable this requirement without changing the code.
+    uint public constant ThresholdStakes = 50_000 * 1 gwei;
+    uint public constant MinSelfStakes = 50_000 * 1 gwei; // gwei, min self stakes for a user to register a validator
     uint public constant StakeUnit = 1; // ether
 
     uint public constant JailPeriod = 86400; // amount of blocks, about 3 days at 3 sec/block.

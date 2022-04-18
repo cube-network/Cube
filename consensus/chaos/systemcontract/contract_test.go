@@ -138,3 +138,16 @@ func TestUpdateActiveValidatorSet(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestGetRewardsUpdatePeroid(t *testing.T) {
+	ctx, err := initCallContext()
+	if err != nil {
+		t.Fatal("Init call context error", "err", err)
+	}
+	ruPeroid, err := GetRewardsUpdatePeroid(ctx)
+
+	if err != nil {
+		t.Error(err)
+	}
+	t.Log(ruPeroid)
+}

@@ -117,6 +117,36 @@ func DecreaseMissedBlocksCounter(ctx *CallContext) error {
 	return nil
 }
 
+// GetRewardsUpdatePeroid return the blocks to update the reward in Staking contract
+func GetRewardsUpdatePeroid(ctx *CallContext) (uint64, error) {
+	method := "rewardsUpdateEpoch"
+	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
+	// execute contract
+	data, err := abi.Pack(method)
+	if err != nil {
+		log.Error("Can't pack data for rewardsUpdateEpoch", "error", err)
+		return 0, err
+	}
+	result, err := CallContract(ctx, &system.StakingContract, data)
+	if err != nil {
+		return 0, err
+	}
+
+	// unpack data
+	ret, err := abi.Unpack(method, result)
+	if err != nil {
+		return 0, err
+	}
+	if len(ret) != 1 {
+		return 0, errors.New("invalid result length")
+	}
+	rewardsUpdateEpoch, ok := ret[0].(*big.Int)
+	if !ok {
+		return 0, errors.New("invalid result format")
+	}
+	return rewardsUpdateEpoch.Uint64(), nil
+}
+
 // UpdateRewardsInfo return the result of calling method `updateRewardsInfo` in Staking contract
 func UpdateRewardsInfo(ctx *CallContext) error {
 	method := "updateRewardsInfo"

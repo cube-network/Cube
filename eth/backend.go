@@ -216,6 +216,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if chaosEngine, ok := eth.engine.(*chaos.Chaos); ok {
 		// set state fn
 		chaosEngine.SetStateFn(eth.blockchain.StateAt)
+		// Init RewardsUpdatePeroid
+		currState, err := eth.blockchain.State()
+		if err != nil {
+			return nil, err
+		}
+		if err = chaosEngine.InitRewardsUpdatePeroid(eth.blockchain, currState); err != nil {
+			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
+			return nil, err
+		}
 	}
 
 	// Permit the downloader to use the trie cache allowance during fast sync

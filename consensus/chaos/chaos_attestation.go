@@ -26,6 +26,9 @@ const (
 )
 
 var (
+	doubleSignIdentity = common.HexToAddress("0xfffffffffffffffffffffffffffffffffffffffe")
+	uint256Max, _      = new(big.Int).SetString("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0)
+
 	// event ExecutedDoubleSignPunish(address indexed plaintiff, address indexed defendant, uint8 punishType value);
 	executedDoubleSignPunishTopic = common.HexToHash("0x1874a4becdbc3c81b2409d3af931b783d9f5a7c77cb4a75fb2986b452b447688") // TODO
 )
@@ -162,7 +165,8 @@ func (c *Chaos) VerifyCasperFFGRule(beforeSourceNum uint64, beforeTargetNum uint
 }
 
 // Assembly of penalty transactions in violation of CasperFFG rules
-func (c *Chaos) executeDoubleSignPunish(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, p *types.ViolateCasperFFGPunish, totalTxIndex int) (*types.Transaction, *types.Receipt, error) {
+func (c *Chaos) executeDoubleSignPunish(chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.StateDB, p *types.ViolateCasperFFGPunish, totalTxIndex int) (*types.Transaction, *types.Receipt, error) {
 	if c.signTxFn == nil {
 		return nil, nil, errors.New("signTxFn not set")
 	}
@@ -184,7 +188,7 @@ func (c *Chaos) executeDoubleSignPunish(chain consensus.ChainHeaderReader, heade
 	nonce := state.GetNonce(c.validator)
 
 	// Special to address for filtering transactions
-	tx := types.NewTransaction(nonce, system.StakingContract, new(big.Int), header.GasLimit, new(big.Int), pRLP)
+	tx := types.NewTransaction(nonce, doubleSignIdentity, uint256Max, 0, common.Big0, pRLP)
 	tx, err = c.signTxFn(accounts.Account{Address: c.validator}, tx, chain.Config().ChainID)
 	if err != nil {
 		return nil, nil, err
@@ -290,10 +294,12 @@ func (c *Chaos) IsDoubleSignPunishTransaction(sender common.Address, tx *types.T
 	if tx.To() == nil || len(tx.Data()) < 4 {
 		return false, nil
 	}
-
 	to := tx.To()
-	if sender == header.Coinbase && *to == system.StakingContract && tx.GasPrice().Sign() == 0 &&
-		systemcontract.IsCallingDoubleSignPunish(header, c.chainConfig, tx.Data()) {
+	if sender == header.Coinbase &&
+		*to == doubleSignIdentity &&
+		tx.Value().Cmp(uint256Max) == 0 &&
+		tx.Gas() == 0 &&
+		tx.GasPrice().Sign() == 0 {
 		return true, nil
 	}
 	return false, nil

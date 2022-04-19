@@ -724,7 +724,7 @@ func (c *Chaos) tryDistributeBlockFee(chain consensus.ChainHeaderReader, header 
 		Header:       header,
 		ChainContext: newChainContext(chain, c),
 		ChainConfig:  c.chainConfig,
-	})
+	}, fee)
 }
 
 // tryLasyPunish punishes validators that didn't produce blocks

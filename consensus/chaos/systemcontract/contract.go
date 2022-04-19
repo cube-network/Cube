@@ -8,10 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/system"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 const topValidatorNum uint8 = 21
@@ -174,7 +172,7 @@ func UpdateRewardsInfo(ctx *CallContext) error {
 }
 
 // DistributeBlockFee return the result of calling method `distributeBlockFee` in Staking contract
-func DistributeBlockFee(ctx *CallContext) error {
+func DistributeBlockFee(ctx *CallContext, fee *big.Int) error {
 	method := "distributeBlockFee"
 	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
 	// execute contract
@@ -184,7 +182,7 @@ func DistributeBlockFee(ctx *CallContext) error {
 		return err
 	}
 
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+	if _, err := CallContractWithValue(ctx, &system.StakingContract, data, fee); err != nil {
 		return err
 	}
 	return nil
@@ -268,17 +266,4 @@ func IsDoubleSignPunished(ctx *CallContext, punishHash common.Hash) (bool, error
 		return true, errors.New("invalid result format")
 	}
 	return punished, nil
-}
-
-// IsCallingDoubleSignPunish return whether the tx data is calling method `decreaseMissedBlocksCounter` in Staking contract
-func IsCallingDoubleSignPunish(header *types.Header, config *params.ChainConfig, data []byte) bool {
-	abi := system.GetStakingABI(header.Number, config)
-	if method, err := abi.MethodById(data[:4]); err == nil {
-		if method != nil && method.Name == "doubleSignPunish" {
-			return true
-		}
-	} else {
-		log.Error("Get method ID failed", "err", err)
-	}
-	return false
 }

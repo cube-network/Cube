@@ -57,7 +57,7 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
 
     uint256 public currFeeRewards;
 
-    uint256 exitLockEnd;
+    uint256 public exitLockEnd;
 
     // the block number that this validator was punished
     uint256 public punishBlk;

@@ -49,9 +49,9 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
 
     bool public isOpened; // true means any one can register to be a validator without permission. default: false
 
-    uint256 basicLockEnd; // End of the locking timestamp for the funding validators.
-    uint256 releasePeriod; // Times of a single release period for the funding validators, such as 30 days
-    uint256 releaseCount;   // Release period count, such as 6.
+    uint256 public basicLockEnd;  // End of the locking timestamp for the funding validators.
+    uint256 public releasePeriod; // Times of a single release period for the funding validators, such as 30 days
+    uint256 public releaseCount;  // Release period count, such as 6.
 
     // validators that can take part in the consensus
     address[] activeValidators;

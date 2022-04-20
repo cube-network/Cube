@@ -971,10 +971,7 @@ func WriteLastAttestNumber(db ethdb.KeyValueWriter, val common.Address, num *big
 }
 
 func ReadAllBlockStatus(db ethdb.Reader) []*types.BlockStatus {
-	blob, err := db.Get(blockStatusKey)
-	if err != nil {
-		log.Info("Failed to load block status", "error", err)
-	}
+	blob, _ := db.Get(blockStatusKey)
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
 		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
@@ -1001,10 +998,7 @@ func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
 }
 
 func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash) {
-	blob, err := db.Get(blockStatusKey)
-	if err != nil {
-		log.Info("Failed to Read block status", "error", err)
-	}
+	blob, _ := db.Get(blockStatusKey)
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
 		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
@@ -1023,10 +1017,7 @@ func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash
 }
 
 func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status *big.Int) error {
-	blob, err := db.Get(blockStatusKey)
-	if err != nil {
-		log.Info("Failed to Write block status", "error", err)
-	}
+	blob, _ := db.Get(blockStatusKey)
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
 		if err := rlp.DecodeBytes(blob, &bsList); err != nil {

@@ -433,7 +433,7 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
     // @notice The founder locking rule is handled here, and some other rules are handled by the Validator contract.
     function addStake(address _val) external payable onlyExistsAndByManager(_val) {
         // founder locking
-        require(founders[_val].locking == false, "E22");
+        require(founders[_val].locking == false || isReleaseLockEnd(), "E22");
         addStakeOrDelegation(_val, _val, true);
     }
 
@@ -510,9 +510,7 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
     }
 
     function exitStaking(address _val) external onlyExistsAndByManager(_val) {
-        FounderLock memory fl = founders[_val];
-        bool ok = noFounderLocking(_val, fl, fl.initialStakeGWei - fl.unboundStakeGWei);
-        require(ok, "E22");
+        require(founders[_val].locking == false || isReleaseLockEnd(), "E22");
 
         doExit(_val, true);
     }
@@ -728,6 +726,10 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
 
     function gweiToWei(uint256 gweiAmount) private pure returns (uint) {
         return gweiAmount.mul(1 gwei);
+    }
+
+    function isReleaseLockEnd() public view returns (bool) {
+        return (block.timestamp >= basicLockEnd) && (block.timestamp - basicLockEnd) >= (releasePeriod * releaseCount);
     }
 
     // #if !Mainnet

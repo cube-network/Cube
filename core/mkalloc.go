@@ -45,9 +45,6 @@ type initArgs struct {
 	FirstLockPeriod *big.Int
 	ReleasePeriod   *big.Int
 	ReleaseCnt      *big.Int
-	TotalRewards    *big.Int
-	RewardsPerBlock *big.Int
-	Epoch           *big.Int
 	RuEpoch         *big.Int
 	CommunityPool   *big.Int
 	BonusPool       *big.Int
@@ -89,9 +86,6 @@ func makelist(g *core.Genesis) allocList {
 			init.FirstLockPeriod = account.Init.FirstLockPeriod
 			init.ReleasePeriod = account.Init.ReleasePeriod
 			init.ReleaseCnt = account.Init.ReleaseCnt
-			init.TotalRewards = account.Init.TotalRewards
-			init.RewardsPerBlock = account.Init.RewardsPerBlock
-			init.Epoch = account.Init.Epoch
 			init.RuEpoch = account.Init.RuEpoch
 			init.CommunityPool = new(big.Int).SetBytes(account.Init.CommunityPool.Bytes())
 			init.BonusPool = new(big.Int).SetBytes(account.Init.BonusPool.Bytes())

@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDefaultGenesisBlock(t *testing.T) {
@@ -215,18 +216,39 @@ func TestGenesisUnmarshal(t *testing.T) {
 	if err := json.NewDecoder(file).Decode(genesis); err != nil {
 		t.Fatalf("invalid genesis file: %v", err)
 	}
-	init := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F000")].Init
-	t.Log(init)
 
-	init = genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init
-	t.Log(init.LockedAccounts[0])
+	assert.Equal(t, genesis.configOrDefault(common.Hash{}).Chaos,
+		&params.ChaosConfig{Period: 3, Epoch: 200, AttestationDelay: 2})
 
-	validator := genesis.Validators[0]
-	t.Log(validator.AcceptDelegation)
+	stakingInit := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F000")].Init
+	assert.Equal(t, stakingInit, &Init{
+		Admin:           common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
+		FirstLockPeriod: big.NewInt(63072000), ReleasePeriod: big.NewInt(2592000),
+		ReleaseCnt:    big.NewInt(48),
+		RuEpoch:       big.NewInt(28800),
+		CommunityPool: common.HexToAddress("0x000000000000000000000000000000000000F001"),
+		BonusPool:     common.HexToAddress("0x000000000000000000000000000000000000F002"),
+	})
 
-	acc := genesis.Alloc[common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8")]
-	t.Log(acc.Code == nil)
-	t.Log(acc.Init == nil)
+	genesisLockInit := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init
+	assert.Equal(t, genesisLockInit.LockedAccounts[0], LockedAccount{
+		UserAddress:  common.HexToAddress("0x2FA024cA813449D315d71D49BdDF7c175C036729"),
+		TypeId:       big.NewInt(1),
+		LockedAmount: fromGwei(1000000000000),
+		LockedTime:   big.NewInt(0), PeriodAmount: big.NewInt(48),
+	})
+
+	assert.Equal(t, genesis.Validators[0], ValidatorInfo{
+		Address:          common.HexToAddress("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0"),
+		Manager:          common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
+		Rate:             big.NewInt(20),
+		Stake:            big.NewInt(350000),
+		AcceptDelegation: true,
+	})
+
+	eoa := genesis.Alloc[common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8")]
+	assert.Nil(t, eoa.Code)
+	assert.Nil(t, eoa.Init)
 }
 
 func TestDecodePrealloc(t *testing.T) {

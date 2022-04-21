@@ -180,13 +180,13 @@ func TestUpdateRewardsInfo(t *testing.T) {
 
 	ctx.Header.Number.SetUint64(period)
 
-	assert.Equal(t, new(big.Int).Div(rewardsByMonth[0], blocksPerMonth), currRewardsPerBlock(ctx))
+	assert.Equal(t, new(big.Int).Div(core.RewardsByMonth[0], blocksPerMonth), currRewardsPerBlock(ctx))
 
 	ctx.Header.Number.SetUint64(period * 33)
 
 	assert.NoError(t, UpdateRewardsInfo(ctx))
 
-	assert.Equal(t, new(big.Int).Div(rewardsByMonth[1], blocksPerMonth), currRewardsPerBlock(ctx))
+	assert.Equal(t, new(big.Int).Div(core.RewardsByMonth[1], blocksPerMonth), currRewardsPerBlock(ctx))
 }
 
 func TestDistributeBlockFee(t *testing.T) {

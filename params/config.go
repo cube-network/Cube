@@ -59,10 +59,9 @@ var (
 		ArrowGlacierBlock:   nil,
 
 		Chaos: &ChaosConfig{
-			Period:                3,
-			Epoch:                 200,
-			EnableDevVerification: true,
-			AttestationDelay:      2,
+			Period:           3,
+			Epoch:            200,
+			AttestationDelay: 2,
 		},
 	}
 
@@ -244,7 +243,6 @@ type ChaosConfig struct {
 	Period uint64 `json:"period"` // Number of seconds between blocks to enforce
 	Epoch  uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
 
-	EnableDevVerification bool `json:"enableDevVerification"` // Enable developer address verification
 	// AttestationDelay is the delay number for a validator to provide an attestation.
 	// That is: only attest to a block which height is ≤ `currentHead - AttestationDelay`
 	AttestationDelay uint64 `json:"attestationDelay"`

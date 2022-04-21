@@ -101,9 +101,6 @@ type Init struct {
 	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
 	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
 	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
-	TotalRewards    *big.Int        `json:"totalRewards,omitempty"`
-	RewardsPerBlock *big.Int        `json:"rewardsPerBlock,omitempty"`
-	Epoch           *big.Int        `json:"epoch,omitempty"`
 	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
 	CommunityPool   common.Address  `json:"communityPool,omitempty"`
 	BonusPool       common.Address  `json:"bonusPool,omitempty"`
@@ -173,9 +170,6 @@ type initMarshaling struct {
 	FirstLockPeriod *math.HexOrDecimal256
 	ReleasePeriod   *math.HexOrDecimal256
 	ReleaseCnt      *math.HexOrDecimal256
-	TotalRewards    *math.HexOrDecimal256
-	RewardsPerBlock *math.HexOrDecimal256
-	Epoch           *math.HexOrDecimal256
 	RuEpoch         *math.HexOrDecimal256
 }
 
@@ -309,6 +303,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	if height == nil {
 		return newcfg, stored, fmt.Errorf("missing block number for head header hash")
 	}
+	// Check whether consensus config of Chaos is changed
+	if (storedcfg.Chaos != nil || newcfg.Chaos != nil) && (storedcfg.Chaos == nil ||
+		newcfg.Chaos == nil || *storedcfg.Chaos != *newcfg.Chaos) {
+		return nil, common.Hash{}, errors.New("ChaosConfig is not compatiable with stored")
+	}
 	compatErr := storedcfg.CheckCompatible(newcfg, *height)
 	if compatErr != nil && *height != 0 && compatErr.RewindTo != 0 {
 		return newcfg, stored, compatErr
@@ -375,20 +374,24 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		}
 	}
 
-	// init system contract
-	gInit := &genesisInit{statedb, head, g}
-	sysContractsInitMap := map[string]func() error{"Staking": gInit.initStaking, "CommunityPool": gInit.initCommunityPool,
-		"BonusPool": gInit.initBonusPool, "GenesisLock": gInit.initGenesisLock}
-
-	for name, initFunc := range sysContractsInitMap {
-		if err = initFunc(); err != nil {
-			log.Crit("Failed to init system contract", "contract", name, "err", err)
+	// Handle the Chaos related
+	if g.Config.Chaos != nil {
+		// init system contract
+		gInit := &genesisInit{statedb, head, g}
+		for name, initSystemContract := range map[string]func() error{
+			"Staking":       gInit.initStaking,
+			"CommunityPool": gInit.initCommunityPool,
+			"BonusPool":     gInit.initBonusPool,
+			"GenesisLock":   gInit.initGenesisLock,
+		} {
+			if err = initSystemContract(); err != nil {
+				log.Crit("Failed to init system contract", "contract", name, "err", err)
+			}
 		}
-	}
-
-	// Set validoter info
-	if head.Extra, err = gInit.initValidators(); err != nil {
-		log.Crit("Failed to init Validators", "err", err)
+		// Set validoter info
+		if head.Extra, err = gInit.initValidators(); err != nil {
+			log.Crit("Failed to init Validators", "err", err)
+		}
 	}
 
 	// Update root after execution
@@ -558,9 +561,6 @@ func decodePrealloc(data string) GenesisAlloc {
 		FirstLockPeriod *big.Int
 		ReleasePeriod   *big.Int
 		ReleaseCnt      *big.Int
-		TotalRewards    *big.Int
-		RewardsPerBlock *big.Int
-		Epoch           *big.Int
 		RuEpoch         *big.Int
 		CommunityPool   *big.Int
 		BonusPool       *big.Int
@@ -587,9 +587,6 @@ func decodePrealloc(data string) GenesisAlloc {
 				FirstLockPeriod: account.Init.FirstLockPeriod,
 				ReleasePeriod:   account.Init.ReleasePeriod,
 				ReleaseCnt:      account.Init.ReleaseCnt,
-				TotalRewards:    account.Init.TotalRewards,
-				RewardsPerBlock: account.Init.RewardsPerBlock,
-				Epoch:           account.Init.Epoch,
 				RuEpoch:         account.Init.RuEpoch,
 				CommunityPool:   common.BigToAddress(account.Init.CommunityPool),
 				BonusPool:       common.BigToAddress(account.Init.BonusPool),

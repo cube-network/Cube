@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/system"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -15,21 +16,6 @@ import (
 const topValidatorNum uint8 = 21
 
 var (
-	rewardsByMonth = []*big.Int{
-		bigInt("89363425930000000000000"), bigInt("97388213730000000000000"), bigInt("194843300700000000000000"), bigInt("211027180100000000000000"),
-		bigInt("316709351000000000000000"), bigInt("341188873400000000000000"), bigInt("465189521400000000000000"), bigInt("508140174800000000000000"),
-		bigInt("650765880000000000000000"), bigInt("712496799300000000000000"), bigInt("874059272700000000000000"), bigInt("954884766600000000000000"),
-		bigInt("1133513436000000000000000"), bigInt("1231547344000000000000000"), bigInt("1427527831000000000000000"), bigInt("1543058156000000000000000"),
-		bigInt("1756680863000000000000000"), bigInt("1890000425000000000000000"), bigInt("2121560614000000000000000"), bigInt("2272967138000000000000000"),
-		bigInt("2522765012000000000000000"), bigInt("2692561202000000000000000"), bigInt("2960901990000000000000000"), bigInt("3149395618000000000000000"),
-		bigInt("3440061877000000000000000"), bigInt("3651067023000000000000000"), bigInt("3964432396000000000000000"), bigInt("4198325814000000000000000"),
-		bigInt("4534770196000000000000000"), bigInt("4791934947000000000000000"), bigInt("5141427924000000000000000"), bigInt("5411750008000000000000000"),
-		bigInt("5774509962000000000000000"), bigInt("6058209582000000000000000"), bigInt("6434458551000000000000000"), bigInt("6731759594000000000000000"),
-		bigInt("7119755739000000000000000"), bigInt("7428901852000000000000000"), bigInt("7828841775000000000000000"), bigInt("8150031197000000000000000"),
-		bigInt("8562114790000000000000000"), bigInt("8895549080000000000000000"), bigInt("9316970322000000000000000"), bigInt("9659820075000000000000000"),
-		bigInt("10090735240000000000000000"), bigInt("10443158040000000000000000"), bigInt("10883726020000000000000000"), bigInt("11245882070000000000000000"),
-	}
-
 	blocksPerMonth = big.NewInt(60 * 60 * 24 / 3 * 30)
 )
 
@@ -39,15 +25,6 @@ type AddrAscend []common.Address
 func (s AddrAscend) Len() int           { return len(s) }
 func (s AddrAscend) Less(i, j int) bool { return bytes.Compare(s[i][:], s[j][:]) < 0 }
 func (s AddrAscend) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-
-// bigInt converts a string to big.Int
-func bigInt(n string) *big.Int {
-	if bint, ok := new(big.Int).SetString(n, 10); !ok {
-		panic("Failed to convert to big int:" + n)
-	} else {
-		return bint
-	}
-}
 
 // GetTopValidators return the result of calling method `getTopValidators` in Staking contract
 func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
@@ -155,7 +132,7 @@ func UpdateRewardsInfo(ctx *CallContext) error {
 	month := new(big.Int).Div(ctx.Header.Number, blocksPerMonth).Int64()
 	// After 4 years, rewards is 0
 	if month < 48 {
-		rewardsPerBlock = new(big.Int).Div(rewardsByMonth[month], blocksPerMonth)
+		rewardsPerBlock = new(big.Int).Div(core.RewardsByMonth[month], blocksPerMonth)
 	}
 
 	// Execute contract

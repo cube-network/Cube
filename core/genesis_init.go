@@ -36,6 +36,22 @@ const (
 	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
 )
 
+var RewardsByMonth = []*big.Int{
+	fromGwei(460590277777778), fromGwei(516685474537037), fromGwei(573248131269290), fromGwei(630282143474312), fromGwei(687791439114376), fromGwei(745779978884773),
+	fromGwei(838973978708813), fromGwei(932944595198053), fromGwei(1027698300158040), fromGwei(1123241619326020), fromGwei(1219581132820400), fromGwei(1316723475593910),
+	fromGwei(1449397560112750), fromGwei(1583177262002570), fromGwei(1718071794741480), fromGwei(1854090448586550), fromGwei(1991242591213660), fromGwei(2129537668362660),
+	fromGwei(2268985204487910), fromGwei(2409594803414200), fromGwei(2551376148998200), fromGwei(2694339005795410), fromGwei(2838493219732590), fromGwei(2983848718785920),
+	fromGwei(3154721069220250), fromGwei(3327017355908200), fromGwei(3500749444985210), fromGwei(3675929301471200), fromGwei(3852568990094570), fromGwei(4030680676123140),
+	fromGwei(4210276626201940), fromGwei(4391369209198070), fromGwei(4573970897052500), fromGwei(4758094265639040), fromGwei(4943751995630480), fromGwei(5130956873371840),
+	fromGwei(5295416236205500), fromGwei(5461246093729430), fromGwei(5628457866732730), fromGwei(5797063071177730), fromGwei(5967073318993100), fromGwei(6138500318873600),
+	fromGwei(6276633654864210), fromGwei(6415918101988080), fromGwei(6556363252837980), fromGwei(6697978779944960), fromGwei(6840774436444510), fromGwei(6984760056748220),
+}
+
+// fromGwei convert amount from gwei to wei
+func fromGwei(gwei int64) *big.Int {
+	return new(big.Int).Mul(big.NewInt(gwei), big.NewInt(1000000000))
+}
+
 // genesisInit is tools to init system contracts in genesis
 type genesisInit struct {
 	state   *state.StateDB
@@ -83,18 +99,25 @@ func (env *genesisInit) initStaking() error {
 		totalValidatorStake = new(big.Int).Add(totalValidatorStake, new(big.Int).Mul(validator.Stake, big.NewInt(1000000000000000000)))
 	}
 
-	if contract.Balance.Cmp(new(big.Int).Add(totalValidatorStake, contract.Init.TotalRewards)) != 0 {
-		return errors.New("Balance of staking contract must be equal to total validator stake plus total staking rewards")
+	totalRewards := big.NewInt(0)
+	for _, rewards := range RewardsByMonth {
+		totalRewards = new(big.Int).Add(totalRewards, rewards)
 	}
+
+	contract.Balance = new(big.Int).Add(totalValidatorStake, totalRewards)
+	env.state.SetBalance(system.StakingContract, contract.Balance)
+
+	blocksPerMonth := big.NewInt(60 * 60 * 24 / 3 * 30)
+	rewardsPerBlock := new(big.Int).Div(RewardsByMonth[0], blocksPerMonth)
 
 	_, err := env.callContract(system.StakingContract, "initialize",
 		contract.Init.Admin,
 		contract.Init.FirstLockPeriod,
 		contract.Init.ReleasePeriod,
 		contract.Init.ReleaseCnt,
-		contract.Init.TotalRewards,
-		contract.Init.RewardsPerBlock,
-		contract.Init.Epoch,
+		totalRewards,
+		rewardsPerBlock,
+		big.NewInt(int64(env.genesis.Config.Chaos.Epoch)),
 		contract.Init.RuEpoch,
 		contract.Init.CommunityPool,
 		contract.Init.BonusPool)
@@ -128,13 +151,11 @@ func (env *genesisInit) initGenesisLock() error {
 		return errors.New("GenesisLock Contract is missing in genesis!")
 	}
 
-	totalLocked := big.NewInt(0)
+	contract.Balance = big.NewInt(0)
 	for _, account := range contract.Init.LockedAccounts {
-		totalLocked = new(big.Int).Add(totalLocked, account.LockedAmount)
+		contract.Balance = new(big.Int).Add(contract.Balance, account.LockedAmount)
 	}
-	if contract.Balance.Cmp(totalLocked) != 0 {
-		return errors.New("Balance of GenesisLock must be equal to total locked amount")
-	}
+	env.state.SetBalance(system.GenesisLockContract, contract.Balance)
 
 	var (
 		address      = make([]common.Address, 0, initBatch)

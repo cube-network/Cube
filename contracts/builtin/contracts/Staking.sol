@@ -545,6 +545,10 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
     function doClaimAny(address _val, bool byValidator) private {
         // settle rewards of the validator
         uint settledRewards = calcValidatorRewards(_val);
+        //reset debt
+        ValidatorInfo storage vInfo = valInfos[_val];
+        vInfo.debt = accRewardsPerStake.mul(vInfo.stakeGWei);
+
         // call IValidator function
         IValidator val = valMaps[_val];
         // the stakeEth had been deducted from totalStake at the time doing subtract or exit staking,
@@ -733,28 +737,28 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
     }
 
     // #if !Mainnet
-    function getBasicLockEnd() public view returns(uint256) {
+    function getBasicLockEnd() public view returns (uint256) {
         return basicLockEnd;
     }
 
-    function getReleasePeriod() public view returns(uint256) {
+    function getReleasePeriod() public view returns (uint256) {
         return releasePeriod;
     }
 
-    function getReleaseCount() public view returns(uint256) {
+    function getReleaseCount() public view returns (uint256) {
         return releaseCount;
     }
 
-    function getTotalStakingRewards() public view returns(uint256) {
+    function getTotalStakingRewards() public view returns (uint256) {
         return totalStakingRewards;
     }
 
-    function simulateUpdateRewardsRecord() public view returns(uint256) {
+    function simulateUpdateRewardsRecord() public view returns (uint256) {
         uint deltaBlock = block.number - lastUpdateAccBlock;
         if (deltaBlock > 0) {
-            return  accRewardsPerStake + (currRewardsPerBlock * deltaBlock) / totalStakeGWei;
+            return accRewardsPerStake + (currRewardsPerBlock * deltaBlock) / totalStakeGWei;
         }
-        return  accRewardsPerStake;
+        return accRewardsPerStake;
     }
 
     function testMustConvertStake(uint256 _value) public pure returns (uint256) {

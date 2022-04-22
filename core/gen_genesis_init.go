@@ -16,24 +16,18 @@ var _ = (*initMarshaling)(nil)
 func (i Init) MarshalJSON() ([]byte, error) {
 	type Init struct {
 		Admin           common.Address        `json:"admin,omitempty"`
-		StakingContract common.Address        `json:"stakingContract,omitempty"`
 		FirstLockPeriod *math.HexOrDecimal256 `json:"firstLockPeriod,omitempty"`
 		ReleasePeriod   *math.HexOrDecimal256 `json:"releasePeriod,omitempty"`
 		ReleaseCnt      *math.HexOrDecimal256 `json:"releaseCnt,omitempty"`
 		RuEpoch         *math.HexOrDecimal256 `json:"ruEpoch,omitempty"`
-		CommunityPool   common.Address        `json:"communityPool,omitempty"`
-		BonusPool       common.Address        `json:"bonusPool,omitempty"`
 		LockedAccounts  []LockedAccount       `json:"lockedAccounts,omitempty"`
 	}
 	var enc Init
 	enc.Admin = i.Admin
-	enc.StakingContract = i.StakingContract
 	enc.FirstLockPeriod = (*math.HexOrDecimal256)(i.FirstLockPeriod)
 	enc.ReleasePeriod = (*math.HexOrDecimal256)(i.ReleasePeriod)
 	enc.ReleaseCnt = (*math.HexOrDecimal256)(i.ReleaseCnt)
 	enc.RuEpoch = (*math.HexOrDecimal256)(i.RuEpoch)
-	enc.CommunityPool = i.CommunityPool
-	enc.BonusPool = i.BonusPool
 	enc.LockedAccounts = i.LockedAccounts
 	return json.Marshal(&enc)
 }
@@ -42,13 +36,10 @@ func (i Init) MarshalJSON() ([]byte, error) {
 func (i *Init) UnmarshalJSON(input []byte) error {
 	type Init struct {
 		Admin           *common.Address       `json:"admin,omitempty"`
-		StakingContract *common.Address       `json:"stakingContract,omitempty"`
 		FirstLockPeriod *math.HexOrDecimal256 `json:"firstLockPeriod,omitempty"`
 		ReleasePeriod   *math.HexOrDecimal256 `json:"releasePeriod,omitempty"`
 		ReleaseCnt      *math.HexOrDecimal256 `json:"releaseCnt,omitempty"`
 		RuEpoch         *math.HexOrDecimal256 `json:"ruEpoch,omitempty"`
-		CommunityPool   *common.Address       `json:"communityPool,omitempty"`
-		BonusPool       *common.Address       `json:"bonusPool,omitempty"`
 		LockedAccounts  []LockedAccount       `json:"lockedAccounts,omitempty"`
 	}
 	var dec Init
@@ -57,9 +48,6 @@ func (i *Init) UnmarshalJSON(input []byte) error {
 	}
 	if dec.Admin != nil {
 		i.Admin = *dec.Admin
-	}
-	if dec.StakingContract != nil {
-		i.StakingContract = *dec.StakingContract
 	}
 	if dec.FirstLockPeriod != nil {
 		i.FirstLockPeriod = (*big.Int)(dec.FirstLockPeriod)
@@ -72,12 +60,6 @@ func (i *Init) UnmarshalJSON(input []byte) error {
 	}
 	if dec.RuEpoch != nil {
 		i.RuEpoch = (*big.Int)(dec.RuEpoch)
-	}
-	if dec.CommunityPool != nil {
-		i.CommunityPool = *dec.CommunityPool
-	}
-	if dec.BonusPool != nil {
-		i.BonusPool = *dec.BonusPool
 	}
 	if dec.LockedAccounts != nil {
 		i.LockedAccounts = dec.LockedAccounts

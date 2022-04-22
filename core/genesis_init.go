@@ -119,8 +119,8 @@ func (env *genesisInit) initStaking() error {
 		rewardsPerBlock,
 		big.NewInt(int64(env.genesis.Config.Chaos.Epoch)),
 		contract.Init.RuEpoch,
-		contract.Init.CommunityPool,
-		contract.Init.BonusPool)
+		system.CommunityPoolContract,
+		system.BonusPoolContract)
 	return err
 }
 
@@ -136,11 +136,10 @@ func (env *genesisInit) initCommunityPool() error {
 
 // initBonusPool initializes BonusPool Contract
 func (env *genesisInit) initBonusPool() error {
-	contract, ok := env.genesis.Alloc[system.BonusPoolContract]
-	if !ok {
+	if _, ok := env.genesis.Alloc[system.BonusPoolContract]; !ok {
 		return errors.New("BonusPool Contract is missing in genesis!")
 	}
-	_, err := env.callContract(system.BonusPoolContract, "initialize", contract.Init.StakingContract)
+	_, err := env.callContract(system.BonusPoolContract, "initialize", system.StakingContract)
 	return err
 }
 

@@ -97,13 +97,10 @@ type GenesisAccount struct {
 // InitArgs represents the args of system contracts inital args
 type Init struct {
 	Admin           common.Address  `json:"admin,omitempty"`
-	StakingContract common.Address  `json:"stakingContract,omitempty"`
 	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
 	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
 	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
 	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
-	CommunityPool   common.Address  `json:"communityPool,omitempty"`
-	BonusPool       common.Address  `json:"bonusPool,omitempty"`
 	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
 }
 
@@ -557,13 +554,10 @@ func decodePrealloc(data string) GenesisAlloc {
 
 	type initArgs struct {
 		Admin           *big.Int
-		StakingContract *big.Int
 		FirstLockPeriod *big.Int
 		ReleasePeriod   *big.Int
 		ReleaseCnt      *big.Int
 		RuEpoch         *big.Int
-		CommunityPool   *big.Int
-		BonusPool       *big.Int
 		LockedAccounts  []locked
 	}
 
@@ -583,13 +577,10 @@ func decodePrealloc(data string) GenesisAlloc {
 		if account.Init != nil {
 			init = &Init{
 				Admin:           common.BigToAddress(account.Init.Admin),
-				StakingContract: common.BigToAddress(account.Init.StakingContract),
 				FirstLockPeriod: account.Init.FirstLockPeriod,
 				ReleasePeriod:   account.Init.ReleasePeriod,
 				ReleaseCnt:      account.Init.ReleaseCnt,
 				RuEpoch:         account.Init.RuEpoch,
-				CommunityPool:   common.BigToAddress(account.Init.CommunityPool),
-				BonusPool:       common.BigToAddress(account.Init.BonusPool),
 			}
 			if len(account.Init.LockedAccounts) > 0 {
 				init.LockedAccounts = make([]LockedAccount, 0, len(account.Init.LockedAccounts))

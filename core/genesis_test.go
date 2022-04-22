@@ -224,10 +224,8 @@ func TestGenesisUnmarshal(t *testing.T) {
 	assert.Equal(t, stakingInit, &Init{
 		Admin:           common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
 		FirstLockPeriod: big.NewInt(63072000), ReleasePeriod: big.NewInt(2592000),
-		ReleaseCnt:    big.NewInt(48),
-		RuEpoch:       big.NewInt(28800),
-		CommunityPool: common.HexToAddress("0x000000000000000000000000000000000000F001"),
-		BonusPool:     common.HexToAddress("0x000000000000000000000000000000000000F002"),
+		ReleaseCnt: big.NewInt(48),
+		RuEpoch:    big.NewInt(28800),
 	})
 
 	genesisLockInit := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init

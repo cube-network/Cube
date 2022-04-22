@@ -41,13 +41,10 @@ import (
 
 type initArgs struct {
 	Admin           *big.Int
-	StakingContract *big.Int
 	FirstLockPeriod *big.Int
 	ReleasePeriod   *big.Int
 	ReleaseCnt      *big.Int
 	RuEpoch         *big.Int
-	CommunityPool   *big.Int
-	BonusPool       *big.Int
 	LockedAccounts  []lockedAccount
 }
 
@@ -82,13 +79,10 @@ func makelist(g *core.Genesis) allocList {
 		init := &initArgs{}
 		if account.Init != nil {
 			init.Admin = new(big.Int).SetBytes(account.Init.Admin.Bytes())
-			init.StakingContract = new(big.Int).SetBytes(account.Init.StakingContract.Bytes())
 			init.FirstLockPeriod = account.Init.FirstLockPeriod
 			init.ReleasePeriod = account.Init.ReleasePeriod
 			init.ReleaseCnt = account.Init.ReleaseCnt
 			init.RuEpoch = account.Init.RuEpoch
-			init.CommunityPool = new(big.Int).SetBytes(account.Init.CommunityPool.Bytes())
-			init.BonusPool = new(big.Int).SetBytes(account.Init.BonusPool.Bytes())
 			if len(account.Init.LockedAccounts) > 0 {
 				lockeds := make([]lockedAccount, 0, len(account.Init.LockedAccounts))
 				for _, locked := range account.Init.LockedAccounts {

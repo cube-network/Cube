@@ -563,9 +563,11 @@ func (s *StateDB) PreloadAccounts(block *types.Block, signer types.Signer) {
 	objsChan := make(chan *stateObject, len(objsForPreload))
 	for addr := range objsForPreload {
 		addr := addr
-		gopool.Submit(func() {
+		if err := gopool.Submit(func() {
 			objsChan <- s.preloadAccountFromSnap(addr)
-		})
+		}); err != nil {
+			log.Error("Failed to preload accounts", "err", err)
+		}
 	}
 
 	for i := 0; i < len(objsForPreload); i++ {
@@ -955,10 +957,12 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 		if obj := s.stateObjects[addr]; !obj.deleted {
 			obj.finalise(false)
 			wg.Add(1)
-			gopool.Submit(func() {
+			if err := gopool.Submit(func() {
 				s.preUpdateStateObject(obj)
 				wg.Done()
-			})
+			}); err != nil {
+				log.Crit("Fail to update trie concurrently")
+			}
 		}
 	}
 

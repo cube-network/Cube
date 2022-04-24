@@ -194,10 +194,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	} else {
 		processOp.bloomWg.Add(1)
-		gopool.Submit(func() {
+		if err := gopool.Submit(func() {
 			receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 			processOp.bloomWg.Done()
-		})
+		}); err != nil {
+			log.Error("Failed to create bloom in gopool", "err", err)
+			return nil, err
+		}
 	}
 
 	if result.Failed() {

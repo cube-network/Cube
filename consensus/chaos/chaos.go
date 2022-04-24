@@ -642,7 +642,7 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
 	// punish validator if low difficulty block found
 	if header.Difficulty.Cmp(diffInTurn) != 0 {
-		if err := c.tryLasyPunish(chain, header, state); err != nil {
+		if err := c.tryLazyPunish(chain, header, state); err != nil {
 			return err
 		}
 	}
@@ -727,8 +727,8 @@ func (c *Chaos) tryDistributeBlockFee(chain consensus.ChainHeaderReader, header 
 	}, fee)
 }
 
-// tryLasyPunish punishes validators that didn't produce blocks
-func (c *Chaos) tryLasyPunish(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
+// tryLazyPunish punishes validators that didn't produce blocks
+func (c *Chaos) tryLazyPunish(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	number := header.Number.Uint64()
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
 	if err != nil {

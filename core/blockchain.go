@@ -670,6 +670,12 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, root common.Hash, repair bo
 	bc.txLookupCache.Purge()
 	bc.futureBlocks.Purge()
 
+	bc.FutureAttessCache.Purge()
+	bc.RecentAttessCache.Purge()
+	bc.HistoryAttessCache.Purge()
+	bc.CasperFFGHistoryCache.Purge()
+	bc.BlockStatusCache.Purge()
+
 	return rootNumber, bc.loadLastState()
 }
 

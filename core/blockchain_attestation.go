@@ -196,7 +196,6 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 	err = bc.MoveAttestsCacheFutureToRecent(head.Number)
 	if err != nil {
 		log.Error(err.Error())
-		return
 	}
 }
 

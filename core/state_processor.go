@@ -32,6 +32,10 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
+var PreservedAddress = map[common.Address]interface{}{
+	consensus.FeeRecoder: nil,
+}
+
 // StateProcessor is a basic Processor, which takes care of transitioning
 // state from one point to another.
 //
@@ -106,6 +110,10 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	commonTxs := make([]*types.Transaction, 0, len(block.Transactions()))
 	punishTxs := make([]*types.Transaction, 0)
 	for i, tx := range block.Transactions() {
+		// Check if tx is sent to preserved address
+		if _, ok := PreservedAddress[*tx.To()]; ok {
+			return nil, nil, 0, fmt.Errorf("Send tx to system preserved address(%v): tx %d [%v]", *tx.To(), i, tx.Hash())
+		}
 		if isChaosEngine {
 			sender, err := types.Sender(signer, tx)
 			if err != nil {

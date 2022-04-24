@@ -100,4 +100,7 @@ var (
 
 	// ErrSenderNoEOA is returned if the sender of a transaction is a contract.
 	ErrSenderNoEOA = errors.New("sender not an eoa")
+
+	// ErrToSystemPreserved is returned if to address of a transaction is system preserved
+	ErrToSystemPreserved = errors.New("to address is system preserved")
 )

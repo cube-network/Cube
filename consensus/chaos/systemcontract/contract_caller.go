@@ -1,6 +1,9 @@
 package systemcontract
 
 import (
+	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"math"
 	"math/big"
 
@@ -35,9 +38,8 @@ func CallContractWithValue(ctx *CallContext, to *common.Address, data []byte, va
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	ctx.Statedb.Finalise(true)
-	if err != nil {
-		log.Error("ExecuteMsg failed", "err", err, "ret", string(ret))
-	}
+	tryShowError(err, ret)
+
 	return ret, err
 }
 
@@ -52,8 +54,19 @@ func VMCallContract(evm *vm.EVM, from common.Address, to *common.Address, data [
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	state.Finalise(true)
-	if err != nil {
-		log.Error("ExecuteMsg failed", "err", err, "ret", string(ret))
-	}
+	tryShowError(err, ret)
+
 	return ret, err
+}
+
+func tryShowError(err error, ret []byte) {
+	if err != nil {
+		if err == vm.ErrExecutionReverted {
+			reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
+			if errUnpack == nil {
+				err = fmt.Errorf("execution reverted: %v", reason)
+			}
+		}
+		log.Error("ExecuteMsg failed", "err", err, "ret", hexutil.Encode(ret))
+	}
 }

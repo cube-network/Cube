@@ -18,9 +18,11 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -76,6 +78,15 @@ func (env *genesisInit) callContract(contract common.Address, method string, arg
 	evm := vm.NewEVM(NewEVMBlockContext(env.header, nil, &env.header.Coinbase), NewEVMTxContext(msg), env.state, env.genesis.Config, vm.Config{})
 	// Run evm call
 	ret, _, err := evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+
+	if err == vm.ErrExecutionReverted {
+		reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
+		if errUnpack != nil {
+			reason = "internal error"
+		}
+		err = fmt.Errorf("%s: %s", err.Error(), reason)
+	}
+
 	if err != nil {
 		log.Error("ExecuteMsg failed", "err", err, "ret", string(ret))
 	}
@@ -199,6 +210,7 @@ func (env *genesisInit) initValidators() ([]byte, error) {
 	if len(env.genesis.Validators) <= 0 {
 		return env.header.Extra, errors.New("validators are missing in genesis!")
 	}
+	activeSet := make([]common.Address, 0, len(env.genesis.Validators))
 	extra := make([]byte, 0, extraVanity+common.AddressLength*len(env.genesis.Validators)+extraSeal)
 	extra = append(extra, env.header.Extra[:extraVanity]...)
 	for _, v := range env.genesis.Validators {
@@ -207,8 +219,12 @@ func (env *genesisInit) initValidators() ([]byte, error) {
 			return env.header.Extra, err
 		}
 		extra = append(extra, v.Address[:]...)
+		activeSet = append(activeSet, v.Address)
 	}
 	extra = append(extra, env.header.Extra[len(env.header.Extra)-extraSeal:]...)
 	env.header.Extra = extra
+	if _, err := env.callContract(system.StakingContract, "updateActiveValidatorSet", activeSet); err != nil {
+		return extra, err
+	}
 	return env.header.Extra, nil
 }

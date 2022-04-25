@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -88,8 +89,11 @@ var (
 )
 
 var (
-	evictionInterval    = time.Minute     // Time interval to check for evictable transactions
-	statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
+	evictionInterval    = time.Minute                     // Time interval to check for evictable transactions
+	statsReportInterval = 8 * time.Second                 // Time interval to report transaction pool stats
+	PreservedAddress    = map[common.Address]interface{}{ // System preserved addresses
+		consensus.FeeRecoder: nil,
+	}
 )
 
 var (
@@ -635,8 +639,8 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if tx.GasFeeCapIntCmp(tx.GasTipCap()) < 0 {
 		return ErrTipAboveFeeCap
 	}
-	// Check to addrss is not system preserved
-	if _, ok := PreservedAddress[*tx.To()]; ok {
+	// Check whether 'to' addrss is system preserved
+	if IsPreserved(tx.To()) {
 		return ErrToSystemPreserved
 	}
 	// Make sure the transaction is signed properly.
@@ -1854,4 +1858,13 @@ func (t *txLookup) RemotesBelowTip(threshold *big.Int) types.Transactions {
 // numSlots calculates the number of slots needed for a single transaction.
 func numSlots(tx *types.Transaction) int {
 	return int((tx.Size() + txSlotSize - 1) / txSlotSize)
+}
+
+// IsPreserved checks whether the address is a system preserved one
+func IsPreserved(address *common.Address) bool {
+	if address == nil {
+		return false
+	}
+	_, preserved := PreservedAddress[*address]
+	return preserved
 }

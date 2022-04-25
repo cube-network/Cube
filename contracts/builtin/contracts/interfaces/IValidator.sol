@@ -38,6 +38,8 @@ interface IValidator {
 
     function anyClaimable(uint _unsettledRewards, address _stakeOwner) external view returns (uint);
 
+    function claimableRewards(uint _unsettledRewards, address _stakeOwner) external view returns (uint);
+
     function punish(uint _factor) external payable ;
 
 }

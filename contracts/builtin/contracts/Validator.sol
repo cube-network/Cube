@@ -472,6 +472,26 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
         }
     }
 
+    function claimableRewards(uint _unsettledRewards, address _stakeOwner) external override view onlyOwner returns (uint) {
+        // calculates _unsettledRewards
+        uint c = _unsettledRewards.mul(commissionRate).div(100);
+        uint newRewards = _unsettledRewards - c;
+        // expected accRewardsPerStake
+        uint rps = newRewards / totalStake;
+        uint expectedAccRPS = accRewardsPerStake + rps;
+
+        uint claimable = 0;
+        if (_stakeOwner == admin) {
+            uint expectedCommission = currCommission + _unsettledRewards - (rps * totalStake);
+            claimable = expectedAccRPS.mul(selfStakeGWei).add(selfSettledRewards).sub(selfDebt);
+            claimable = claimable.add(expectedCommission).add(currFeeRewards);
+        } else {
+            Delegation memory dlg = delegators[_stakeOwner];
+            claimable = expectedAccRPS.mul(dlg.stakeGWei).add(dlg.settled).sub(dlg.debt);
+        }
+        return claimable;
+    }
+
     function punish(uint _factor) external payable override onlyOwner {
         handleReceivedRewards();
         // punish according to totalUnWithdrawn
@@ -541,7 +561,7 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
         if (slashAmountFromPending > 0) {
             if (slashAmountFromPending > claimableUnbound) {
                 claimableUnbound = 0;
-            }else {
+            } else {
                 claimableUnbound -= slashAmountFromPending;
             }
         }
@@ -585,11 +605,11 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
     }
 
     // #if !Mainnet
-    function getSelfDebt() public view returns(uint256) {
+    function getSelfDebt() public view returns (uint256) {
         return selfDebt;
     }
 
-    function getSelfSettledRewards() public view returns(uint256) {
+    function getSelfSettledRewards() public view returns (uint256) {
         return selfSettledRewards;
     }
 

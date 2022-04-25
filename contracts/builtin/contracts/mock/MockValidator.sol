@@ -94,6 +94,9 @@ contract Validator is WithAdmin, IValidator {
     function anyClaimable(uint , address ) external override view onlyOwner returns (uint) {
         return 0;
     }
+    function claimableRewards(uint , address ) external override view onlyOwner returns (uint) {
+        return 0;
+    }
 
     function punish(uint ) external payable override onlyOwner {
 

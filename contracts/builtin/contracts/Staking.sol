@@ -692,7 +692,19 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
 
     // @dev anyClaimable returns how much token(rewards and unbound stakes) can be currently claimed
     // for the specific stakeOwner on a specific validator.
+    // @param _stakeOwner, for delegator, this is the delegator address; for validator, this must be the manager(admin) address of the validator.
     function anyClaimable(address _val, address _stakeOwner) public view returns (uint) {
+        return claimableHandler(_val, _stakeOwner, true);
+    }
+
+    // @dev claimableRewards returns how much rewards can be currently claimed
+    // for the specific stakeOwner on a specific validator.
+    // @param _stakeOwner, for delegator, this is the delegator address; for validator, this must be the manager(admin) address of the validator.
+    function claimableRewards(address _val, address _stakeOwner) public view returns (uint) {
+        return claimableHandler(_val, _stakeOwner, false);
+    }
+
+    function claimableHandler(address _val, address _stakeOwner, bool isIncludingStake) private view returns (uint) {
         if (valMaps[_val] == IValidator(address(0))) {
             return 0;
         }
@@ -709,7 +721,11 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
             unsettledRewards = totalStakingRewards;
         }
         IValidator val = valMaps[_val];
-        return val.anyClaimable(unsettledRewards, _stakeOwner);
+        if (isIncludingStake) {
+            return val.anyClaimable(unsettledRewards, _stakeOwner);
+        } else {
+            return val.claimableRewards(unsettledRewards, _stakeOwner);
+        }
     }
 
     function getAllValidatorsLength() external view returns (uint){

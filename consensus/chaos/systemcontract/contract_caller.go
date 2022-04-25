@@ -2,10 +2,10 @@ package systemcontract
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"math"
 	"math/big"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -38,9 +38,8 @@ func CallContractWithValue(ctx *CallContext, to *common.Address, data []byte, va
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	ctx.Statedb.Finalise(true)
-	tryShowError(err, ret)
 
-	return ret, err
+	return ret, WrapVMError(err, ret)
 }
 
 // VMCallContract executes transaction sent to system contracts with given EVM.
@@ -54,19 +53,18 @@ func VMCallContract(evm *vm.EVM, from common.Address, to *common.Address, data [
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	state.Finalise(true)
-	tryShowError(err, ret)
 
-	return ret, err
+	return ret, WrapVMError(err, ret)
 }
 
-func tryShowError(err error, ret []byte) {
-	if err != nil {
-		if err == vm.ErrExecutionReverted {
-			reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
-			if errUnpack == nil {
-				err = fmt.Errorf("execution reverted: %v", reason)
-			}
+// WrapVMError wraps vm error with readable reason
+func WrapVMError(err error, ret []byte) error {
+	if err == vm.ErrExecutionReverted {
+		reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
+		if errUnpack != nil {
+			reason = "internal error"
 		}
-		log.Error("ExecuteMsg failed", "err", err, "ret", hexutil.Encode(ret))
+		return fmt.Errorf("%s: %s", err.Error(), reason)
 	}
+	return err
 }

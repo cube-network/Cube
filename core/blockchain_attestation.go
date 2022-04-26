@@ -165,7 +165,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 		// attestation in turn, and it cannot initiate across heights
 		a, err := bc.bestAttestationToProcessed(head.Number)
 		if err != nil {
-			log.Error(err.Error())
+			log.Warn(err.Error())
 			return
 		}
 		if a == nil {
@@ -688,7 +688,7 @@ func (bc *BlockChain) IsFiliation(parent, child *types.RangeEdge) (bool, error) 
 	}
 	heightDiff := child.Number.Uint64() - parent.Number.Uint64()
 	if heightDiff > diffUpperLimitWarning {
-		log.Warn("The block gap is large, which may affect the program performance", "Height difference", heightDiff)
+		log.Debug("The block gap is large, which may affect the program performance", "Height difference", heightDiff)
 	}
 	childBlock := bc.GetBlock(child.Hash, child.Number.Uint64())
 	for ; childBlock != nil && childBlock.NumberU64() != parent.Number.Uint64(); childBlock = bc.GetBlock(childBlock.ParentHash(), childBlock.NumberU64()-1) {

@@ -1361,9 +1361,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		return NonStatTy, err
 	}
 	if isNeedReorg == NoNeedReorg {
-		log.Debug("IsNeedReorgByCasperFFG", "According to the CasperFFG rule, the old branch has higher priority")
+		log.Debug("IsNeedReorgByCasperFFG", "According to the CasperFFG rule, the old branch has higher priority", isNeedReorg)
 	} else if isNeedReorg == NeedReorg {
-		log.Debug("IsNeedReorgByCasperFFG", "According to the CasperFFG rule, the new branch has higher priority")
+		log.Debug("IsNeedReorgByCasperFFG", "According to the CasperFFG rule, the new branch has higher priority", isNeedReorg)
 	}
 	reorg := isNeedReorg == NeedReorg
 	// If the total difficulty is higher than our known, add it to the canonical chain

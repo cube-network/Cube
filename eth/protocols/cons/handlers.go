@@ -35,7 +35,7 @@ func handleNewAttestation(backend Backend, msg Decoder, peer *Peer) error {
 	}
 	err := backend.Chain().HandleAttestation(a)
 	if err != nil {
-		log.Error(err.Error())
+		log.Warn(err.Error())
 	}
 	return nil
 }

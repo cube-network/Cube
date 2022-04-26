@@ -24,7 +24,7 @@ contract BonusPool is Initializable, SafeSend, IBonusPool {
     address public owner;
     bool public bonusEnded;
 
-    mapping(address => BonusRecord) records;
+    mapping(address => BonusRecord) public records;
 
     event BonusRecordUpdated(address indexed owner, uint stake, uint time);
     event BonusSend(address indexed owner, address indexed to, uint bonus);

@@ -68,8 +68,8 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
     uint256 public totalStakeGWei; // Total stakes, gwei.
     uint256 public currRewardsPerBlock; // wei
     uint256 public accRewardsPerStake; // accumulative rewards per stakeGWei
-    uint256 lastUpdateAccBlock; // block number of last updates to the accRewardsPerStake
-    uint256 totalStakingRewards; // amount of totalStakingRewards, not including bonus.
+    uint256 public lastUpdateAccBlock; // block number of last updates to the accRewardsPerStake
+    uint256 public totalStakingRewards; // amount of totalStakingRewards, not including bonus.
 
     // necessary restriction for the miner to update some consensus relative value
     uint public rewardsUpdateEpoch; // set on initialize, update the currRewardsPerBlock once per rewardsUpdateEpoch (considering 3 sec per block)

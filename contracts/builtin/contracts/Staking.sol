@@ -14,13 +14,14 @@ import "./interfaces/IBonusPool.sol";
 import "./WithAdmin.sol";
 import "./interfaces/types.sol";
 import "./library/initializable.sol";
+import "./library/ReentrancyGuard.sol";
 
 /*
 Basic rules of Staking:
 1.
 */
 
-contract Staking is Initializable, Params, SafeSend, WithAdmin {
+contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard {
     using SafeMath for uint;
     using SortedLinkedList for SortedLinkedList.List;
 
@@ -534,11 +535,11 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin {
         afterLessStake(_val, val, stakeGWei, op, stakeOwner, payable(msg.sender));
     }
     // @dev validatorClaimAny claims any token that can be send to the manager of the specific validator.
-    function validatorClaimAny(address _val) external onlyExistsAndByManager(_val) {
+    function validatorClaimAny(address _val) external onlyExistsAndByManager(_val) nonReentrant {
         doClaimAny(_val, true);
     }
 
-    function delegatorClaimAny(address _val) external onlyExists(_val) {
+    function delegatorClaimAny(address _val) external onlyExists(_val) nonReentrant {
         doClaimAny(_val, false);
     }
 

@@ -653,6 +653,12 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
             if (block.timestamp < basicLockEnd) {
                 return false;
             } else {
+                // check if the _deltaGWei is valid.
+                uint targetUnbound = fl.unboundStakeGWei.add(_deltaGWei);
+                if (targetUnbound > fl.initialStakeGWei) {
+                    // _deltaGWei is too large.
+                    return false;
+                }
                 if (releasePeriod > 0) {
                     uint _canReleaseCnt = (block.timestamp - basicLockEnd) / releasePeriod;
                     uint _canReleaseAmount = fl.initialStakeGWei.mul(_canReleaseCnt).div(releaseCount);
@@ -660,14 +666,14 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
                     if (_canReleaseCnt >= releaseCount) {
                         // all unlocked
                         fl.locking = false;
-                        fl.unboundStakeGWei += _deltaGWei;
+                        fl.unboundStakeGWei = targetUnbound;
                         founders[_val] = fl;
                         emit FounderUnlocked(_val);
                         // become no locking
                         return true;
                     } else {
-                        if (fl.unboundStakeGWei + _deltaGWei <= _canReleaseAmount) {
-                            fl.unboundStakeGWei += _deltaGWei;
+                        if ( targetUnbound <= _canReleaseAmount) {
+                            fl.unboundStakeGWei = targetUnbound;
                             founders[_val] = fl;
                             // can subtract _deltaGWei;
                             return true;

@@ -115,35 +115,34 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 	if currentNeedHandleHeight <= latestAttestedNum { // Prevent multiple signups due to block rollback
 		return nil, errors.New("the current block height does not reach the range")
 	}
-	// If the previous one of the current latest block has been justified, the latest block will be processed first
-	block := bc.GetBlockByNumber(currentNeedHandleHeight - 1)
-	re := bc.LastValidJustifiedOrFinalized(new(big.Int).SetUint64(currentNeedHandleHeight-1), block.Hash())
-	if latestAttestedNum <= re.Number.Uint64() { // Prevent inclusion relationships
-		// Target Num == Source Num +1
-		targetBlock := bc.GetBlockByNumber(re.Number.Uint64() + 1)
-		target := &types.RangeEdge{
-			Hash:   targetBlock.Hash(),
-			Number: targetBlock.Number(),
-		}
-		return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), re, target)
+	re := bc.LastValidJustifiedOrFinalized()
+	block := bc.GetBlockByNumber(currentNeedHandleHeight)
+	target := &types.RangeEdge{
+		Hash:   block.Hash(),
+		Number: block.Number(),
 	}
+
 	// Self recovery
 	if currentNeedHandleHeight > unableSureBlockStateInterval {
 		diffNumber := currentNeedHandleHeight - unableSureBlockStateInterval
 		if re.Number.Uint64() <= diffNumber {
 			b := bc.GetBlockByNumber(diffNumber)
 			source := &types.RangeEdge{Number: new(big.Int).Set(b.Number()), Hash: b.Hash()}
-			targetBlock := bc.GetBlockByNumber(currentNeedHandleHeight)
-			target := &types.RangeEdge{
-				Hash:   targetBlock.Hash(),
-				Number: targetBlock.Number(),
-			}
 			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
 		}
 	}
-	// TODO retry
-	log.Debug("no attestation found to process")
-	return nil, nil
+	// Fast update
+	// Try your best to submit. The maximum probability occurs when there is a block height difference
+	if re.Number.Uint64() >= currentNeedHandleHeight {
+		status, _ := bc.GetBlockStatusByNum(latestAttestedNum)
+		if status.Uint64() == types.BasJustified || status.Uint64() == types.BasFinalized {
+			b := bc.GetBlockByNumber(latestAttestedNum)
+			source := &types.RangeEdge{Number: new(big.Int).Set(b.Number()), Hash: b.Hash()}
+			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
+		}
+		return nil, errors.New("the current block height does not reach the range")
+	}
+	return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), re, target)
 }
 
 // Subscribe to the ChainHeadEvent message. After obtaining the new block event, first check whether it meets
@@ -200,28 +199,12 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 }
 
 // LastValidJustifiedOrFinalized Get the last valid block status information after the specified block
-func (bc *BlockChain) LastValidJustifiedOrFinalized(num *big.Int, hash common.Hash) *types.RangeEdge {
+func (bc *BlockChain) LastValidJustifiedOrFinalized() *types.RangeEdge {
 	ss := rawdb.ReadAllBlockStatus(bc.db)
-	t := new(types.RangeEdge)
-	for i := 0; i < len(ss); i++ {
-		if ss[i].BlockNumber.Uint64() <= num.Uint64() && bc.HasBlock(ss[i].Hash, ss[i].BlockNumber.Uint64()) {
-			branch, err := bc.IsFiliation(&types.RangeEdge{
-				Hash:   ss[i].Hash,
-				Number: ss[i].BlockNumber,
-			}, &types.RangeEdge{
-				Hash:   hash,
-				Number: num,
-			})
-			if err == nil && branch {
-				t = &types.RangeEdge{Number: new(big.Int).Set(ss[i].BlockNumber), Hash: ss[i].Hash}
-				break
-			}
-		}
+	if len(ss) == 0 {
+		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
 	}
-	if t.Number == nil { // First initialization
-		t = &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
-	}
-	return t
+	return &types.RangeEdge{Number: new(big.Int).Set(ss[0].BlockNumber), Hash: ss[0].Hash}
 }
 
 // StoreLastAttested Stores the height of the last processed block

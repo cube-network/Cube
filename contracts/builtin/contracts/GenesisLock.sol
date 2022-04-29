@@ -3,12 +3,7 @@ pragma solidity 0.8.4;
 
 contract GenesisLock {
     uint256 public startTime;
-    // #if Mainnet
-    uint256 public constant PeriodTime = 2592000; //60*60*24*30 = 2592000
-    // #else
-    uint256 public constant PeriodTime = 50; // for testcase
-    // #endif
-
+    uint256 public periodTime;// = 2592000; //60*60*24*30 = 2592000
 
     /**
     * userType:
@@ -29,7 +24,14 @@ contract GenesisLock {
     //user's claimed Period
     mapping(address => uint256) public claimedPeriod;
 
-
+    function initialize(uint256 _periodTime) external {
+        // #if Mainnet
+        require(block.number == 0,"need gensis block");
+        // #endif
+        require(periodTime == 0, "already initialized");
+        require(_periodTime > 0, "invalid periodTime");
+        periodTime = _periodTime;
+    }
     /**
     *   init the data of all users
     *   The input parameters are 5 equal-length arrays, which store the user's account address, userType, userLockedAmount, firstPeriodLockedTime, and lockedPeriodAmount.
@@ -45,6 +47,8 @@ contract GenesisLock {
         // #if Mainnet
         require(block.number == 0,"need gensis block");
         // #endif
+        require(periodTime > 0, "not initialized");
+
         require(userAddress.length == typeId.length,"typeId length must equal userAddress");
         require(userAddress.length == lockedAmount.length,"lockedAmount length must equal userAddress");
         require(userAddress.length == lockedTime.length,"lockedTime length must equal userAddress");
@@ -68,9 +72,9 @@ contract GenesisLock {
         uint256 startTimestamp = startTime + firstPeriodLockedTime[msg.sender];
 
         if(currentTimestamp[msg.sender] == 0){
-            currentTimestamp[msg.sender] = startTimestamp + PeriodTime * period;
+            currentTimestamp[msg.sender] = startTimestamp + periodTime * period;
         }else{
-            currentTimestamp[msg.sender] = currentTimestamp[msg.sender] + PeriodTime * period;
+            currentTimestamp[msg.sender] = currentTimestamp[msg.sender] + periodTime * period;
         }
         claimedPeriod[msg.sender] += period;
            
@@ -91,11 +95,11 @@ contract GenesisLock {
         if(maxClaimablePeriod > 0){
             if(currentTimestamp[account] >= startTimestamp){
                 if(block.timestamp > currentTimestamp[account]){
-                    period = (block.timestamp - currentTimestamp[account]) / PeriodTime;
+                    period = (block.timestamp - currentTimestamp[account]) / periodTime;
                 }
             }else{
                 if(block.timestamp > startTimestamp){
-                    period = (block.timestamp - startTimestamp) / PeriodTime;
+                    period = (block.timestamp - startTimestamp) / periodTime;
                 }
             }
 
@@ -111,7 +115,7 @@ contract GenesisLock {
     function getUserReleasedPeriod(address account) internal view returns(uint256 period) {
         uint256 startTimestamp = startTime + firstPeriodLockedTime[account];
         if(block.timestamp > startTimestamp){
-            period = (block.timestamp - startTimestamp) / PeriodTime;
+            period = (block.timestamp - startTimestamp) / periodTime;
             if(period > lockedPeriodAmount[account]){
                 period = lockedPeriodAmount[account];
             }

@@ -32,14 +32,21 @@ describe("GenesisLock contract uint test",function(){
         console.log("addr4 address: ",addr4.address);
         console.log("addr5 address: ",addr5.address);
 
-        //await owner.transfer({vaule: ethers.utils.parseEther("90")});
-
-
-        //await hre.network.provider.send('evm_increaseTime',[1000])
-
-
-
     })
+
+    it('should initialize success', async function () {
+        // failed to with 0
+        await expect(genesisLock.initialize(0)).to.be.revertedWith("invalid periodTime");
+
+        // success
+        let tx = await genesisLock.initialize(50);
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+
+        // failed when retry
+        await expect(genesisLock.initialize(10)).to.be.revertedWith("already initialized");
+
+    });
 
     // address[] memory userAddress,
     // uint256[] memory typeId,
@@ -47,6 +54,9 @@ describe("GenesisLock contract uint test",function(){
     // uint256[] memory lockedTime,
     // uint256[] memory periodAmount
     it("should init success",async function(){
+        let tx = await genesisLock.initialize(50);
+        let receipt = await tx.wait();
+        expect(receipt.status).equal(1);
 
         const gasPrice = 5000000000;
         const gasLimit = 42000;

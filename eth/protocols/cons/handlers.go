@@ -17,6 +17,7 @@
 package cons
 
 import (
+	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -85,10 +86,11 @@ func handleAttestations(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&as); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	for i, a := range as {
-		if i > 20 { // max 21 bp
-			break
-		}
+	maxCount := backend.Chain().MaxValidators()
+	if len(as) > int(maxCount) {
+		return errors.New("the total number of attestations exceeds the maximum number of validators")
+	}
+	for _, a := range as {
 		if !peer.knownAttestations.Contains(a.Hash()) {
 			peer.knownAttestations.Add(a.Hash())
 		}

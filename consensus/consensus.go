@@ -152,6 +152,7 @@ type ChaosEngine interface {
 
 	// CurrentValidator Get the verifier address in the current consensus
 	CurrentValidator() common.Address
+	MaxValidators() uint8
 
 	// Attest trys to give an attestation on current chain when a ChainHeadEvent is fired.
 	Attest(chain ChainHeaderReader, headerNum *big.Int, source, target *types.RangeEdge) (*types.Attestation, error)

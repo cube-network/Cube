@@ -758,3 +758,7 @@ func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (u
 		}
 	}
 }
+
+func (bc *BlockChain) MaxValidators() uint8 {
+	return bc.ChaosEngine.MaxValidators()
+}

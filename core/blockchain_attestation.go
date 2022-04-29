@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -24,6 +25,8 @@ const (
 	blockStatusCacheLimit           = 1024
 
 	casperFFGHistoryCacheToKeep = 100
+
+	catchUpDiffTime = 6
 )
 
 const (
@@ -157,12 +160,27 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 // according to the block information and the previous valid block status information, and finally carry out
 // broadcast storage and other processes
 func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
+	// Give priority to judge whether it has caught up
+	firstCatchup := bc.firstCatchUpNumber.Load().(*big.Int)
+	if firstCatchup.Uint64() == 0 && head.Number.Uint64() > 0 {
+		if uint64(time.Now().Unix()) <= head.Time+catchUpDiffTime {
+			bc.firstCatchUpNumber.Store(new(big.Int).Set(head.Number))
+		}
+	}
+	firstCatchup = bc.firstCatchUpNumber.Load().(*big.Int)
+	if head.Number.Uint64() > firstCatchup.Uint64() &&
+		head.Number.Uint64()-firstCatchup.Uint64() >= unableSureBlockStateInterval &&
+		bc.ChaosEngine.AttestationStatus() == types.AttestationPending {
+		bc.ChaosEngine.StartAttestation()
+		log.Info("StartAttestation", "firstCatchup", firstCatchup.Uint64(), "currentHeight", head.Number.Uint64())
+	}
+
 	err := bc.UpdateCurrentEpochBPList(head.Hash(), head.Number.Uint64())
 	if err != nil {
 		log.Error(err.Error())
 		return
 	}
-	if bc.ChaosEngine.IsReadyAttest(head.Number) {
+	if bc.ChaosEngine.IsReadyAttest() {
 		// From the perspective of the current node itself, all it can do is create
 		// attestation in turn, and it cannot initiate across heights
 		a, err := bc.bestAttestationToProcessed(head.Number)

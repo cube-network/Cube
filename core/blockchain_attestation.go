@@ -37,9 +37,6 @@ const (
 func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	//log.Debug("Received a untreated attestation")
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
-	if !bc.IsReadyProcessAttestation(new(big.Int).SetUint64(currentBlockNumber)) {
-		return errors.New("the IsReadyProcessAttestation check failed")
-	}
 	if err := a.SanityCheck(); err != nil {
 		return err
 	}
@@ -150,10 +147,6 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 // according to the block information and the previous valid block status information, and finally carry out
 // broadcast storage and other processes
 func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
-	if !bc.IsReadyProcessAttestation(head.Number) {
-		log.Debug("The height of the block specified for executing process attachment has not been reached")
-		return
-	}
 	err := bc.UpdateCurrentEpochBPList(head.Hash(), head.Number.Uint64())
 	if err != nil {
 		log.Error(err.Error())
@@ -506,10 +499,6 @@ func (bc *BlockChain) IsExistsFutureCache(a *types.Attestation) bool {
 	return false
 }
 
-func (bc *BlockChain) IsReadyProcessAttestation(num *big.Int) bool {
-	return bc.isChaosEngine
-}
-
 func (bc *BlockChain) VerifyLocalDataCheck(a *types.Attestation, number uint64) bool {
 	if a.SourceRangeEdge.Number.Uint64() <= number {
 		if (a.SourceRangeEdge.Number.Uint64() != 0) && (!bc.HasBlock(a.SourceRangeEdge.Hash, a.SourceRangeEdge.Number.Uint64())) {
@@ -687,9 +676,6 @@ func (bc *BlockChain) IsFiliation(parent, child *types.RangeEdge) (bool, error) 
 // which branch will be retained, and then compare the justified state under the same logic. If both branches fail to hit,
 // compare the difficulty of the two blocks according to the old logic
 func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (int, error) {
-	if !bc.IsReadyProcessAttestation(oldBlock.Number()) {
-		return types.BasUnknown, nil
-	}
 	if has, err := rawdb.IsReadyReadBlockStatus(bc.db); !has || err != nil {
 		return types.BasUnknown, nil
 	}

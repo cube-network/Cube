@@ -55,11 +55,11 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 			return err
 		}
 		if isExist {
-			return errors.New("current attestation already exists")
+			return nil
 		}
 	} else {
 		if bc.IsExistsFutureCache(a) {
-			return errors.New("current attestation already exists")
+			return nil
 		}
 	}
 	signer, err := a.RecoverSigner()

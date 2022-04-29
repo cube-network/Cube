@@ -159,7 +159,9 @@ type ChaosEngine interface {
 	CurrentNeedHandleHeight(headerNum uint64) (uint64, error)
 
 	// IsReadyAttest Whether it meets the conditions for executing interest
-	IsReadyAttest(num *big.Int) bool
+	IsReadyAttest() bool
+	AttestationStatus() uint8
+	StartAttestation()
 
 	// AttestationThreshold Get the attestation threshold at the specified height
 	AttestationThreshold(chain ChainHeaderReader, hash common.Hash, number uint64) (int, error)

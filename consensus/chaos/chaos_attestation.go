@@ -71,7 +71,7 @@ func (c *Chaos) MaxValidators() uint8 {
 }
 
 func (c *Chaos) Attest(chain consensus.ChainHeaderReader, headerNum *big.Int, source, target *types.RangeEdge) (*types.Attestation, error) {
-	if !c.IsReadyAttest(headerNum) {
+	if !c.IsReadyAttest() {
 		return nil, errIsNotReadyAttest
 	}
 	if !c.IsAuthorizedAtHeight(chain, c.validator, target.Number.Uint64()) {
@@ -125,8 +125,8 @@ func (c *Chaos) CurrentNeedHandleHeight(headerNum uint64) (uint64, error) {
 	return headerNum - c.config.AttestationDelay, nil
 }
 
-func (c *Chaos) IsReadyAttest(num *big.Int) bool {
-	return c.isReady && c.isStartAttestation
+func (c *Chaos) IsReadyAttest() bool {
+	return c.isReady && c.attestationStatus == types.AttestationStart
 }
 
 func (c *Chaos) AttestationThreshold(chain consensus.ChainHeaderReader, hash common.Hash, number uint64) (int, error) {

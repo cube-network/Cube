@@ -583,7 +583,9 @@ func (s *Ethereum) StopMining() {
 func (s *Ethereum) StartAttestation() {
 	if s.IsMining() {
 		if c, ok := s.engine.(*chaos.Chaos); ok {
-			c.StartAttestation()
+			if c.AttestationStatus() == types.AttestationStop {
+				c.StartAttestation()
+			}
 		}
 	}
 }
@@ -591,7 +593,9 @@ func (s *Ethereum) StartAttestation() {
 func (s *Ethereum) StopAttestation() {
 	if s.IsMining() {
 		if c, ok := s.engine.(*chaos.Chaos); ok {
-			c.StopAttestation()
+			if c.AttestationStatus() == types.AttestationStart {
+				c.StopAttestation()
+			}
 		}
 	}
 }

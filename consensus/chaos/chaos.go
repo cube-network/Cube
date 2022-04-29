@@ -208,7 +208,7 @@ type Chaos struct {
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
 
-	isStartAttestation bool
+	attestationStatus uint8
 }
 
 // New creates a Chaos proof-of-stake-authority consensus engine with the initial
@@ -783,7 +783,7 @@ func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn
 	c.signFn = signFn
 	c.signTxFn = signTxFn
 	c.isReady = true
-	c.isStartAttestation = true
+	c.attestationStatus = types.AttestationPending
 }
 
 // punishDoubleSign punishes double sign attack in casper ffg
@@ -842,12 +842,16 @@ func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *type
 	return nil
 }
 
+func (c *Chaos) AttestationStatus() uint8 {
+	return c.attestationStatus
+}
+
 func (c *Chaos) StartAttestation() {
-	c.isStartAttestation = true
+	c.attestationStatus = types.AttestationStart
 }
 
 func (c *Chaos) StopAttestation() {
-	c.isStartAttestation = false
+	c.attestationStatus = types.AttestationStop
 }
 
 func (c *Chaos) ClearAllViolateCasperFFGPunish() {

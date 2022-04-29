@@ -71,6 +71,10 @@ func (a *Attestation) Hash() common.Hash {
 
 // RecoverSigner recover the signer from the attestation
 func (a *Attestation) RecoverSigner() (common.Address, error) {
+	if signer := a.signer.Load(); signer != nil {
+		return signer.(common.Address), nil
+	}
+
 	if err := a.SanityCheck(); err != nil {
 		return common.Address{}, err
 	}
@@ -78,7 +82,7 @@ func (a *Attestation) RecoverSigner() (common.Address, error) {
 	if err != nil {
 		return common.Address{}, err
 	}
-	a.signer.Store(signer) //TODO:(attestation) do we need it
+	a.signer.Store(signer)
 	return signer, nil
 }
 

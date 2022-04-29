@@ -49,6 +49,19 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 		log.Error("VerifyValidLimit", "targetNumber", targetNumber, "currentBlockNumber", currentBlockNumber)
 		return errors.New("attestation does not meet the valid limit inspection")
 	}
+	if targetNumber <= currentBlockNumber {
+		isExist, err := bc.IsExistsRecentCache(a)
+		if err != nil {
+			return err
+		}
+		if isExist {
+			return errors.New("current attestation already exists")
+		}
+	} else {
+		if bc.IsExistsFutureCache(a) {
+			return errors.New("current attestation already exists")
+		}
+	}
 	signer, err := a.RecoverSigner()
 	if err != nil {
 		log.Error("RecoverSigner error:", "err", err.Error())
@@ -62,9 +75,6 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	}
 	if targetNumber <= currentBlockNumber {
 		return bc.AddOneAttestationToRecentCache(a, signer, false)
-	}
-	if bc.IsExistsFutureCache(a) {
-		return errors.New("current attestation already exists")
 	}
 	return bc.AddOneAttestationToFutureCache(a)
 }
@@ -222,13 +232,6 @@ func (bc *BlockChain) AddOneAttestationToRecentCache(a *types.Attestation, signe
 		}
 	}
 
-	isExist, err := bc.IsExistsRecentCache(a)
-	if err != nil {
-		return err
-	}
-	if isExist {
-		return nil
-	}
 	_, threshold, err := bc.ChaosEngine.VerifyAttestation(bc, a)
 	if err != nil && !isTest {
 		return err
@@ -397,12 +400,16 @@ func (bc *BlockChain) MoveAttestsCacheFutureToRecent(num *big.Int) error {
 	as, found := bc.FutureAttessCache.Get(num.Uint64())
 	if found {
 		cAs := as.(*types.FutureAttestations)
-		for _, v := range cAs.Attestations {
-			signer, err := v.RecoverSigner()
-			if err != nil {
-				return err
+		for _, a := range cAs.Attestations {
+			isExist, err := bc.IsExistsRecentCache(a)
+			if err != nil || isExist {
+				continue
 			}
-			_ = bc.AddOneAttestationToRecentCache(v, signer, false)
+			signer, err := a.RecoverSigner()
+			if err != nil {
+				continue
+			}
+			_ = bc.AddOneAttestationToRecentCache(a, signer, false)
 		}
 		bc.FutureAttessCache.Remove(num.Uint64())
 	}

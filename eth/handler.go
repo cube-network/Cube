@@ -554,7 +554,7 @@ func (h *handler) BroadcastAttestationToOtherNodes(a *types.Attestation) {
 	transfer := peers //[:int(math.Sqrt(float64(len(peers))))]
 	for _, peer := range transfer {
 		log.Info("metric", "method", "BroadcastAttestationToOtherNodes", "peer", peer.ID(), "hash", a.TargetRangeEdge.Hash.String(), "number", a.TargetRangeEdge.Number.Uint64())
-		peer.SendNewAttestation(a)
+		peer.AsyncSendNewAttestation(a)
 	}
 }
 
@@ -564,7 +564,7 @@ func (h *handler) BroadcastJustifiedOrFinalizedBlockToOtherNodes(bs *types.Block
 	transfer := peers //[:int(math.Sqrt(float64(len(peers))))] // TODO
 	for _, peer := range transfer {
 		log.Info("metric", "method", "BroadcastJustifiedOrFinalizedBlockToOtherNodes", "peer", peer.ID(), "hash", bs.Hash.String(), "number", bs.BlockNumber.Uint64())
-		peer.SendNewJustifiedOrFinalizedBlock(bs)
+		peer.AsyncSendNewJustifiedOrFinalizedBlock(bs)
 	}
 }
 

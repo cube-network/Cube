@@ -203,11 +203,15 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 
 // LastValidJustifiedOrFinalized Get the last valid block status information after the specified block
 func (bc *BlockChain) LastValidJustifiedOrFinalized() *types.RangeEdge {
-	ss := rawdb.ReadAllBlockStatus(bc.db)
-	if len(ss) == 0 {
+	last := bc.currentBlockStatusNumber.Load().(*big.Int)
+	if last.Uint64() == 0 {
 		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
 	}
-	return &types.RangeEdge{Number: new(big.Int).Set(ss[0].BlockNumber), Hash: ss[0].Hash}
+	block := bc.GetBlockByNumber(last.Uint64())
+	return &types.RangeEdge{
+		Hash:   block.Hash(),
+		Number: block.Number(),
+	}
 }
 
 // StoreLastAttested Stores the height of the last processed block

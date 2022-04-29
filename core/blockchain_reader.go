@@ -426,7 +426,7 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 		data := blob.(*types.BlockStatus)
 		return data.Status, data.Hash
 	}
-	status, hash := rawdb.ReadBlockStatusByNum(bc.db, number)
+	status, hash := rawdb.ReadBlockStatusByNum(bc.db, new(big.Int).SetUint64(number))
 	// Cache the found status for next time and return
 	// Only deterministic data is saved, and data tracking is required only at the beginning of startup
 	if status == types.BasFinalized {

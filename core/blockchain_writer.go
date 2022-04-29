@@ -22,5 +22,11 @@ func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status u
 		Hash:        hash,
 		Status:      status,
 	})
+	last := bc.currentBlockStatusNumber.Load().(*big.Int)
+	if num.Cmp(last) <= 0 {
+		return nil
+	}
+	rawdb.WriteLastBlockStatusNumber(bc.db, num)
+	bc.currentBlockStatusNumber.Store(new(big.Int).Set(num))
 	return nil
 }

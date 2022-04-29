@@ -101,6 +101,7 @@ type Init struct {
 	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
 	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
 	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
+	PeriodTime      *big.Int        `json:"periodTime,omitempty"`
 	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
 }
 
@@ -168,6 +169,7 @@ type initMarshaling struct {
 	ReleasePeriod   *math.HexOrDecimal256
 	ReleaseCnt      *math.HexOrDecimal256
 	RuEpoch         *math.HexOrDecimal256
+	PeriodTime      *math.HexOrDecimal256
 }
 
 type lockedAccountMarshaling struct {
@@ -558,6 +560,7 @@ func decodePrealloc(data string) GenesisAlloc {
 		ReleasePeriod   *big.Int
 		ReleaseCnt      *big.Int
 		RuEpoch         *big.Int
+		PeriodTime      *big.Int
 		LockedAccounts  []locked
 	}
 
@@ -581,6 +584,7 @@ func decodePrealloc(data string) GenesisAlloc {
 				ReleasePeriod:   account.Init.ReleasePeriod,
 				ReleaseCnt:      account.Init.ReleaseCnt,
 				RuEpoch:         account.Init.RuEpoch,
+				PeriodTime:      account.Init.PeriodTime,
 			}
 			if len(account.Init.LockedAccounts) > 0 {
 				init.LockedAccounts = make([]LockedAccount, 0, len(account.Init.LockedAccounts))

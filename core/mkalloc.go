@@ -45,6 +45,7 @@ type initArgs struct {
 	ReleasePeriod   *big.Int
 	ReleaseCnt      *big.Int
 	RuEpoch         *big.Int
+	PeriodTime      *big.Int
 	LockedAccounts  []lockedAccount
 }
 
@@ -83,6 +84,7 @@ func makelist(g *core.Genesis) allocList {
 			init.ReleasePeriod = account.Init.ReleasePeriod
 			init.ReleaseCnt = account.Init.ReleaseCnt
 			init.RuEpoch = account.Init.RuEpoch
+			init.PeriodTime = account.Init.PeriodTime
 			if len(account.Init.LockedAccounts) > 0 {
 				lockeds := make([]lockedAccount, 0, len(account.Init.LockedAccounts))
 				for _, locked := range account.Init.LockedAccounts {

@@ -20,6 +20,7 @@ func (i Init) MarshalJSON() ([]byte, error) {
 		ReleasePeriod   *math.HexOrDecimal256 `json:"releasePeriod,omitempty"`
 		ReleaseCnt      *math.HexOrDecimal256 `json:"releaseCnt,omitempty"`
 		RuEpoch         *math.HexOrDecimal256 `json:"ruEpoch,omitempty"`
+		PeriodTime      *math.HexOrDecimal256 `json:"periodTime,omitempty"`
 		LockedAccounts  []LockedAccount       `json:"lockedAccounts,omitempty"`
 	}
 	var enc Init
@@ -28,6 +29,7 @@ func (i Init) MarshalJSON() ([]byte, error) {
 	enc.ReleasePeriod = (*math.HexOrDecimal256)(i.ReleasePeriod)
 	enc.ReleaseCnt = (*math.HexOrDecimal256)(i.ReleaseCnt)
 	enc.RuEpoch = (*math.HexOrDecimal256)(i.RuEpoch)
+	enc.PeriodTime = (*math.HexOrDecimal256)(i.PeriodTime)
 	enc.LockedAccounts = i.LockedAccounts
 	return json.Marshal(&enc)
 }
@@ -40,6 +42,7 @@ func (i *Init) UnmarshalJSON(input []byte) error {
 		ReleasePeriod   *math.HexOrDecimal256 `json:"releasePeriod,omitempty"`
 		ReleaseCnt      *math.HexOrDecimal256 `json:"releaseCnt,omitempty"`
 		RuEpoch         *math.HexOrDecimal256 `json:"ruEpoch,omitempty"`
+		PeriodTime      *math.HexOrDecimal256 `json:"periodTime,omitempty"`
 		LockedAccounts  []LockedAccount       `json:"lockedAccounts,omitempty"`
 	}
 	var dec Init
@@ -60,6 +63,9 @@ func (i *Init) UnmarshalJSON(input []byte) error {
 	}
 	if dec.RuEpoch != nil {
 		i.RuEpoch = (*big.Int)(dec.RuEpoch)
+	}
+	if dec.PeriodTime != nil {
+		i.PeriodTime = (*big.Int)(dec.PeriodTime)
 	}
 	if dec.LockedAccounts != nil {
 		i.LockedAccounts = dec.LockedAccounts

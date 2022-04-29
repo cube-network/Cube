@@ -154,7 +154,9 @@ func (env *genesisInit) initBonusPool() error {
 	return err
 }
 
-// initGenesisLock initializes GenesisLock Contract
+// initGenesisLock initializes GenesisLock Contract, including:
+// 1. initialize PeriodTime
+// 2. init locked accounts
 func (env *genesisInit) initGenesisLock() error {
 	contract, ok := env.genesis.Alloc[system.GenesisLockContract]
 	if !ok {
@@ -166,6 +168,11 @@ func (env *genesisInit) initGenesisLock() error {
 		contract.Balance = new(big.Int).Add(contract.Balance, account.LockedAmount)
 	}
 	env.state.SetBalance(system.GenesisLockContract, contract.Balance)
+
+	if _, err := env.callContract(system.GenesisLockContract, "initialize",
+		contract.Init.PeriodTime); err != nil {
+		return err
+	}
 
 	var (
 		address      = make([]common.Address, 0, initBatch)

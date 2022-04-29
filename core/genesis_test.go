@@ -26,6 +26,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -220,15 +221,17 @@ func TestGenesisUnmarshal(t *testing.T) {
 	assert.Equal(t, genesis.configOrDefault(common.Hash{}).Chaos,
 		&params.ChaosConfig{Period: 3, Epoch: 200, AttestationDelay: 2})
 
-	stakingInit := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F000")].Init
+	stakingInit := genesis.Alloc[system.StakingContract].Init
 	assert.Equal(t, stakingInit, &Init{
 		Admin:           common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
-		FirstLockPeriod: big.NewInt(63072000), ReleasePeriod: big.NewInt(2592000),
-		ReleaseCnt: big.NewInt(48),
-		RuEpoch:    big.NewInt(28800),
+		FirstLockPeriod: big.NewInt(63072000),
+		ReleasePeriod:   big.NewInt(2592000),
+		ReleaseCnt:      big.NewInt(48),
+		RuEpoch:         big.NewInt(28800),
 	})
 
-	genesisLockInit := genesis.Alloc[common.HexToAddress("0x000000000000000000000000000000000000F003")].Init
+	genesisLockInit := genesis.Alloc[system.GenesisLockContract].Init
+	assert.Equal(t, big.NewInt(2592000), genesisLockInit.PeriodTime)
 	assert.Equal(t, genesisLockInit.LockedAccounts[0], LockedAccount{
 		UserAddress:  common.HexToAddress("0x2FA024cA813449D315d71D49BdDF7c175C036729"),
 		TypeId:       big.NewInt(1),

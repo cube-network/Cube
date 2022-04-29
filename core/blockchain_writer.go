@@ -9,7 +9,7 @@ import (
 
 // Maximize performance, space for time
 
-func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status *big.Int) error {
+func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status uint8) error {
 	bc.lockBlockStatusCache.Lock()
 	defer bc.lockBlockStatusCache.Unlock()
 

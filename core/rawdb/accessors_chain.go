@@ -985,19 +985,19 @@ func ReadAllBlockStatus(db ethdb.Reader) []*types.BlockStatus {
 	return ss
 }
 
-func ReadBlockStatusByNumAndHash(db ethdb.Reader, num *big.Int, hash common.Hash) *big.Int {
+func ReadBlockStatusByNumAndHash(db ethdb.Reader, num *big.Int, hash common.Hash) uint8 {
 	status, oldHash := ReadBlockStatusByNum(db, num.Uint64())
 	if oldHash == hash {
 		return status
 	}
-	return new(big.Int).SetUint64(types.BasUnknown)
+	return types.BasUnknown
 }
 
 func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
 	return db.Has(blockStatusKey)
 }
 
-func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash) {
+func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (uint8, common.Hash) {
 	blob, _ := db.Get(blockStatusKey)
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
@@ -1013,10 +1013,10 @@ func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash
 			break
 		}
 	}
-	return new(big.Int).SetUint64(types.BasUnknown), common.Hash{}
+	return types.BasUnknown, common.Hash{}
 }
 
-func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status *big.Int) error {
+func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status uint8) error {
 	blob, _ := db.Get(blockStatusKey)
 	var bsList types.BlockStatusList
 	if len(blob) > 0 {
@@ -1028,7 +1028,7 @@ func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, st
 	found := false
 	for _, b := range bsList {
 		if b.BlockNumber.Uint64() == num.Uint64() && b.Hash == hash {
-			if b.Status.Uint64() == status.Uint64() {
+			if b.Status == status {
 				return nil
 			}
 			b.Status = status

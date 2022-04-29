@@ -45,17 +45,17 @@ func handleNewJustifiedOrFinalizedBlock(backend Backend, msg Decoder, peer *Peer
 	if err := msg.Decode(&bs); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	if bs.Status.Uint64() != types.BasJustified && bs.Status.Uint64() != types.BasFinalized {
+	if bs.Status != types.BasJustified && bs.Status != types.BasFinalized {
 		return fmt.Errorf("status is error  %d", bs.Status)
 	}
 	status, hash := backend.Chain().GetBlockStatusByNum(bs.BlockNumber.Uint64())
-	if status.Uint64() == types.BasUnknown { // not found
+	if status == types.BasUnknown { // not found
 		// need to request the current block
 		return p2p.Send(peer.rw, GetAttestationsMsg, &types.RequestAttestation{BlockNumber: new(big.Int).Set(bs.BlockNumber), Hash: bs.Hash})
 	} else if hash != bs.Hash { // Not in theory
 		return fmt.Errorf("hash inequality %v: %v", hash.String(), bs.Hash.String())
 	}
-	if bs.Status.Uint64() == types.BasFinalized && status.Uint64() == types.BasJustified {
+	if bs.Status == types.BasFinalized && status == types.BasJustified {
 		// need to request the next block
 		block := backend.Chain().GetBlockByNumber(bs.BlockNumber.Uint64() + 1)
 		if block == nil {

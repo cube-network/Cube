@@ -267,6 +267,19 @@ const (
 		{
 			"inputs": [
 				{
+					"internalType": "uint256",
+					"name": "_periodTime",
+					"type": "uint256"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
 					"internalType": "address[]",
 					"name": "userAddress",
 					"type": "address[]"

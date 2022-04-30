@@ -39,6 +39,7 @@ func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
 
 	result, err := CallContract(ctx, &system.StakingContract, data)
 	if err != nil {
+		log.Error("Failed to perform GetTopValidators", "err", err)
 		return []common.Address{}, err
 	}
 
@@ -48,11 +49,11 @@ func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
 		return []common.Address{}, err
 	}
 	if len(ret) != 1 {
-		return []common.Address{}, errors.New("invalid result length")
+		return []common.Address{}, errors.New("GetTopValidators: invalid result length")
 	}
 	validators, ok := ret[0].([]common.Address)
 	if !ok {
-		return []common.Address{}, errors.New("invalid validator format")
+		return []common.Address{}, errors.New("GetTopValidators: invalid validator format")
 	}
 	sort.Sort(AddrAscend(validators))
 	return validators, nil
@@ -70,6 +71,7 @@ func UpdateActiveValidatorSet(ctx *CallContext, newValidators []common.Address) 
 	}
 
 	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform UpdateActiveValidatorSet", "newValidators", newValidators, "err", err)
 		return err
 	}
 	return nil
@@ -87,6 +89,7 @@ func DecreaseMissedBlocksCounter(ctx *CallContext) error {
 	}
 
 	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform DecreaseMissedBlocksCounter", "err", err)
 		return err
 	}
 	return nil
@@ -104,6 +107,7 @@ func GetRewardsUpdatePeroid(ctx *CallContext) (uint64, error) {
 	}
 	result, err := CallContract(ctx, &system.StakingContract, data)
 	if err != nil {
+		log.Error("Failed to perform GetRewardsUpdatePeroid", "err", err)
 		return 0, err
 	}
 
@@ -113,11 +117,11 @@ func GetRewardsUpdatePeroid(ctx *CallContext) (uint64, error) {
 		return 0, err
 	}
 	if len(ret) != 1 {
-		return 0, errors.New("invalid result length")
+		return 0, errors.New("GetRewardsUpdatePeroid: invalid result length")
 	}
 	rewardsUpdateEpoch, ok := ret[0].(*big.Int)
 	if !ok {
-		return 0, errors.New("invalid result format")
+		return 0, errors.New("GetRewardsUpdatePeroid: invalid result format")
 	}
 	return rewardsUpdateEpoch.Uint64(), nil
 }
@@ -143,6 +147,7 @@ func UpdateRewardsInfo(ctx *CallContext) error {
 	}
 
 	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform UpdateRewardsInfo", "err", err)
 		return err
 	}
 	return nil
@@ -160,6 +165,7 @@ func DistributeBlockFee(ctx *CallContext, fee *big.Int) error {
 	}
 
 	if _, err := CallContractWithValue(ctx, &system.StakingContract, data, fee); err != nil {
+		log.Error("Failed to perform DistributeBlockFee", "fee", fee, "err", err)
 		return err
 	}
 	return nil
@@ -177,6 +183,7 @@ func LazyPunish(ctx *CallContext, validator common.Address) error {
 	}
 
 	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform LazyPunish", "validator", validator, "err", err)
 		return err
 	}
 	return nil
@@ -193,6 +200,7 @@ func DoubleSignPunish(ctx *CallContext, punishHash common.Hash, validator common
 		return err
 	}
 	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform DoubleSignPunish", "validator", validator, "punishHash", punishHash, "err", err)
 		return err
 	}
 	return nil
@@ -209,6 +217,7 @@ func DoubleSignPunishGivenEVM(evm *vm.EVM, from common.Address, punishHash commo
 		return err
 	}
 	if _, err := VMCallContract(evm, from, &system.StakingContract, data); err != nil {
+		log.Error("Failed to perform DoubleSignPunishGivenEVM", "validator", validator, "punishHash", punishHash, "err", err)
 		return err
 	}
 	return nil
@@ -227,6 +236,7 @@ func IsDoubleSignPunished(ctx *CallContext, punishHash common.Hash) (bool, error
 
 	result, err := CallContract(ctx, &system.StakingContract, data)
 	if err != nil {
+		log.Error("Failed to perform IsDoubleSignPunished", "punishHash", punishHash, "err", err)
 		return true, err
 	}
 
@@ -236,11 +246,11 @@ func IsDoubleSignPunished(ctx *CallContext, punishHash common.Hash) (bool, error
 		return true, err
 	}
 	if len(ret) != 1 {
-		return true, errors.New("invalid result length")
+		return true, errors.New("IsDoubleSignPunished: invalid result length")
 	}
 	punished, ok := ret[0].(bool)
 	if !ok {
-		return true, errors.New("invalid result format")
+		return true, errors.New("IsDoubleSignPunished: invalid result format")
 	}
 	return punished, nil
 }

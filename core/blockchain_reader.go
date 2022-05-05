@@ -149,14 +149,14 @@ func (bc *BlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return block
 }
 
-func (bc *BlockChain) GetBlockPredictStatus(hash common.Hash, number uint64) *big.Int {
+func (bc *BlockChain) GetBlockPredictStatus(hash common.Hash, number uint64) uint8 {
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
 	if currentBlockNumber > unableSureBlockStateInterval {
 		if number < currentBlockNumber-unableSureBlockStateInterval {
 			if bc.HasBlock(hash, number) {
-				return new(big.Int).SetInt64(types.BasFinalized)
+				return types.BasFinalized
 			} else {
-				return new(big.Int).SetInt64(types.BasUnknown)
+				return types.BasUnknown
 			}
 		}
 	}
@@ -408,16 +408,16 @@ func (bc *BlockChain) SubscribeNewJustifiedOrFinalizedBlockEvent(ch chan<- NewJu
 	return bc.scope.Track(bc.newJustifiedOrFinalizedBlockFeed.Subscribe(ch))
 }
 
-func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) *big.Int {
+func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) uint8 {
 	// Short circuit if the status's already in the cache, retrieve otherwise
 	status, oldHash := bc.GetBlockStatusByNum(number)
 	if oldHash == hash {
 		return status
 	}
-	return new(big.Int).SetUint64(types.BasUnknown)
+	return types.BasUnknown
 }
 
-func (bc *BlockChain) GetBlockStatusByNum(number uint64) (*big.Int, common.Hash) {
+func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 	bc.lockBlockStatusCache.Lock()
 	defer bc.lockBlockStatusCache.Unlock()
 
@@ -426,10 +426,10 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (*big.Int, common.Hash)
 		data := blob.(*types.BlockStatus)
 		return data.Status, data.Hash
 	}
-	status, hash := rawdb.ReadBlockStatusByNum(bc.db, number)
+	status, hash := rawdb.ReadBlockStatusByNum(bc.db, new(big.Int).SetUint64(number))
 	// Cache the found status for next time and return
 	// Only deterministic data is saved, and data tracking is required only at the beginning of startup
-	if status.Uint64() == types.BasFinalized {
+	if status == types.BasFinalized {
 		bc.BlockStatusCache.Add(number, &types.BlockStatus{
 			BlockNumber: new(big.Int).SetUint64(number),
 			Hash:        hash,

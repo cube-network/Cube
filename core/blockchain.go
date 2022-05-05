@@ -214,14 +214,15 @@ type BlockChain struct {
 
 	shouldPreserve func(*types.Block) bool // Function used to determine whether should preserve the given block.
 
-	ChaosEngine           consensus.ChaosEngine
-	isChaosEngine         bool
-	currentAttestedNumber atomic.Value // Currently the latest attested block number that is stored in db
-	FutureAttessCache     *lru.Cache   // Future attestations are attestations added for later processing
-	RecentAttessCache     *lru.Cache   // Cache for the most recent attestations hashes, use it to skip duplicate-processing.
-	HistoryAttessCache    *lru.Cache
-	CasperFFGHistoryCache *lru.Cache
-	BlockStatusCache      *lru.Cache
+	ChaosEngine              consensus.ChaosEngine
+	isChaosEngine            bool
+	currentAttestedNumber    atomic.Value // Currently the latest attested block number that is stored in db
+	currentBlockStatusNumber atomic.Value
+	FutureAttessCache        *lru.Cache // Future attestations are attestations added for later processing
+	RecentAttessCache        *lru.Cache // Cache for the most recent attestations hashes, use it to skip duplicate-processing.
+	HistoryAttessCache       *lru.Cache
+	CasperFFGHistoryCache    *lru.Cache
+	BlockStatusCache         *lru.Cache
 
 	currentEpochCheckBps atomic.Value // types.EpochCheckBps
 	lock                 sync.RWMutex
@@ -277,9 +278,13 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.ChaosEngine, bc.isChaosEngine = engine.(consensus.ChaosEngine)
 	if bc.isChaosEngine {
 		// load stored last attested number
-		currentAttested := rawdb.ReadLastAttestNumber(bc.db, bc.ChaosEngine.CurrentValidator()) // TODO db?
+		currentAttested := rawdb.ReadLastAttestNumber(bc.db, bc.ChaosEngine.CurrentValidator())
 		bc.currentAttestedNumber.Store(currentAttested)
 		log.Info("last stored attested number", "num", currentAttested)
+
+		blockStatusNumber := rawdb.LastBlockStatusNumber(bc.db)
+		bc.currentBlockStatusNumber.Store(blockStatusNumber)
+		log.Info("last stored block status number", "num", blockStatusNumber)
 
 		bc.FutureAttessCache, _ = lru.New(maxFutureAttestations)
 		bc.RecentAttessCache, _ = lru.New(attestationsCacheLimit)

@@ -47,7 +47,7 @@ type LesApiBackend struct {
 	gpo                 *gasprice.Oracle
 }
 
-func (b *LesApiBackend) BlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint64, error) {
+func (b *LesApiBackend) BlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint8, error) {
 	//TODO implement me
 	panic("implement me")
 }

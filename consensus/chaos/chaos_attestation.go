@@ -66,6 +66,10 @@ func (c *Chaos) CurrentValidator() common.Address {
 	return c.validator
 }
 
+func (c *Chaos) MaxValidators() uint8 {
+	return systemcontract.TopValidatorNum
+}
+
 func (c *Chaos) Attest(chain consensus.ChainHeaderReader, headerNum *big.Int, source, target *types.RangeEdge) (*types.Attestation, error) {
 	if !c.IsReadyAttest(headerNum) {
 		return nil, errIsNotReadyAttest

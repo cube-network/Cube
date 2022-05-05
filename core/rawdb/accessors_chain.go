@@ -970,94 +970,47 @@ func WriteLastAttestNumber(db ethdb.KeyValueWriter, val common.Address, num *big
 	}
 }
 
-func ReadAllBlockStatus(db ethdb.Reader) []*types.BlockStatus {
-	blob, _ := db.Get(blockStatusKey)
-	var bsList types.BlockStatusList
-	if len(blob) > 0 {
-		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
-			log.Crit("failed to decode all block status")
-		}
+func WriteLastBlockStatusNumber(db ethdb.KeyValueWriter, num *big.Int) {
+	err := db.Put(lastBlockStatusKey, num.Bytes())
+	if err != nil {
+		log.Crit("Failed to store last attest status number", "err", err)
 	}
-	var ss []*types.BlockStatus
-	for _, s := range bsList {
-		ss = append(ss, &types.BlockStatus{BlockNumber: s.BlockNumber, Hash: s.Hash, Status: s.Status})
-	}
-	return ss
 }
 
-func ReadBlockStatusByNumAndHash(db ethdb.Reader, num *big.Int, hash common.Hash) *big.Int {
-	status, oldHash := ReadBlockStatusByNum(db, num.Uint64())
-	if oldHash == hash {
-		return status
-	}
-	return new(big.Int).SetUint64(types.BasUnknown)
+func LastBlockStatusNumber(db ethdb.Reader) *big.Int {
+	data, _ := db.Get(lastBlockStatusKey)
+	return new(big.Int).SetBytes(data)
 }
 
 func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
 	return db.Has(blockStatusKey)
 }
 
-func ReadBlockStatusByNum(db ethdb.Reader, number uint64) (*big.Int, common.Hash) {
-	blob, _ := db.Get(blockStatusKey)
-	var bsList types.BlockStatusList
+func ReadBlockStatusByNum(db ethdb.Reader, num *big.Int) (uint8, common.Hash) {
+	key := append(blockStatusKey, num.Bytes()...)
+	blob, _ := db.Get(key)
+	var bs types.BlockStatus
 	if len(blob) > 0 {
-		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
+		if err := rlp.DecodeBytes(blob, &bs); err != nil {
 			log.Crit("failed to decode old bad blocks")
 		}
+		return bs.Status, bs.Hash
 	}
-	for _, s := range bsList {
-		if s.BlockNumber.Uint64() == number {
-			return s.Status, s.Hash
-		}
-		if s.BlockNumber.Uint64() < number {
-			break
-		}
-	}
-	return new(big.Int).SetUint64(types.BasUnknown), common.Hash{}
+	return types.BasUnknown, common.Hash{}
 }
 
-func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status *big.Int) error {
-	blob, _ := db.Get(blockStatusKey)
-	var bsList types.BlockStatusList
-	if len(blob) > 0 {
-		if err := rlp.DecodeBytes(blob, &bsList); err != nil {
-			log.Crit("failed to decode old bad blocks")
-		}
+func WriteBlockStatus(db ethdb.KeyValueStore, num *big.Int, hash common.Hash, status uint8) error {
+	key := append(blockStatusKey, num.Bytes()...)
+	blockStatus := &types.BlockStatus{
+		BlockNumber: num,
+		Hash:        hash,
+		Status:      status,
 	}
-
-	found := false
-	for _, b := range bsList {
-		if b.BlockNumber.Uint64() == num.Uint64() && b.Hash == hash {
-			if b.Status.Uint64() == status.Uint64() {
-				return nil
-			}
-			b.Status = status
-			found = true
-			break
-		}
-		if b.BlockNumber.Uint64() == num.Uint64() {
-			return fmt.Errorf("only one hash can be marked at the same height %d %v", num.Uint64(), hash.String())
-		}
-		if b.BlockNumber.Uint64() < num.Uint64() {
-			break
-		}
-	}
-	if !found {
-		bsList = append(bsList, &types.BlockStatus{
-			BlockNumber: num,
-			Hash:        hash,
-			Status:      status,
-		})
-		sort.Sort(sort.Reverse(bsList))
-		if len(bsList) > blockStatusToKeep {
-			bsList = bsList[:blockStatusToKeep]
-		}
-	}
-	data, err := rlp.EncodeToBytes(bsList)
+	data, err := rlp.EncodeToBytes(blockStatus)
 	if err != nil {
 		log.Crit("failed to encode block status %v", err.Error())
 	}
-	if err := db.Put(blockStatusKey, data); err != nil {
+	if err := db.Put(key, data); err != nil {
 		log.Crit("failed to write block status %v", err.Error())
 	}
 	return nil

@@ -114,8 +114,8 @@ func (b *EthAPIBackend) BlockByHash(ctx context.Context, hash common.Hash) (*typ
 	return b.eth.blockchain.GetBlockByHash(hash), nil
 }
 
-func (b *EthAPIBackend) BlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint64, error) {
-	return b.eth.blockchain.GetBlockPredictStatus(hash, uint64(number)).Uint64(), nil
+func (b *EthAPIBackend) BlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint8, error) {
+	return b.eth.blockchain.GetBlockPredictStatus(hash, uint64(number)), nil
 }
 
 func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Block, error) {

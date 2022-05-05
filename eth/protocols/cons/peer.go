@@ -67,8 +67,8 @@ func newPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 		term:                            make(chan struct{}),
 	}
 	// Start up all the broadcasters
-	//go peer.broadcastAttestationsLoop()
-	//go peer.broadcastJustifiedOrFinalizedBlockLoop()
+	go peer.broadcastAttestationsLoop()
+	go peer.broadcastJustifiedOrFinalizedBlockLoop()
 	return peer
 }
 

@@ -37,9 +37,6 @@ const (
 func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	//log.Debug("Received a untreated attestation")
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
-	if !bc.IsReadyProcessAttestation(new(big.Int).SetUint64(currentBlockNumber)) {
-		return errors.New("the IsReadyProcessAttestation check failed")
-	}
 	if err := a.SanityCheck(); err != nil {
 		return err
 	}
@@ -51,6 +48,19 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	if !bc.VerifyValidLimit(targetNumber, currentBlockNumber) {
 		log.Error("VerifyValidLimit", "targetNumber", targetNumber, "currentBlockNumber", currentBlockNumber)
 		return errors.New("attestation does not meet the valid limit inspection")
+	}
+	if targetNumber <= currentBlockNumber {
+		isExist, err := bc.IsExistsRecentCache(a)
+		if err != nil {
+			return err
+		}
+		if isExist {
+			return nil
+		}
+	} else {
+		if bc.IsExistsFutureCache(a) {
+			return nil
+		}
 	}
 	signer, err := a.RecoverSigner()
 	if err != nil {
@@ -65,9 +75,6 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	}
 	if targetNumber <= currentBlockNumber {
 		return bc.AddOneAttestationToRecentCache(a, signer, false)
-	}
-	if bc.IsExistsFutureCache(a) {
-		return errors.New("current attestation already exists")
 	}
 	return bc.AddOneAttestationToFutureCache(a)
 }
@@ -135,7 +142,7 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 	// Try your best to submit. The maximum probability occurs when there is a block height difference
 	if re.Number.Uint64() >= currentNeedHandleHeight {
 		status, _ := bc.GetBlockStatusByNum(latestAttestedNum)
-		if status.Uint64() == types.BasJustified || status.Uint64() == types.BasFinalized {
+		if status == types.BasJustified || status == types.BasFinalized {
 			b := bc.GetBlockByNumber(latestAttestedNum)
 			source := &types.RangeEdge{Number: new(big.Int).Set(b.Number()), Hash: b.Hash()}
 			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
@@ -150,10 +157,6 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 // according to the block information and the previous valid block status information, and finally carry out
 // broadcast storage and other processes
 func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
-	if !bc.IsReadyProcessAttestation(head.Number) {
-		log.Debug("The height of the block specified for executing process attachment has not been reached")
-		return
-	}
 	err := bc.UpdateCurrentEpochBPList(head.Hash(), head.Number.Uint64())
 	if err != nil {
 		log.Error(err.Error())
@@ -200,11 +203,15 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 
 // LastValidJustifiedOrFinalized Get the last valid block status information after the specified block
 func (bc *BlockChain) LastValidJustifiedOrFinalized() *types.RangeEdge {
-	ss := rawdb.ReadAllBlockStatus(bc.db)
-	if len(ss) == 0 {
+	last := bc.currentBlockStatusNumber.Load().(*big.Int)
+	if last.Uint64() == 0 {
 		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
 	}
-	return &types.RangeEdge{Number: new(big.Int).Set(ss[0].BlockNumber), Hash: ss[0].Hash}
+	block := bc.GetBlockByNumber(last.Uint64())
+	return &types.RangeEdge{
+		Hash:   block.Hash(),
+		Number: block.Number(),
+	}
 }
 
 // StoreLastAttested Stores the height of the last processed block
@@ -229,13 +236,6 @@ func (bc *BlockChain) AddOneAttestationToRecentCache(a *types.Attestation, signe
 		}
 	}
 
-	isExist, err := bc.IsExistsRecentCache(a)
-	if err != nil {
-		return err
-	}
-	if isExist {
-		return nil
-	}
 	_, threshold, err := bc.ChaosEngine.VerifyAttestation(bc, a)
 	if err != nil && !isTest {
 		return err
@@ -290,7 +290,7 @@ func (bc *BlockChain) AddOneValidAttestationToRecentCache(a *types.Attestation, 
 
 	if totalCount >= threshold {
 		status, _ := bc.GetBlockStatusByNum(treNumber.Uint64())
-		if status.Uint64() == types.BasUnknown { // not found
+		if status == types.BasUnknown { // not found
 			status, err := bc.AddBlockBasJustified(treNumber, treHash)
 			if err != nil {
 				log.Error(err.Error())
@@ -298,7 +298,7 @@ func (bc *BlockChain) AddOneValidAttestationToRecentCache(a *types.Attestation, 
 			if status == types.BasJustified || status == types.BasFinalized {
 				bc.BroadcastNewJustifiedOrFinalizedBlockToOtherNodes(
 					&types.BlockStatus{BlockNumber: treNumber, Hash: treHash,
-						Status: new(big.Int).SetUint64(uint64(status))})
+						Status: status})
 			}
 		}
 	}
@@ -334,8 +334,8 @@ func (bc *BlockChain) AddOneAttestationToFutureCache(a *types.Attestation) error
 //If the status of the previous block is already justified for the same branch, modify the status of
 //the previous block to finalized. If the status of the latter block is judged or finalized, set the status
 //of the current block to be processed to finalized, otherwise it is judged
-func (bc *BlockChain) AddBlockBasJustified(num *big.Int, hash common.Hash) (int, error) {
-	if status, hashBefore := bc.GetBlockStatusByNum(num.Uint64() - 1); status.Uint64() == types.BasJustified {
+func (bc *BlockChain) AddBlockBasJustified(num *big.Int, hash common.Hash) (uint8, error) {
+	if status, hashBefore := bc.GetBlockStatusByNum(num.Uint64() - 1); status == types.BasJustified {
 		branch, err := bc.IsFiliation(&types.RangeEdge{
 			Hash:   hashBefore,
 			Number: new(big.Int).SetUint64(num.Uint64() - 1),
@@ -344,14 +344,14 @@ func (bc *BlockChain) AddBlockBasJustified(num *big.Int, hash common.Hash) (int,
 			Number: num,
 		})
 		if err == nil && branch {
-			err := bc.UpdateBlockStatus(new(big.Int).SetUint64(num.Uint64()-1), hashBefore, new(big.Int).SetUint64(types.BasFinalized))
+			err := bc.UpdateBlockStatus(new(big.Int).SetUint64(num.Uint64()-1), hashBefore, types.BasFinalized)
 			if err != nil {
 				return types.BasUnknown, err
 			}
 		}
 	}
 	currentBlockStatus := types.BasJustified
-	if status, hashAfter := bc.GetBlockStatusByNum(num.Uint64() + 1); status.Uint64() != types.BasUnknown {
+	if status, hashAfter := bc.GetBlockStatusByNum(num.Uint64() + 1); status != types.BasUnknown {
 		branch, err := bc.IsFiliation(&types.RangeEdge{
 			Hash:   hash,
 			Number: num,
@@ -363,7 +363,7 @@ func (bc *BlockChain) AddBlockBasJustified(num *big.Int, hash common.Hash) (int,
 			currentBlockStatus = types.BasFinalized
 		}
 	}
-	return currentBlockStatus, bc.UpdateBlockStatus(num, hash, new(big.Int).SetUint64(uint64(currentBlockStatus)))
+	return currentBlockStatus, bc.UpdateBlockStatus(num, hash, currentBlockStatus)
 }
 
 // AddOneValidAttestationForCasperFFG Store corresponding data for casperffg rule judgment.
@@ -404,12 +404,16 @@ func (bc *BlockChain) MoveAttestsCacheFutureToRecent(num *big.Int) error {
 	as, found := bc.FutureAttessCache.Get(num.Uint64())
 	if found {
 		cAs := as.(*types.FutureAttestations)
-		for _, v := range cAs.Attestations {
-			signer, err := v.RecoverSigner()
-			if err != nil {
-				return err
+		for _, a := range cAs.Attestations {
+			isExist, err := bc.IsExistsRecentCache(a)
+			if err != nil || isExist {
+				continue
 			}
-			_ = bc.AddOneAttestationToRecentCache(v, signer, false)
+			signer, err := a.RecoverSigner()
+			if err != nil {
+				continue
+			}
+			_ = bc.AddOneAttestationToRecentCache(a, signer, false)
 		}
 		bc.FutureAttessCache.Remove(num.Uint64())
 	}
@@ -504,10 +508,6 @@ func (bc *BlockChain) IsExistsFutureCache(a *types.Attestation) bool {
 		return found
 	}
 	return false
-}
-
-func (bc *BlockChain) IsReadyProcessAttestation(num *big.Int) bool {
-	return bc.isChaosEngine
 }
 
 func (bc *BlockChain) VerifyLocalDataCheck(a *types.Attestation, number uint64) bool {
@@ -686,10 +686,7 @@ func (bc *BlockChain) IsFiliation(parent, child *types.RangeEdge) (bool, error) 
 // Check the two branches respectively. If which branch contains a block in the finalized state and the block height is higher,
 // which branch will be retained, and then compare the justified state under the same logic. If both branches fail to hit,
 // compare the difficulty of the two blocks according to the old logic
-func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (int, error) {
-	if !bc.IsReadyProcessAttestation(oldBlock.Number()) {
-		return types.BasUnknown, nil
-	}
+func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (uint8, error) {
 	if has, err := rawdb.IsReadyReadBlockStatus(bc.db); !has || err != nil {
 		return types.BasUnknown, nil
 	}
@@ -698,11 +695,11 @@ func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (i
 	if oldBlock.NumberU64() > newBlock.NumberU64() {
 		for ; oldBlock != nil && oldBlock.NumberU64() != newBlock.NumberU64(); oldBlock = bc.GetBlock(oldBlock.ParentHash(), oldBlock.NumberU64()-1) {
 			status, hash := bc.GetBlockStatusByNum(oldBlock.Number().Uint64())
-			if status.Uint64() != types.BasUnknown && hash == oldBlock.Hash() {
-				if status.Uint64() == types.BasFinalized {
+			if status != types.BasUnknown && hash == oldBlock.Hash() {
+				if status == types.BasFinalized {
 					// the old branch already exists with the finalized status flag
 					return NoNeedReorg, nil
-				} else if status.Uint64() == types.BasJustified && oldLastJustifiedNum == 0 {
+				} else if status == types.BasJustified && oldLastJustifiedNum == 0 {
 					oldLastJustifiedNum = oldBlock.Number().Uint64()
 				}
 			}
@@ -710,10 +707,10 @@ func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (i
 	} else {
 		for ; newBlock != nil && newBlock.NumberU64() != oldBlock.NumberU64(); newBlock = bc.GetBlock(newBlock.ParentHash(), newBlock.NumberU64()-1) {
 			status, hash := bc.GetBlockStatusByNum(newBlock.Number().Uint64())
-			if status.Uint64() != types.BasUnknown && hash == newBlock.Hash() {
-				if status.Uint64() == types.BasFinalized {
+			if status != types.BasUnknown && hash == newBlock.Hash() {
+				if status == types.BasFinalized {
 					return NeedReorg, nil // need to reorg
-				} else if status.Uint64() == types.BasJustified && newLastJustifiedNum == 0 {
+				} else if status == types.BasJustified && newLastJustifiedNum == 0 {
 					newLastJustifiedNum = newBlock.Number().Uint64()
 				}
 			}
@@ -737,19 +734,19 @@ func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (i
 			return NotSure, nil // Execute old logic
 		}
 		status, hash := bc.GetBlockStatusByNum(oldBlock.Number().Uint64())
-		if status.Uint64() != types.BasUnknown {
+		if status != types.BasUnknown {
 			if hash == oldBlock.Hash() {
-				if status.Uint64() == types.BasFinalized {
+				if status == types.BasFinalized {
 					// the old branch already exists with the finalized status flag
 					return NoNeedReorg, nil
-				} else if status.Uint64() == types.BasJustified && oldLastJustifiedNum == 0 {
+				} else if status == types.BasJustified && oldLastJustifiedNum == 0 {
 					oldLastJustifiedNum = oldBlock.Number().Uint64()
 				}
 			}
 			if hash == newBlock.Hash() {
-				if status.Uint64() == types.BasFinalized {
+				if status == types.BasFinalized {
 					return NeedReorg, nil // need to reorg
-				} else if status.Uint64() == types.BasJustified && newLastJustifiedNum == 0 {
+				} else if status == types.BasJustified && newLastJustifiedNum == 0 {
 					newLastJustifiedNum = newBlock.Number().Uint64()
 				}
 			}
@@ -764,4 +761,8 @@ func (bc *BlockChain) IsNeedReorgByCasperFFG(oldBlock, newBlock *types.Block) (i
 			return NotSure, fmt.Errorf("invalid new chain")
 		}
 	}
+}
+
+func (bc *BlockChain) MaxValidators() uint8 {
+	return bc.ChaosEngine.MaxValidators()
 }

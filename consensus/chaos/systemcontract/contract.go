@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-const topValidatorNum uint8 = 21
+const TopValidatorNum uint8 = 21
 
 var (
 	blocksPerMonth = big.NewInt(60 * 60 * 24 / 3 * 30)
@@ -31,7 +31,7 @@ func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
 	method := "getTopValidators"
 	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
 	// execute contract
-	data, err := abi.Pack(method, topValidatorNum)
+	data, err := abi.Pack(method, TopValidatorNum)
 	if err != nil {
 		log.Error("Can't pack data for getTopValidators", "error", err)
 		return []common.Address{}, err

@@ -91,9 +91,10 @@ var (
 	CodePrefix            = []byte("c") // CodePrefix + code hash -> account code
 
 	// lastAttestKey tracks the latest block number
-	lastAttestPrefix          = []byte("LA")  // lastAttestPrefix + address -> the latest block number that a local validator have given an attestation
-	blockStatusKey            = []byte("BSK") // blockStatusKey
-	casperFFGAttestationsKey  = []byte("CFA") // casperFFGAttestationsKey
+	lastAttestPrefix          = []byte("LA")   // lastAttestPrefix + address -> the latest block number that a local validator have given an attestation
+	blockStatusKey            = []byte("BSK")  // blockStatusKey
+	lastBlockStatusKey        = []byte("LBSK") // lastBlockStatusKey
+	casperFFGAttestationsKey  = []byte("CFA")  // casperFFGAttestationsKey
 	epochCheckBpsKey          = []byte("ECB")
 	violateCasperFFGPunishKey = []byte("VCF")
 

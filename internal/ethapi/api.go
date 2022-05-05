@@ -856,7 +856,7 @@ func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block
 	return transactions, nil
 }
 
-func (s *PublicBlockChainAPI) GetBlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint64, error) {
+func (s *PublicBlockChainAPI) GetBlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint8, error) {
 	block, err := s.b.BlockByHash(ctx, hash)
 	if err != nil || block == nil {
 		return 0, err

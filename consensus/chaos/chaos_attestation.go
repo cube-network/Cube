@@ -125,6 +125,10 @@ func (c *Chaos) CurrentNeedHandleHeight(headerNum uint64) (uint64, error) {
 	return headerNum - c.config.AttestationDelay, nil
 }
 
+func (c *Chaos) AttestationDelay() uint64 {
+	return c.config.AttestationDelay
+}
+
 func (c *Chaos) IsReadyAttest() bool {
 	return c.isReady && c.attestationStatus == types.AttestationStart
 }

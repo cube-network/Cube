@@ -165,18 +165,20 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 	if bc.ChaosEngine.AttestationStatus() == types.AttestationPending {
 		// Give priority to judge whether it has caught up
 		firstCatchup := bc.firstCatchUpNumber.Load().(*big.Int)
+		attestationDelay := bc.ChaosEngine.AttestationDelay()
 		// Prevent false triggering during node initialization
 		continuousBlocks := bc.chainConfig.ChaosContinuousInturn(head.Number)
 		if firstCatchup.Uint64() == 0 && head.Number.Uint64() > continuousBlocks*catchUpSafetyMultiple &&
 			uint64(time.Now().Unix()) <= head.Time+catchUpDiffTime {
-			bc.firstCatchUpNumber.Store(new(big.Int).SetUint64(head.Number.Uint64() + catchUpDiffBlocks))
-			log.Info("firstCatchUpNumber", "time.Now.Unix", time.Now().Unix(), "head.Time", head.Time)
+			num := head.Number.Uint64() + catchUpDiffBlocks
+			bc.firstCatchUpNumber.Store(new(big.Int).SetUint64(num))
+			log.Info("🎄Will StartAttestation", "Number", num+attestationDelay+unableSureBlockStateInterval)
 		}
 		firstCatchup = bc.firstCatchUpNumber.Load().(*big.Int)
-		if firstCatchup.Uint64() > 0 && head.Number.Uint64() > firstCatchup.Uint64() &&
-			head.Number.Uint64()-firstCatchup.Uint64() >= unableSureBlockStateInterval {
+		if firstCatchup.Uint64() > 0 && head.Number.Uint64() > firstCatchup.Uint64()+attestationDelay &&
+			head.Number.Uint64()-firstCatchup.Uint64()-attestationDelay >= unableSureBlockStateInterval {
 			bc.ChaosEngine.StartAttestation()
-			log.Info("StartAttestation", "firstCatchup", firstCatchup.Uint64(), "currentHeight", head.Number.Uint64())
+			log.Info("✨StartAttestation", "firstCatchup", firstCatchup.Uint64(), "currentHeight", head.Number.Uint64())
 		}
 	}
 

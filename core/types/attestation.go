@@ -281,3 +281,9 @@ func (cf CasperFFGHistoryList) Less(i, j int) bool {
 	return cf[i].TargetNum.Uint64() < cf[j].TargetNum.Uint64()
 }
 func (cf CasperFFGHistoryList) Swap(i, j int) { cf[i], cf[j] = cf[j], cf[i] }
+
+const (
+	AttestationPending = uint8(0)
+	AttestationStart   = uint8(1)
+	AttestationStop    = uint8(2)
+)

@@ -218,6 +218,7 @@ type BlockChain struct {
 	isChaosEngine            bool
 	currentAttestedNumber    atomic.Value // Currently the latest attested block number that is stored in db
 	currentBlockStatusNumber atomic.Value
+	firstCatchUpNumber       atomic.Value
 	FutureAttessCache        *lru.Cache // Future attestations are attestations added for later processing
 	RecentAttessCache        *lru.Cache // Cache for the most recent attestations hashes, use it to skip duplicate-processing.
 	HistoryAttessCache       *lru.Cache
@@ -285,6 +286,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		blockStatusNumber := rawdb.LastBlockStatusNumber(bc.db)
 		bc.currentBlockStatusNumber.Store(blockStatusNumber)
 		log.Info("last stored block status number", "num", blockStatusNumber)
+		bc.firstCatchUpNumber.Store(new(big.Int).SetUint64(0))
 
 		bc.FutureAttessCache, _ = lru.New(maxFutureAttestations)
 		bc.RecentAttessCache, _ = lru.New(attestationsCacheLimit)

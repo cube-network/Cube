@@ -157,9 +157,12 @@ type ChaosEngine interface {
 	// Attest trys to give an attestation on current chain when a ChainHeadEvent is fired.
 	Attest(chain ChainHeaderReader, headerNum *big.Int, source, target *types.RangeEdge) (*types.Attestation, error)
 	CurrentNeedHandleHeight(headerNum uint64) (uint64, error)
+	AttestationDelay() uint64
 
 	// IsReadyAttest Whether it meets the conditions for executing interest
-	IsReadyAttest(num *big.Int) bool
+	IsReadyAttest() bool
+	AttestationStatus() uint8
+	StartAttestation()
 
 	// AttestationThreshold Get the attestation threshold at the specified height
 	AttestationThreshold(chain ChainHeaderReader, hash common.Hash, number uint64) (int, error)

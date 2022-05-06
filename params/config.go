@@ -28,7 +28,7 @@ import (
 // Genesis hashes to enforce below configs on.
 var (
 	MainnetGenesisHash = common.HexToHash("0x5751d1772ebc82d52d19d96157bb3f13ca8417217e3c0913adf15f04eb4cb144")
-	TestnetGenesisHash = common.HexToHash("0xb24b1124276b1250ad3b2c02623677bce3e76c1539f76dcdfe4c27ab991c1dad")
+	TestnetGenesisHash = common.HexToHash("0xc155ba6b6c297cf65d7e49b595da9305a53f36cafc96940f79b8b1c8e4e5ce57")
 )
 
 // TrustedCheckpoints associates each known checkpoint with the genesis hash of
@@ -82,9 +82,8 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		Chaos: &ChaosConfig{
-			Period: 3,
-			Epoch:  200,
-
+			Period:           3,
+			Epoch:            200,
 			AttestationDelay: 2,
 		},
 	}

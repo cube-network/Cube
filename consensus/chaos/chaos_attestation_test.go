@@ -1,5 +1,5 @@
 // Copyright 2017 The go-ethereum Authors
-// Copyright 2021 the HECO Authors
+// Copyright 2021 the Cube Authors
 
 package chaos
 

@@ -17,25 +17,32 @@
 package core
 
 import (
+	"encoding/json"
 	"math/big"
+	"os"
 	"reflect"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestInvalidCliqueConfig(t *testing.T) {
-	block := DefaultGoerliGenesisBlock()
-	block.ExtraData = []byte{}
-	if _, err := block.Commit(nil); err == nil {
-		t.Fatal("Expected error on invalid clique config")
+func TestDefaultGenesisBlock(t *testing.T) {
+	block := DefaultGenesisBlock().ToBlock(nil)
+	if block.Hash() != params.MainnetGenesisHash {
+		t.Errorf("wrong mainnet genesis hash, got %v, want %v", block.Hash(), params.MainnetGenesisHash)
 	}
+	// block = DefaultRopstenGenesisBlock().ToBlock(nil)
+	// if block.Hash() != params.RopstenGenesisHash {
+	// 	t.Errorf("wrong ropsten genesis hash, got %v, want %v", block.Hash(), params.RopstenGenesisHash)
+	// }
 }
 
 func TestSetupGenesis(t *testing.T) {
@@ -90,16 +97,6 @@ func TestSetupGenesis(t *testing.T) {
 			},
 			wantHash:   customghash,
 			wantConfig: customg.Config,
-		},
-		{
-			name: "custom block in DB, genesis == ropsten",
-			fn: func(db ethdb.Database) (*params.ChainConfig, common.Hash, error) {
-				customg.MustCommit(db)
-				return SetupGenesisBlock(db, DefaultRopstenGenesisBlock())
-			},
-			wantErr:    &GenesisMismatchError{Stored: customghash, New: params.RopstenGenesisHash},
-			wantHash:   params.RopstenGenesisHash,
-			wantConfig: params.RopstenChainConfig,
 		},
 		{
 			name: "compatible config in DB",
@@ -168,10 +165,6 @@ func TestGenesisHashes(t *testing.T) {
 		want    common.Hash
 	}{
 		{DefaultGenesisBlock(), params.MainnetGenesisHash},
-		{DefaultGoerliGenesisBlock(), params.GoerliGenesisHash},
-		{DefaultRopstenGenesisBlock(), params.RopstenGenesisHash},
-		{DefaultRinkebyGenesisBlock(), params.RinkebyGenesisHash},
-		{DefaultSepoliaGenesisBlock(), params.SepoliaGenesisHash},
 	} {
 		// Test via MustCommit
 		if have := c.genesis.MustCommit(rawdb.NewMemoryDatabase()).Hash(); have != c.want {
@@ -212,4 +205,72 @@ func TestGenesis_Commit(t *testing.T) {
 	if stored.Cmp(genesisBlock.Difficulty()) != 0 {
 		t.Errorf("inequal difficulty; stored: %v, genesisBlock: %v", stored, genesisBlock.Difficulty())
 	}
+}
+
+func TestGenesisUnmarshal(t *testing.T) {
+	file, err := os.Open("testdata/test-genesis.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	genesis := new(Genesis)
+	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+		t.Fatalf("invalid genesis file: %v", err)
+	}
+
+	assert.Equal(t, genesis.configOrDefault(common.Hash{}).Chaos,
+		&params.ChaosConfig{Period: 3, Epoch: 200, AttestationDelay: 2})
+
+	stakingInit := genesis.Alloc[system.StakingContract].Init
+	assert.Equal(t, stakingInit, &Init{
+		Admin:           common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
+		FirstLockPeriod: big.NewInt(63072000),
+		ReleasePeriod:   big.NewInt(2592000),
+		ReleaseCnt:      big.NewInt(48),
+		RuEpoch:         big.NewInt(28800),
+	})
+
+	genesisLockInit := genesis.Alloc[system.GenesisLockContract].Init
+	assert.Equal(t, big.NewInt(2592000), genesisLockInit.PeriodTime)
+	assert.Equal(t, genesisLockInit.LockedAccounts[0], LockedAccount{
+		UserAddress:  common.HexToAddress("0x2FA024cA813449D315d71D49BdDF7c175C036729"),
+		TypeId:       big.NewInt(1),
+		LockedAmount: fromGwei(1000000000000),
+		LockedTime:   big.NewInt(0), PeriodAmount: big.NewInt(48),
+	})
+
+	assert.Equal(t, genesis.Validators[0], ValidatorInfo{
+		Address:          common.HexToAddress("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0"),
+		Manager:          common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
+		Rate:             big.NewInt(20),
+		Stake:            big.NewInt(350000),
+		AcceptDelegation: true,
+	})
+
+	eoa := genesis.Alloc[common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8")]
+	assert.Nil(t, eoa.Code)
+	assert.Nil(t, eoa.Init)
+}
+
+func TestDecodePrealloc(t *testing.T) {
+	alloc := decodePrealloc(mainnetAllocData)
+	for addr, account := range alloc {
+		t.Logf("addr : %v", addr)
+		account.Code = nil
+		t.Logf("acc.Init : %v", account.Init)
+	}
+}
+
+func TestGenesisInit(t *testing.T) {
+	file, err := os.Open("testdata/test-genesis.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	genesis := new(Genesis)
+	if err := json.NewDecoder(file).Decode(genesis); err != nil {
+		t.Fatalf("invalid genesis file: %v", err)
+	}
+	block := genesis.ToBlock(nil)
+	t.Log(block.Hash())
 }

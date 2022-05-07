@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/fetcher"
+	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -43,7 +44,9 @@ import (
 const (
 	// txChanSize is the size of channel listening to NewTxsEvent.
 	// The number is referenced from the size of tx pool.
-	txChanSize = 4096
+	txChanSize  = 4096
+	naChanSize  = 4096
+	njfChanSize = 4096
 )
 
 var (
@@ -112,6 +115,10 @@ type handler struct {
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
+	naCh          chan core.NewAttestationEvent
+	naSub         event.Subscription
+	njfCh         chan core.NewJustifiedOrFinalizedBlockEvent
+	njfSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
@@ -217,7 +224,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return n, err
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer)
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)
@@ -241,6 +248,9 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		peer.Log().Error("Snapshot extension barrier failed", "err", err)
 		return err
 	}
+	// wait for the `cons` extension
+	cons, err := h.peers.waitConsExtension(peer)
+
 	// TODO(karalabe): Not sure why this is needed
 	if !h.chainSync.handlePeerEvent(peer) {
 		return p2p.DiscQuitting
@@ -281,7 +291,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 	peer.Log().Debug("Ethereum peer connected", "name", peer.Name())
 
 	// Register the peer locally
-	if err := h.peers.registerPeer(peer, snap); err != nil {
+	if err := h.peers.registerPeer(peer, snap, cons); err != nil {
 		peer.Log().Error("Ethereum peer registration failed", "err", err)
 		return err
 	}
@@ -352,6 +362,21 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 	return handler(peer)
 }
 
+// runConsExtension registers a `cons` peer into the joint eth/cons peerset and
+// starts handling inbound messages. As `cons` is only a satellite protocol to
+// `eth`, all subsystem registrations and lifecycle management will be done by
+// the main `eth` handler to prevent strange races.
+func (h *handler) runConsExtension(peer *cons.Peer, handler cons.Handler) error {
+	h.peerWG.Add(1)
+	defer h.peerWG.Done()
+
+	if err := h.peers.registerConsExtension(peer); err != nil {
+		peer.Log().Error("Cons extension registration failed", "err", err)
+		return err
+	}
+	return handler(peer)
+}
+
 // removePeer requests disconnection of a peer.
 func (h *handler) removePeer(id string) {
 	peer := h.peers.peer(id)
@@ -405,6 +430,18 @@ func (h *handler) Start(maxPeers int) {
 	h.minedBlockSub = h.eventMux.Subscribe(core.NewMinedBlockEvent{})
 	go h.minedBroadcastLoop()
 
+	// broadcast self-built attestation
+	h.wg.Add(1)
+	h.naCh = make(chan core.NewAttestationEvent, naChanSize)
+	h.naSub = h.chain.SubscribeNewAttestationEvent(h.naCh)
+	go h.newAttestationBroadcastLoop()
+
+	// broadcast justified or finalized block
+	h.wg.Add(1)
+	h.njfCh = make(chan core.NewJustifiedOrFinalizedBlockEvent, njfChanSize)
+	h.njfSub = h.chain.SubscribeNewJustifiedOrFinalizedBlockEvent(h.njfCh)
+	go h.newJustifiedOrFinalizedBlockBroadcastLoop()
+
 	// start sync handlers
 	h.wg.Add(1)
 	go h.chainSync.loop()
@@ -413,6 +450,8 @@ func (h *handler) Start(maxPeers int) {
 func (h *handler) Stop() {
 	h.txsSub.Unsubscribe()        // quits txBroadcastLoop
 	h.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	h.naSub.Unsubscribe()         // quits newAttestationBroadcastLoop
+	h.njfSub.Unsubscribe()        // quits newJustifiedOrFinalizedBlockBroadcastLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -448,6 +487,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 		// Send the block to a subset of our peers
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
+			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
 			peer.AsyncSendNewBlock(block, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
@@ -457,6 +497,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 	if h.chain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
+			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", false)
 		}
 		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}
@@ -505,6 +546,28 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		"tx packs", directPeers, "broadcast txs", directCount)
 }
 
+func (h *handler) BroadcastAttestationToOtherNodes(a *types.Attestation) {
+	peers := h.peers.peersWithoutAttestation(a.Hash())
+	//log.Debug("BroadcastAttestationToOtherNodes", "peers", len(peers),
+	//"hash", a.TargetRangeEdge.Hash, "number", a.TargetRangeEdge.Number.Uint64())
+	// Send the attestation to a subset of our peers
+	transfer := peers //[:int(math.Sqrt(float64(len(peers))))]
+	for _, peer := range transfer {
+		log.Info("metric", "method", "BroadcastAttestationToOtherNodes", "peer", peer.ID(), "hash", a.TargetRangeEdge.Hash.String(), "number", a.TargetRangeEdge.Number.Uint64())
+		peer.AsyncSendNewAttestation(a)
+	}
+}
+
+func (h *handler) BroadcastJustifiedOrFinalizedBlockToOtherNodes(bs *types.BlockStatus) {
+	peers := h.peers.peersWithoutJustifiedOrFinalizedBlock(bs.CacheHash())
+	// Send the attestation to a subset of our peers
+	transfer := peers //[:int(math.Sqrt(float64(len(peers))))] // TODO
+	for _, peer := range transfer {
+		log.Info("metric", "method", "BroadcastJustifiedOrFinalizedBlockToOtherNodes", "peer", peer.ID(), "hash", bs.Hash.String(), "number", bs.BlockNumber.Uint64())
+		peer.AsyncSendNewJustifiedOrFinalizedBlock(bs)
+	}
+}
+
 // minedBroadcastLoop sends mined blocks to connected peers.
 func (h *handler) minedBroadcastLoop() {
 	defer h.wg.Done()
@@ -525,6 +588,30 @@ func (h *handler) txBroadcastLoop() {
 		case event := <-h.txsCh:
 			h.BroadcastTransactions(event.Txs)
 		case <-h.txsSub.Err():
+			return
+		}
+	}
+}
+
+func (h *handler) newAttestationBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case na := <-h.naCh:
+			h.BroadcastAttestationToOtherNodes(na.A)
+		case <-h.naSub.Err():
+			return
+		}
+	}
+}
+
+func (h *handler) newJustifiedOrFinalizedBlockBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case njf := <-h.njfCh:
+			h.BroadcastJustifiedOrFinalizedBlockToOtherNodes(njf.JF)
+		case <-h.naSub.Err():
 			return
 		}
 	}

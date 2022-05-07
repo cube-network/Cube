@@ -67,6 +67,10 @@ var (
 	// is higher than the balance of the user's account.
 	ErrInsufficientFunds = errors.New("insufficient funds for gas * price + value")
 
+	// ErrInsufficientFunds is returned if the total cost of executing a transaction
+	// is higher than the balance of the meta fee address's account.
+	ErrInsufficientMetaFunds = errors.New("meta address insufficient funds for gas * price + value")
+
 	// ErrGasUintOverflow is returned when calculating gas usage.
 	ErrGasUintOverflow = errors.New("gas uint64 overflow")
 
@@ -96,4 +100,7 @@ var (
 
 	// ErrSenderNoEOA is returned if the sender of a transaction is a contract.
 	ErrSenderNoEOA = errors.New("sender not an eoa")
+
+	// ErrToSystemPreserved is returned if to address of a transaction is system preserved
+	ErrToSystemPreserved = errors.New("to address is system preserved")
 )

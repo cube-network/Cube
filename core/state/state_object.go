@@ -91,6 +91,15 @@ type stateObject struct {
 	dirtyCode bool // true if the code was updated
 	suicided  bool
 	deleted   bool
+
+	// only used between StateDB.preUpdateStateObject and StateDB.updateStateObject
+	accountRLP     []byte
+	rlpErr         error
+	slimAccountRLP []byte
+
+	// only used between updateTrieConcurrencySafe and updateSnapshot
+	snapStorage map[common.Hash][]byte
+	usedStorage [][]byte
 }
 
 // empty returns whether the account is considered empty.
@@ -112,7 +121,7 @@ func newObject(db *StateDB, address common.Address, data types.StateAccount) *st
 	return &stateObject{
 		db:             db,
 		address:        address,
-		addrHash:       crypto.Keccak256Hash(address[:]),
+		addrHash:       crypto.HashDataWithCache(nil, address[:]),
 		data:           data,
 		originStorage:  make(Storage),
 		pendingStorage: make(Storage),
@@ -226,7 +235,7 @@ func (s *stateObject) GetCommittedState(db Database, key common.Hash) common.Has
 		if _, destructed := s.db.snapDestructs[s.addrHash]; destructed {
 			return common.Hash{}
 		}
-		enc, err = s.db.snap.Storage(s.addrHash, crypto.Keccak256Hash(key.Bytes()))
+		enc, err = s.db.snap.Storage(s.addrHash, crypto.HashDataWithCache(nil, key[:]))
 	}
 	// If the snapshot is unavailable or reading from it fails, load from the database.
 	if s.db.snap == nil || err != nil {
@@ -317,23 +326,16 @@ func (s *stateObject) finalise(prefetch bool) {
 	}
 }
 
-// updateTrie writes cached storage modifications into the object's storage trie.
-// It will return nil if the trie has not been loaded and no changes have been made
-func (s *stateObject) updateTrie(db Database) Trie {
-	// Make sure all dirty slots are finalized into the pending storage area
-	s.finalise(false) // Don't prefetch anymore, pull directly if need be
+func (s *stateObject) updateTrieConcurrencySafe(db Database) Trie {
 	if len(s.pendingStorage) == 0 {
 		return s.trie
 	}
-	// Track the amount of time wasted on updating the storage trie
-	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.db.StorageUpdates += time.Since(start) }(time.Now())
-	}
+
 	// The snapshot storage map for the object
 	var storage map[common.Hash][]byte
 	// Insert all the pending updates into the trie
 	tr := s.getTrie(db)
-	hasher := s.db.hasher
+	hasher := crypto.NewKeccakState()
 
 	usedStorage := make([][]byte, 0, len(s.pendingStorage))
 	for key, value := range s.pendingStorage {
@@ -359,33 +361,45 @@ func (s *stateObject) updateTrie(db Database) Trie {
 				// Retrieve the old storage map, if available, create a new one otherwise
 				if storage = s.db.snapStorage[s.addrHash]; storage == nil {
 					storage = make(map[common.Hash][]byte)
-					s.db.snapStorage[s.addrHash] = storage
 				}
 			}
-			storage[crypto.HashData(hasher, key[:])] = v // v will be nil if it's deleted
+			storage[crypto.HashDataWithCache(hasher, key[:])] = v // v will be nil if value is 0x00
 		}
 		usedStorage = append(usedStorage, common.CopyBytes(key[:])) // Copy needed for closure
 	}
-	if s.db.prefetcher != nil {
-		s.db.prefetcher.used(s.data.Root, usedStorage)
-	}
+	s.snapStorage = storage
+	s.usedStorage = usedStorage
+
 	if len(s.pendingStorage) > 0 {
 		s.pendingStorage = make(Storage)
 	}
 	return tr
 }
 
-// UpdateRoot sets the trie root to the current root hash of
-func (s *stateObject) updateRoot(db Database) {
-	// If nothing changed, don't bother with hashing anything
-	if s.updateTrie(db) == nil {
-		return
+// update s.db.snapStorage and s.db.prefetcher.used
+func (s *stateObject) updateSnapshot() {
+	if s.snapStorage != nil {
+		s.db.snapStorage[s.addrHash] = s.snapStorage
+		s.snapStorage = nil
 	}
-	// Track the amount of time wasted on hashing the storage trie
+	if s.db.prefetcher != nil && s.usedStorage != nil {
+		s.db.prefetcher.used(s.data.Root, s.usedStorage)
+		s.usedStorage = nil
+	}
+}
+
+// updateTrie writes cached storage modifications into the object's storage trie.
+func (s *stateObject) updateTrie(db Database) Trie {
+	// Make sure all dirty slots are finalized into the pending storage area
+	s.finalise(false) // Don't prefetch any more, pull directly if need be
+	// Track the amount of time wasted on updating the storage trie
 	if metrics.EnabledExpensive {
-		defer func(start time.Time) { s.db.StorageHashes += time.Since(start) }(time.Now())
+		defer func(start time.Time) { s.db.StorageUpdates += time.Since(start) }(time.Now())
 	}
-	s.data.Root = s.trie.Hash()
+	tr := s.updateTrieConcurrencySafe(db)
+	s.updateSnapshot()
+
+	return tr
 }
 
 // CommitTrie the storage trie of the object to db.
@@ -426,7 +440,14 @@ func (s *stateObject) AddBalance(amount *big.Int) {
 // SubBalance removes amount from s's balance.
 // It is used to remove funds from the origin account of a transfer.
 func (s *stateObject) SubBalance(amount *big.Int) {
+	// We must check emptiness for the objects such that the account
+	// clearing (0,0,0 objects) can take effect.
+	// It may happen because the Chaos engine will interact with some system-contract by evm Call,
+	// and the `from` account may be empty.
 	if amount.Sign() == 0 {
+		if s.empty() {
+			s.touch()
+		}
 		return
 	}
 	s.SetBalance(new(big.Int).Sub(s.Balance(), amount))
@@ -546,4 +567,28 @@ func (s *stateObject) Nonce() uint64 {
 // interface. Interfaces are awesome.
 func (s *stateObject) Value() *big.Int {
 	panic("Value on stateObject should never be called")
+}
+
+func (s *stateObject) erase() {
+	prevcode := s.Code(s.db.db)
+	s.db.journal.append(eraseChange{
+		account:  &s.address,
+		prevhash: s.CodeHash(),
+		prevcode: prevcode,
+		prevroot: s.data.Root,
+	})
+
+	s.code = []byte{}
+	s.data.CodeHash = emptyCodeHash
+	s.data.Root = emptyRoot
+	s.trie = nil
+	s.dirtyCode = true
+}
+
+func (s *stateObject) revertErase(codeHash common.Hash, code []byte, root common.Hash) {
+	s.code = code
+	s.data.CodeHash = codeHash[:]
+	s.data.Root = root
+	s.getTrie(s.db.db)
+	s.dirtyCode = true
 }

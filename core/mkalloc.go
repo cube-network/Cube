@@ -39,7 +39,31 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-type allocItem struct{ Addr, Balance *big.Int }
+type initArgs struct {
+	Admin           *big.Int
+	FirstLockPeriod *big.Int
+	ReleasePeriod   *big.Int
+	ReleaseCnt      *big.Int
+	RuEpoch         *big.Int
+	PeriodTime      *big.Int
+	LockedAccounts  []lockedAccount
+}
+
+// LockedAccount represents the info of the locked account
+type lockedAccount struct {
+	UserAddress  *big.Int
+	TypeId       *big.Int
+	LockedAmount *big.Int
+	LockedTime   *big.Int
+	PeriodAmount *big.Int
+}
+
+type allocItem struct {
+	Addr    *big.Int
+	Balance *big.Int
+	Code    []byte
+	Init    *initArgs
+}
 
 type allocList []allocItem
 
@@ -50,11 +74,28 @@ func (a allocList) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func makelist(g *core.Genesis) allocList {
 	a := make(allocList, 0, len(g.Alloc))
 	for addr, account := range g.Alloc {
-		if len(account.Storage) > 0 || len(account.Code) > 0 || account.Nonce != 0 {
+		if len(account.Storage) > 0 || account.Nonce != 0 {
 			panic(fmt.Sprintf("can't encode account %x", addr))
 		}
+		init := &initArgs{}
+		if account.Init != nil {
+			init.Admin = new(big.Int).SetBytes(account.Init.Admin.Bytes())
+			init.FirstLockPeriod = account.Init.FirstLockPeriod
+			init.ReleasePeriod = account.Init.ReleasePeriod
+			init.ReleaseCnt = account.Init.ReleaseCnt
+			init.RuEpoch = account.Init.RuEpoch
+			init.PeriodTime = account.Init.PeriodTime
+			if len(account.Init.LockedAccounts) > 0 {
+				lockeds := make([]lockedAccount, 0, len(account.Init.LockedAccounts))
+				for _, locked := range account.Init.LockedAccounts {
+					lockeds = append(lockeds, lockedAccount{new(big.Int).SetBytes(locked.UserAddress.Bytes()),
+						locked.TypeId, locked.LockedAmount, locked.LockedTime, locked.PeriodAmount})
+				}
+				init.LockedAccounts = lockeds
+			}
+		}
 		bigAddr := new(big.Int).SetBytes(addr.Bytes())
-		a = append(a, allocItem{bigAddr, account.Balance})
+		a = append(a, allocItem{bigAddr, account.Balance, account.Code, init})
 	}
 	sort.Sort(a)
 	return a

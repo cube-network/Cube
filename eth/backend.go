@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/chaos"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -41,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
+	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -71,6 +73,7 @@ type Ethereum struct {
 	handler            *handler
 	ethDialCandidates  enode.Iterator
 	snapDialCandidates enode.Iterator
+	consDialCandidates enode.Iterator
 
 	// DB interfaces
 	chainDb ethdb.Database // Block chain database
@@ -78,6 +81,9 @@ type Ethereum struct {
 	eventMux       *event.TypeMux
 	engine         consensus.Engine
 	accountManager *accounts.Manager
+
+	isChaosEngine bool
+	chaosEngine   consensus.ChaosEngine
 
 	bloomRequests     chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
 	bloomIndexer      *core.ChainIndexer             // Bloom indexer operating during block imports
@@ -154,6 +160,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
 	}
+	eth.chaosEngine, eth.isChaosEngine = eth.engine.(consensus.ChaosEngine)
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
 	var dbVer = "<nil>"
@@ -205,6 +212,21 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, eth.blockchain)
 
+	// do some extra work if consensus engine is chaos.
+	if chaosEngine, ok := eth.engine.(*chaos.Chaos); ok {
+		// set state fn
+		chaosEngine.SetStateFn(eth.blockchain.StateAt)
+		// Init RewardsUpdatePeroid
+		currState, err := eth.blockchain.State()
+		if err != nil {
+			return nil, err
+		}
+		if err = chaosEngine.InitRewardsUpdatePeroid(eth.blockchain, currState); err != nil {
+			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
+			return nil, err
+		}
+	}
+
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
 	checkpoint := config.Checkpoint
@@ -228,7 +250,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
-	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
+	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
 		log.Info("Unprotected transactions allowed")
 	}
@@ -239,12 +261,16 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 
 	// Setup DNS discovery iterators.
-	dnsclient := dnsdisc.NewClient(dnsdisc.Config{})
-	eth.ethDialCandidates, err = dnsclient.NewIterator(eth.config.EthDiscoveryURLs...)
+	dnsClient := dnsdisc.NewClient(dnsdisc.Config{})
+	eth.ethDialCandidates, err = dnsClient.NewIterator(eth.config.EthDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
-	eth.snapDialCandidates, err = dnsclient.NewIterator(eth.config.SnapDiscoveryURLs...)
+	eth.snapDialCandidates, err = dnsClient.NewIterator(eth.config.SnapDiscoveryURLs...)
+	if err != nil {
+		return nil, err
+	}
+	eth.consDialCandidates, err = dnsClient.NewIterator(eth.config.ConsDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
@@ -256,6 +282,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	stack.RegisterAPIs(eth.APIs())
 	stack.RegisterProtocols(eth.Protocols())
 	stack.RegisterLifecycle(eth)
+
+	// gas price prediction
+	gppCfg := checkPricePredictionConfig(&gpoParams)
+	eth.APIBackend.gpp = gasprice.NewPrediction(*gppCfg, eth.APIBackend, eth.txPool)
+
 	// Check for unclean shutdown
 	if uncleanShutdowns, discards, err := rawdb.PushUncleanShutdownMarker(chainDb); err != nil {
 		log.Error("Could not update unclean-shutdown-marker list", "error", err)
@@ -270,6 +301,46 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	}
 	return eth, nil
+}
+
+func checkPricePredictionConfig(cfg *gasprice.Config) *gasprice.Config {
+	if cfg == nil {
+		cfg1 := ethconfig.FullNodeGPO
+		return &cfg1
+	}
+	defaultConf := ethconfig.FullNodeGPO
+	if cfg.PredictIntervalSecs == 0 {
+		cfg.PredictIntervalSecs = defaultConf.PredictIntervalSecs
+	}
+	if cfg.MinTxCntPerBlock == 0 {
+		cfg.MinTxCntPerBlock = defaultConf.MinTxCntPerBlock
+	}
+
+	if cfg.MinMedianIndex == 0 {
+		cfg.MinMedianIndex = defaultConf.MinMedianIndex
+	}
+	if cfg.MinLowIndex == 0 {
+		cfg.MinLowIndex = defaultConf.MinLowIndex
+	}
+	if cfg.FastPercentile == 0 {
+		cfg.FastPercentile = defaultConf.FastPercentile
+	}
+	if cfg.MeidanPercentile == 0 {
+		cfg.MeidanPercentile = defaultConf.MeidanPercentile
+	}
+	if cfg.FastFactor == 0 {
+		cfg.FastFactor = defaultConf.FastFactor
+	}
+	if cfg.MedianFactor == 0 {
+		cfg.MedianFactor = defaultConf.MedianFactor
+	}
+	if cfg.LowFactor == 0 {
+		cfg.LowFactor = defaultConf.LowFactor
+	}
+	if cfg.MaxValidPendingSecs == 0 {
+		cfg.MaxValidPendingSecs = defaultConf.MaxValidPendingSecs
+	}
+	return cfg
 }
 
 func makeExtraData(extra []byte) []byte {
@@ -424,6 +495,9 @@ func (s *Ethereum) shouldPreserve(block *types.Block) bool {
 	if _, ok := s.engine.(*clique.Clique); ok {
 		return false
 	}
+	if _, ok := s.engine.(*chaos.Chaos); ok {
+		return false
+	}
 	return s.isLocalBlock(block)
 }
 
@@ -473,11 +547,20 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			clique.Authorize(eb, wallet.SignData)
 		}
+		if chaos, ok := s.engine.(*chaos.Chaos); ok {
+			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return fmt.Errorf("signer missing: %v", err)
+			}
+			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
+		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)
 
 		go s.miner.Start(eb)
+		s.StartAttestation()
 	}
 	return nil
 }
@@ -494,6 +577,27 @@ func (s *Ethereum) StopMining() {
 	}
 	// Stop the block creating itself
 	s.miner.Stop()
+	s.StopAttestation()
+}
+
+func (s *Ethereum) StartAttestation() {
+	if s.IsMining() {
+		if c, ok := s.engine.(*chaos.Chaos); ok {
+			if c.AttestationStatus() == types.AttestationStop {
+				c.StartAttestation()
+			}
+		}
+	}
+}
+
+func (s *Ethereum) StopAttestation() {
+	if s.IsMining() {
+		if c, ok := s.engine.(*chaos.Chaos); ok {
+			if c.AttestationStatus() == types.AttestationStart {
+				c.StopAttestation()
+			}
+		}
+	}
 }
 
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
@@ -518,6 +622,7 @@ func (s *Ethereum) Protocols() []p2p.Protocol {
 	if s.config.SnapshotCache > 0 {
 		protos = append(protos, snap.MakeProtocols((*snapHandler)(s.handler), s.snapDialCandidates)...)
 	}
+	protos = append(protos, cons.MakeProtocols((*consHandler)(s.handler), s.consDialCandidates)...)
 	return protos
 }
 
@@ -548,6 +653,7 @@ func (s *Ethereum) Stop() error {
 	// Stop all the peer-related stuff first.
 	s.ethDialCandidates.Close()
 	s.snapDialCandidates.Close()
+	s.consDialCandidates.Close()
 	s.handler.Stop()
 
 	// Then stop everything else.

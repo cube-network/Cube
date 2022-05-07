@@ -20,9 +20,9 @@ package rawdb
 import (
 	"bytes"
 	"encoding/binary"
+	"github.com/ethereum/go-ethereum/metrics"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/metrics"
 )
 
 // The fields below define the low level database schema prefixing.
@@ -89,6 +89,14 @@ var (
 	SnapshotAccountPrefix = []byte("a") // SnapshotAccountPrefix + account hash -> account trie value
 	SnapshotStoragePrefix = []byte("o") // SnapshotStoragePrefix + account hash + storage hash -> storage trie value
 	CodePrefix            = []byte("c") // CodePrefix + code hash -> account code
+
+	// lastAttestKey tracks the latest block number
+	lastAttestPrefix          = []byte("LA")   // lastAttestPrefix + address -> the latest block number that a local validator have given an attestation
+	blockStatusKey            = []byte("BSK")  // blockStatusKey
+	lastBlockStatusKey        = []byte("LBSK") // lastBlockStatusKey
+	casperFFGAttestationsKey  = []byte("CFA")  // casperFFGAttestationsKey
+	epochCheckBpsKey          = []byte("ECB")
+	violateCasperFFGPunishKey = []byte("VCF")
 
 	PreimagePrefix = []byte("secure-key-")      // PreimagePrefix + hash -> preimage
 	configPrefix   = []byte("ethereum-config-") // config prefix for the db

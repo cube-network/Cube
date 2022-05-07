@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/chaos"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -47,6 +48,8 @@ var FullNodeGPO = gasprice.Config{
 	MaxBlockHistory:  1024,
 	MaxPrice:         gasprice.DefaultMaxPrice,
 	IgnorePrice:      gasprice.DefaultIgnorePrice,
+
+	PredConfig: DefaultPredictionConfig,
 }
 
 // LightClientGPO contains default gasprice oracle settings for light client.
@@ -57,11 +60,26 @@ var LightClientGPO = gasprice.Config{
 	MaxBlockHistory:  5,
 	MaxPrice:         gasprice.DefaultMaxPrice,
 	IgnorePrice:      gasprice.DefaultIgnorePrice,
+
+	PredConfig: DefaultPredictionConfig,
+}
+
+var DefaultPredictionConfig = gasprice.PredConfig{
+	PredictIntervalSecs: 3, // in seconds
+	MinTxCntPerBlock:    100,
+	FastFactor:          2,
+	MedianFactor:        5,
+	LowFactor:           8,
+	MinMedianIndex:      500,
+	MinLowIndex:         1000,
+	FastPercentile:      75,
+	MeidanPercentile:    90,
+	MaxValidPendingSecs: 300,
 }
 
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
-	SyncMode: downloader.SnapSync,
+	SyncMode: downloader.FastSync,
 	Ethash: ethash.Config{
 		CacheDir:         "ethash",
 		CachesInMem:      2,
@@ -71,8 +89,8 @@ var Defaults = Config{
 		DatasetsOnDisk:   2,
 		DatasetsLockMmap: false,
 	},
-	NetworkId:               1,
-	TxLookupLimit:           2350000,
+	NetworkId:               1818,
+	TxLookupLimit:           0,
 	LightPeers:              100,
 	UltraLightFraction:      75,
 	DatabaseCache:           512,
@@ -131,6 +149,7 @@ type Config struct {
 	// for nodes to connect to.
 	EthDiscoveryURLs  []string
 	SnapDiscoveryURLs []string
+	ConsDiscoveryURLs []string
 
 	NoPruning  bool // Whether to disable pruning and flush everything to disk
 	NoPrefetch bool // Whether to disable prefetching and only load state on demand
@@ -164,7 +183,7 @@ type Config struct {
 	TrieCleanCacheJournal   string        `toml:",omitempty"` // Disk journal directory for trie cache to survive node restarts
 	TrieCleanCacheRejournal time.Duration `toml:",omitempty"` // Time interval to regenerate the journal for clean cache
 	TrieDirtyCache          int
-	TrieTimeout             time.Duration
+	TrieTimeout             time.Duration `toml:",omitempty"`
 	SnapshotCache           int
 	Preimages               bool
 
@@ -211,6 +230,10 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, co
 	// If proof-of-authority is requested, set it up
 	if chainConfig.Clique != nil {
 		return clique.New(chainConfig.Clique, db)
+	}
+	// If proof-of-stake-authority is requested, set it up
+	if chainConfig.Chaos != nil {
+		return chaos.New(chainConfig, db)
 	}
 	// Otherwise assume proof-of-work
 	switch config.PowMode {

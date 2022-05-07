@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -88,8 +89,11 @@ var (
 )
 
 var (
-	evictionInterval    = time.Minute     // Time interval to check for evictable transactions
-	statsReportInterval = 8 * time.Second // Time interval to report transaction pool stats
+	evictionInterval    = time.Minute                     // Time interval to check for evictable transactions
+	statsReportInterval = 8 * time.Second                 // Time interval to report transaction pool stats
+	PreservedAddress    = map[common.Address]interface{}{ // System preserved addresses
+		consensus.FeeRecoder: nil,
+	}
 )
 
 var (
@@ -149,6 +153,10 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
 
+type exTxValidator interface {
+	ValidateTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+}
+
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
 	Locals    []common.Address // Addresses that should be treated by default as local
@@ -165,23 +173,27 @@ type TxPoolConfig struct {
 	GlobalQueue  uint64 // Maximum number of non-executable transaction slots for all accounts
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
+
+	JamConfig TxJamConfig
 }
 
 // DefaultTxPoolConfig contains the default configurations for the transaction
 // pool.
 var DefaultTxPoolConfig = TxPoolConfig{
 	Journal:   "transactions.rlp",
-	Rejournal: time.Hour,
+	Rejournal: 10 * time.Minute,
 
 	PriceLimit: 1,
 	PriceBump:  10,
 
-	AccountSlots: 16,
-	GlobalSlots:  4096 + 1024, // urgent + floating queue capacity with 4:1 ratio
-	AccountQueue: 64,
+	AccountSlots: 64,
+	GlobalSlots:  10240, // more slots for big block
+	AccountQueue: 32,
 	GlobalQueue:  1024,
 
-	Lifetime: 3 * time.Hour,
+	Lifetime: 30 * time.Minute,
+
+	JamConfig: DefaultJamConfig,
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -257,6 +269,8 @@ type TxPool struct {
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
 
+	jamIndexer *txJamIndexer // tx jam indexer
+
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
 	reqResetCh      chan *txpoolResetRequest
@@ -299,6 +313,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		initDoneCh:      make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
 	}
+	pool.jamIndexer = newTxJamIndexer(config.JamConfig, pool)
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
 		log.Info("Setting new local account", "address", addr)
@@ -359,6 +374,7 @@ func (pool *TxPool) loop() {
 			if ev.Block != nil {
 				pool.requestReset(head.Header(), ev.Block.Header())
 				head = ev.Block
+				pool.jamIndexer.UpdateHeader(head.Header())
 			}
 
 		// System shutdown.
@@ -418,6 +434,8 @@ func (pool *TxPool) Stop() {
 	// Unsubscribe subscriptions registered from blockchain
 	pool.chainHeadSub.Unsubscribe()
 	pool.wg.Wait()
+
+	pool.jamIndexer.Stop()
 
 	if pool.journal != nil {
 		pool.journal.close()
@@ -565,6 +583,11 @@ func (pool *TxPool) Locals() []common.Address {
 	return pool.locals.flatten()
 }
 
+// JamIndex returns the jam index which is evaluated by current pending transactions.
+func (pool *TxPool) JamIndex() int {
+	return pool.jamIndexer.JamIndex()
+}
+
 // local retrieves all currently known local transactions, grouped by origin
 // account and sorted by nonce. The returned transaction set is a copy and can be
 // freely modified by calling code.
@@ -615,6 +638,10 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	// Ensure gasFeeCap is greater than or equal to gasTipCap.
 	if tx.GasFeeCapIntCmp(tx.GasTipCap()) < 0 {
 		return ErrTipAboveFeeCap
+	}
+	// Check whether 'to' addrss is system preserved
+	if IsPreserved(tx.To()) {
+		return ErrToSystemPreserved
 	}
 	// Make sure the transaction is signed properly.
 	from, err := types.Sender(pool.signer, tx)
@@ -677,6 +704,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		if !isLocal && pool.priced.Underpriced(tx) {
 			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
 			underpricedTxMeter.Mark(1)
+			pool.jamIndexer.UnderPricedInc()
 			return false, ErrUnderpriced
 		}
 		// We're about to replace a transaction. The reorg does a more thorough
@@ -705,6 +733,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		for _, tx := range drop {
 			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
 			underpricedTxMeter.Mark(1)
+			pool.jamIndexer.UnderPricedInc()
 			pool.removeTx(tx.Hash(), false)
 		}
 	}
@@ -1540,9 +1569,11 @@ func (pool *TxPool) demoteUnexecutables() {
 			// Internal shuffle shouldn't touch the lookup set.
 			pool.enqueueTx(hash, tx, false, false)
 		}
-		pendingGauge.Dec(int64(len(olds) + len(drops) + len(invalids)))
+		ln := len(olds) + len(drops) + len(invalids)
+		pendingGauge.Dec(int64(ln))
+
 		if pool.locals.contains(addr) {
-			localGauge.Dec(int64(len(olds) + len(drops) + len(invalids)))
+			localGauge.Dec(int64(ln))
 		}
 		// If there's a gap in front, alert (should never happen) and postpone all transactions
 		if list.Len() > 0 && list.txs.Get(nonce) == nil {
@@ -1827,4 +1858,13 @@ func (t *txLookup) RemotesBelowTip(threshold *big.Int) types.Transactions {
 // numSlots calculates the number of slots needed for a single transaction.
 func numSlots(tx *types.Transaction) int {
 	return int((tx.Size() + txSlotSize - 1) / txSlotSize)
+}
+
+// IsPreserved checks whether the address is a system preserved one
+func IsPreserved(address *common.Address) bool {
+	if address == nil {
+		return false
+	}
+	_, preserved := PreservedAddress[*address]
+	return preserved
 }

@@ -44,8 +44,9 @@ type BlockGen struct {
 	receipts []*types.Receipt
 	uncles   []*types.Header
 
-	config *params.ChainConfig
-	engine consensus.Engine
+	config      *params.ChainConfig
+	engine      consensus.Engine
+	chainReader consensus.ChainReader
 }
 
 // SetCoinbase sets the coinbase of the generated block.
@@ -98,7 +99,7 @@ func (b *BlockGen) AddTx(tx *types.Transaction) {
 // further limitations on the content of transactions that can be
 // added. If contract code relies on the BLOCKHASH instruction,
 // the block in chain will be returned.
-func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) {
+func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) *types.Receipt {
 	if b.gasPool == nil {
 		b.SetCoinbase(common.Address{})
 	}
@@ -109,6 +110,7 @@ func (b *BlockGen) AddTxWithChain(bc *BlockChain, tx *types.Transaction) {
 	}
 	b.txs = append(b.txs, tx)
 	b.receipts = append(b.receipts, receipt)
+	return receipt
 }
 
 // GetBalance returns the balance of the given address at the generated block.
@@ -183,6 +185,10 @@ func (b *BlockGen) OffsetTime(seconds int64) {
 	b.header.Difficulty = b.engine.CalcDifficulty(chainreader, b.header.Time, b.parent.Header())
 }
 
+func (b *BlockGen) FakeChainReader() consensus.ChainReader {
+	return b.chainReader
+}
+
 // GenerateChain creates a chain of n blocks. The first block's
 // parent will be the provided parent. db is used to store
 // intermediate states and should contain the parent's state trie.
@@ -200,9 +206,9 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		config = params.TestChainConfig
 	}
 	blocks, receipts := make(types.Blocks, n), make([]types.Receipts, n)
-	chainreader := &fakeChainReader{config: config}
+	chainreader := &fakeChainReader{config: config, engine: engine, blocks: blocks, first: parent}
 	genblock := func(i int, parent *types.Block, statedb *state.StateDB) (*types.Block, types.Receipts) {
-		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: engine}
+		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: engine, chainReader: chainreader}
 		b.header = makeHeader(chainreader, parent, statedb, b.engine)
 
 		// Mutate the state and block according to any hard-fork specs
@@ -217,13 +223,21 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 		if config.DAOForkSupport && config.DAOForkBlock != nil && config.DAOForkBlock.Cmp(b.header.Number) == 0 {
 			misc.ApplyDAOHardFork(statedb)
 		}
+		chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine)
+		if isChaosEngine {
+			if err := chaosEngine.PreHandle(chainreader, b.header, statedb); err != nil {
+				return nil, nil
+			}
+		}
+
 		// Execute any user modifications to the block
 		if gen != nil {
 			gen(i, b)
 		}
 		if b.engine != nil {
 			// Finalize and seal the block
-			block, _ := b.engine.FinalizeAndAssemble(chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
+			block, receipts, _ := b.engine.FinalizeAndAssemble(chainreader, b.header, statedb, b.txs, b.uncles, b.receipts)
+			b.receipts = receipts
 
 			// Write state changes to db
 			root, err := statedb.Commit(config.IsEIP158(b.header.Number))
@@ -301,6 +315,9 @@ func makeBlockChain(parent *types.Block, n int, engine consensus.Engine, db ethd
 
 type fakeChainReader struct {
 	config *params.ChainConfig
+	engine consensus.Engine
+	first  *types.Block
+	blocks types.Blocks
 }
 
 // Config returns the chain configuration.
@@ -308,8 +325,67 @@ func (cr *fakeChainReader) Config() *params.ChainConfig {
 	return cr.config
 }
 
-func (cr *fakeChainReader) CurrentHeader() *types.Header                            { return nil }
-func (cr *fakeChainReader) GetHeaderByNumber(number uint64) *types.Header           { return nil }
-func (cr *fakeChainReader) GetHeaderByHash(hash common.Hash) *types.Header          { return nil }
-func (cr *fakeChainReader) GetHeader(hash common.Hash, number uint64) *types.Header { return nil }
-func (cr *fakeChainReader) GetBlock(hash common.Hash, number uint64) *types.Block   { return nil }
+func (cr *fakeChainReader) Engine() consensus.Engine {
+	return cr.engine
+}
+
+func (cr *fakeChainReader) CurrentHeader() *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeaderByNumber(number uint64) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.NumberU64() == number {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeaderByHash(hash common.Hash) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetHeader(hash common.Hash, number uint64) *types.Header {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1].Header()
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash && cr.first.NumberU64() == number {
+		return cr.first.Header()
+	}
+	return nil
+}
+func (cr *fakeChainReader) GetBlock(hash common.Hash, number uint64) *types.Block {
+	n := len(cr.blocks)
+	for i := 0; i < n; i++ {
+		if cr.blocks[n-i-1] != nil && cr.blocks[n-i-1].NumberU64() == number && cr.blocks[n-i-1].Hash() == hash {
+			return cr.blocks[n-i-1]
+		}
+	}
+	if cr.first != nil && cr.first.Hash() == hash && cr.first.NumberU64() == number {
+		return cr.first
+	}
+	return nil
+}

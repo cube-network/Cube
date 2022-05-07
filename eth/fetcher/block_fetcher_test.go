@@ -95,7 +95,7 @@ func newTester(light bool) *fetcherTester {
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, tester.continousInturn)
 	tester.fetcher.Start()
 
 	return tester
@@ -186,6 +186,11 @@ func (f *fetcherTester) dropPeer(peer string) {
 	defer f.lock.Unlock()
 
 	f.drops[peer] = true
+}
+
+// continousInturn is an emulator for getting continous in turn
+func (f *fetcherTester) continousInturn(blockNumber *big.Int) uint64 {
+	return 1
 }
 
 // makeHeaderFetcher retrieves a block header fetcher associated with a simulated peer.

@@ -41,6 +41,9 @@ import (
 
 //go:generate gencodec -type Genesis -field-override genesisSpecMarshaling -out gen_genesis.go
 //go:generate gencodec -type GenesisAccount -field-override genesisAccountMarshaling -out gen_genesis_account.go
+//go:generate gencodec -type Init -field-override initMarshaling -out gen_genesis_init.go
+//go:generate gencodec -type LockedAccount -field-override lockedAccountMarshaling -out gen_genesis_locked_account.go
+//go:generate gencodec -type ValidatorInfo -field-override validatorInfoMarshaling -out gen_genesis_validator_info.go
 
 var errGenesisNoConfig = errors.New("genesis has no chain configuration")
 
@@ -56,6 +59,7 @@ type Genesis struct {
 	Mixhash    common.Hash         `json:"mixHash"`
 	Coinbase   common.Address      `json:"coinbase"`
 	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
+	Validators []ValidatorInfo     `json:"validators" gencodec:"required"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -84,9 +88,59 @@ func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 type GenesisAccount struct {
 	Code       []byte                      `json:"code,omitempty"`
 	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
-	Balance    *big.Int                    `json:"balance" gencodec:"required"`
+	Balance    *big.Int                    `json:"balance"            gencodec:"required"`
 	Nonce      uint64                      `json:"nonce,omitempty"`
+	Init       *Init                       `json:"init,omitempty"`
 	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
+}
+
+// InitArgs represents the args of system contracts inital args
+type Init struct {
+	Admin           common.Address  `json:"admin,omitempty"`
+	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
+	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
+	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
+	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
+	PeriodTime      *big.Int        `json:"periodTime,omitempty"`
+	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
+}
+
+// LockedAccount represents the info of the locked account
+type LockedAccount struct {
+	UserAddress  common.Address `json:"userAddress,omitempty"`
+	TypeId       *big.Int       `json:"typeId,omitempty"`
+	LockedAmount *big.Int       `json:"lockedAmount,omitempty"`
+	LockedTime   *big.Int       `json:"lockedTime,omitempty"`
+	PeriodAmount *big.Int       `json:"periodAmount,omitempty"`
+}
+
+// ValidatorInfo represents the info of inital validators
+type ValidatorInfo struct {
+	Address          common.Address `json:"address"         gencodec:"required"`
+	Manager          common.Address `json:"manager"         gencodec:"required"`
+	Rate             *big.Int       `json:"rate,omitempty"`
+	Stake            *big.Int       `json:"stake,omitempty"`
+	AcceptDelegation bool           `json:"acceptDelegation,omitempty"`
+}
+
+// makeValidator creates ValidatorInfo
+func makeValidator(address, manager, rate, stake string, acceptDelegation bool) ValidatorInfo {
+	rateNum, ok := new(big.Int).SetString(rate, 10)
+	if !ok {
+		panic("Failed to make validator info due to invalid rate")
+	}
+	stakeNum, ok := new(big.Int).SetString(stake, 10)
+	if !ok {
+		panic("Failed to make validator info due to invalid stake")
+	}
+
+	return ValidatorInfo{
+		Address:          common.HexToAddress(address),
+		Manager:          common.HexToAddress(manager),
+		Rate:             rateNum,
+		Stake:            stakeNum,
+		AcceptDelegation: acceptDelegation,
+	}
 }
 
 // field type overrides for gencodec
@@ -108,6 +162,26 @@ type genesisAccountMarshaling struct {
 	Nonce      math.HexOrDecimal64
 	Storage    map[storageJSON]storageJSON
 	PrivateKey hexutil.Bytes
+}
+
+type initMarshaling struct {
+	FirstLockPeriod *math.HexOrDecimal256
+	ReleasePeriod   *math.HexOrDecimal256
+	ReleaseCnt      *math.HexOrDecimal256
+	RuEpoch         *math.HexOrDecimal256
+	PeriodTime      *math.HexOrDecimal256
+}
+
+type lockedAccountMarshaling struct {
+	TypeId       *math.HexOrDecimal256
+	LockedAmount *math.HexOrDecimal256
+	LockedTime   *math.HexOrDecimal256
+	PeriodAmount *math.HexOrDecimal256
+}
+
+type validatorInfoMarshaling struct {
+	Rate  *math.HexOrDecimal256
+	Stake *math.HexOrDecimal256
 }
 
 // storageJSON represents a 256 bit byte array, but allows less than 256 bits when
@@ -228,6 +302,11 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 	if height == nil {
 		return newcfg, stored, fmt.Errorf("missing block number for head header hash")
 	}
+	// Check whether consensus config of Chaos is changed
+	if (storedcfg.Chaos != nil || newcfg.Chaos != nil) && (storedcfg.Chaos == nil ||
+		newcfg.Chaos == nil || *storedcfg.Chaos != *newcfg.Chaos) {
+		return nil, common.Hash{}, errors.New("ChaosConfig is not compatiable with stored")
+	}
 	compatErr := storedcfg.CheckCompatible(newcfg, *height)
 	if compatErr != nil && *height != 0 && compatErr.RewindTo != 0 {
 		return newcfg, stored, compatErr
@@ -242,16 +321,10 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return g.Config
 	case ghash == params.MainnetGenesisHash:
 		return params.MainnetChainConfig
-	case ghash == params.RopstenGenesisHash:
-		return params.RopstenChainConfig
-	case ghash == params.SepoliaGenesisHash:
-		return params.SepoliaChainConfig
-	case ghash == params.RinkebyGenesisHash:
-		return params.RinkebyChainConfig
-	case ghash == params.GoerliGenesisHash:
-		return params.GoerliChainConfig
+	case ghash == params.TestnetGenesisHash:
+		return params.TestnetChainConfig
 	default:
-		return params.AllEthashProtocolChanges
+		return params.AllChaosProtocolChanges
 	}
 }
 
@@ -273,7 +346,6 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 			statedb.SetState(addr, key, value)
 		}
 	}
-	root := statedb.IntermediateRoot(false)
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
 		Nonce:      types.EncodeNonce(g.Nonce),
@@ -286,7 +358,6 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		Difficulty: g.Difficulty,
 		MixDigest:  g.Mixhash,
 		Coinbase:   g.Coinbase,
-		Root:       root,
 	}
 	if g.GasLimit == 0 {
 		head.GasLimit = params.GenesisGasLimit
@@ -301,8 +372,32 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 			head.BaseFee = new(big.Int).SetUint64(params.InitialBaseFee)
 		}
 	}
+
+	// Handle the Chaos related
+	if g.Config.Chaos != nil {
+		// init system contract
+		gInit := &genesisInit{statedb, head, g}
+		for name, initSystemContract := range map[string]func() error{
+			"Staking":       gInit.initStaking,
+			"CommunityPool": gInit.initCommunityPool,
+			"BonusPool":     gInit.initBonusPool,
+			"GenesisLock":   gInit.initGenesisLock,
+		} {
+			if err = initSystemContract(); err != nil {
+				log.Crit("Failed to init system contract", "contract", name, "err", err)
+			}
+		}
+		// Set validoter info
+		if head.Extra, err = gInit.initValidators(); err != nil {
+			log.Crit("Failed to init Validators", "err", err)
+		}
+	}
+
+	// Update root after execution
+	head.Root = statedb.IntermediateRoot(false)
+
 	statedb.Commit(false)
-	statedb.Database().TrieDB().Commit(root, true, nil)
+	statedb.Database().TrieDB().Commit(head.Root, true, nil)
 
 	return types.NewBlock(head, nil, nil, nil, trie.NewStackTrie(nil))
 }
@@ -358,11 +453,36 @@ func GenesisBlockForTesting(db ethdb.Database, addr common.Address, balance *big
 func DefaultGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.MainnetChainConfig,
-		Nonce:      66,
-		ExtraData:  hexutil.MustDecode("0x11bbe8db4e347b4e8c937c1c8370e4b5ed33adb3db69cbdb7a38e1e50b1b82fa"),
-		GasLimit:   5000,
-		Difficulty: big.NewInt(17179869184),
+		Nonce:      0,
+		Timestamp:  0x5fc58968,
+		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   0x280de80,
+		Difficulty: big.NewInt(1),
 		Alloc:      decodePrealloc(mainnetAllocData),
+		Validators: []ValidatorInfo{
+			makeValidator("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0", "0x352BbF453fFdcba6b126a73eD684260D7968dDc8", "20", "350000000000000000000", true),
+		},
+	}
+}
+
+func DefaultTestnetGenesisBlock() *Genesis {
+	return &Genesis{
+		Config:     params.TestnetChainConfig,
+		Timestamp:  0x6273f480,
+		ExtraData:  hexutil.MustDecode("0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
+		GasLimit:   0x05f5e100,
+		Difficulty: big.NewInt(1),
+		Alloc:      decodePrealloc(testnetAllocData),
+		Mixhash:    common.Hash{},
+		Validators: []ValidatorInfo{
+			makeValidator("0x4c5a5ec1258fb56E476dA4fA137928b278351CB0", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "0", "1000000", false),
+			makeValidator("0xA6F3A3031208a603727B303A4DbC4e19c0A99508", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "0", "1000000", true),
+			makeValidator("0x59FB3eFe94d0F332200DB0Cf2161F2083e6EeCbf", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "40", "1000000", true),
+			makeValidator("0xA28B9860780A7D25827519379654222A6cBa187C", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "60", "1000000", true),
+			makeValidator("0xC9a91dd01E6EFCf73aD8412f698a7A50a3225437", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "80", "1000000", true),
+			makeValidator("0x6277ed2DBe70Ad3436cF97A7C2018bd38d11A7BE", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "100", "1000000", true),
+			makeValidator("0xD7040cF7Eb9E23eAa4b92A6fa0BeD0eAD0277d5d", "0x2488c99EEdEf8a842079951792865911C34BDFfb", "100", "1000000", false),
+		},
 	}
 }
 
@@ -378,40 +498,25 @@ func DefaultRopstenGenesisBlock() *Genesis {
 	}
 }
 
-// DefaultRinkebyGenesisBlock returns the Rinkeby network genesis block.
-func DefaultRinkebyGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.RinkebyChainConfig,
-		Timestamp:  1492009146,
-		ExtraData:  hexutil.MustDecode("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:   4700000,
-		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(rinkebyAllocData),
+// BasicChaosGenesisBlock returns a genesis containing basic allocation for Chais engine,
+func BasicChaosGenesisBlock(config *params.ChainConfig, initialValidators []common.Address, faucet common.Address) *Genesis {
+	extraVanity := 32
+	extraData := make([]byte, extraVanity+common.AddressLength*len(initialValidators)+65)
+	for i, validator := range initialValidators {
+		copy(extraData[extraVanity+i*common.AddressLength:], validator[:])
 	}
-}
-
-// DefaultGoerliGenesisBlock returns the Görli network genesis block.
-func DefaultGoerliGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.GoerliChainConfig,
-		Timestamp:  1548854791,
-		ExtraData:  hexutil.MustDecode("0x22466c6578692069732061207468696e6722202d204166726900000000000000e0a2bd4258d2768837baa26a28fe71dc079f84c70000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:   10485760,
-		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(goerliAllocData),
+	alloc := decodePrealloc(basicAllocForChaos)
+	if (faucet != common.Address{}) {
+		// 100M
+		b, _ := new(big.Int).SetString("100000000000000000000000000", 10)
+		alloc[faucet] = GenesisAccount{Balance: b}
 	}
-}
-
-// DefaultSepoliaGenesisBlock returns the Sepolia network genesis block.
-func DefaultSepoliaGenesisBlock() *Genesis {
 	return &Genesis{
-		Config:     params.SepoliaChainConfig,
-		Nonce:      0,
-		ExtraData:  []byte("Sepolia, Athens, Attica, Greece!"),
-		GasLimit:   0x1c9c380,
-		Difficulty: big.NewInt(0x20000),
-		Timestamp:  1633267481,
-		Alloc:      decodePrealloc(sepoliaAllocData),
+		Config:     config,
+		ExtraData:  extraData,
+		GasLimit:   0x280de80,
+		Difficulty: big.NewInt(2),
+		Alloc:      alloc,
 	}
 }
 
@@ -447,13 +552,61 @@ func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address
 }
 
 func decodePrealloc(data string) GenesisAlloc {
-	var p []struct{ Addr, Balance *big.Int }
+	type locked struct {
+		UserAddress  *big.Int
+		TypeId       *big.Int
+		LockedAmount *big.Int
+		LockedTime   *big.Int
+		PeriodAmount *big.Int
+	}
+
+	type initArgs struct {
+		Admin           *big.Int
+		FirstLockPeriod *big.Int
+		ReleasePeriod   *big.Int
+		ReleaseCnt      *big.Int
+		RuEpoch         *big.Int
+		PeriodTime      *big.Int
+		LockedAccounts  []locked
+	}
+
+	var p []struct {
+		Addr    *big.Int
+		Balance *big.Int
+		Code    []byte
+		Init    *initArgs
+	}
+
 	if err := rlp.NewStream(strings.NewReader(data), 0).Decode(&p); err != nil {
 		panic(err)
 	}
 	ga := make(GenesisAlloc, len(p))
 	for _, account := range p {
-		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance}
+		var init *Init
+		if account.Init != nil {
+			init = &Init{
+				Admin:           common.BigToAddress(account.Init.Admin),
+				FirstLockPeriod: account.Init.FirstLockPeriod,
+				ReleasePeriod:   account.Init.ReleasePeriod,
+				ReleaseCnt:      account.Init.ReleaseCnt,
+				RuEpoch:         account.Init.RuEpoch,
+				PeriodTime:      account.Init.PeriodTime,
+			}
+			if len(account.Init.LockedAccounts) > 0 {
+				init.LockedAccounts = make([]LockedAccount, 0, len(account.Init.LockedAccounts))
+				for _, locked := range account.Init.LockedAccounts {
+					init.LockedAccounts = append(init.LockedAccounts,
+						LockedAccount{
+							UserAddress:  common.BigToAddress(locked.UserAddress),
+							TypeId:       locked.TypeId,
+							LockedAmount: locked.LockedAmount,
+							LockedTime:   locked.LockedTime,
+							PeriodAmount: locked.PeriodAmount,
+						})
+				}
+			}
+		}
+		ga[common.BigToAddress(account.Addr)] = GenesisAccount{Balance: account.Balance, Code: account.Code, Init: init}
 	}
 	return ga
 }

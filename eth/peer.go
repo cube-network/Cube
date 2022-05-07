@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"math/big"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ type ethPeerInfo struct {
 type ethPeer struct {
 	*eth.Peer
 	snapExt *snapPeer // Satellite `snap` connection
+	consExt *consPeer // Satellite `cons` connection
 
 	syncDrop *time.Timer   // Connection dropper if `eth` sync progress isn't validated in time
 	snapWait chan struct{} // Notification channel for snap connections
@@ -68,6 +70,24 @@ type snapPeer struct {
 // info gathers and returns some `snap` protocol metadata known about a peer.
 func (p *snapPeer) info() *snapPeerInfo {
 	return &snapPeerInfo{
+		Version: p.Version(),
+	}
+}
+
+// consPeerInfo represents a short summary of the `cons` sub-protocol metadata known
+// about a connected peer.
+type consPeerInfo struct {
+	Version uint `json:"version"` // cons protocol version negotiated
+}
+
+// consPeer is a wrapper around cons.Peer to maintain a few extra metadata.
+type consPeer struct {
+	*cons.Peer
+}
+
+// info gathers and returns some `cons` protocol metadata known about a peer.
+func (p *consPeer) info() *consPeerInfo {
+	return &consPeerInfo{
 		Version: p.Version(),
 	}
 }

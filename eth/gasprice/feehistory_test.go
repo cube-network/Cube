@@ -26,6 +26,7 @@ import (
 )
 
 func TestFeeHistory(t *testing.T) {
+	t.Skip("EIP 1559 is not supported")
 	var cases = []struct {
 		pending             bool
 		maxHeader, maxBlock int

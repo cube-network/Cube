@@ -47,6 +47,16 @@ type LesApiBackend struct {
 	gpo                 *gasprice.Oracle
 }
 
+func (b *LesApiBackend) BlockPredictStatus(ctx context.Context, hash common.Hash, number rpc.BlockNumber) (uint8, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (b *LesApiBackend) SubscribeBlockPredictStatusEvent(ch chan<- core.NewJustifiedOrFinalizedBlockEvent) event.Subscription {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (b *LesApiBackend) ChainConfig() *params.ChainConfig {
 	return b.eth.chainConfig
 }
@@ -227,6 +237,10 @@ func (b *LesApiBackend) TxPoolContentFrom(addr common.Address) (types.Transactio
 	return b.eth.txPool.ContentFrom(addr)
 }
 
+func (b *LesApiBackend) JamIndex() int {
+	return 0 // not implement
+}
+
 func (b *LesApiBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
 	return b.eth.txPool.SubscribeNewTxsEvent(ch)
 }
@@ -272,6 +286,10 @@ func (b *LesApiBackend) SuggestGasTipCap(ctx context.Context) (*big.Int, error) 
 
 func (b *LesApiBackend) FeeHistory(ctx context.Context, blockCount int, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (firstBlock *big.Int, reward [][]*big.Int, baseFee []*big.Int, gasUsedRatio []float64, err error) {
 	return b.gpo.FeeHistory(ctx, blockCount, lastBlock, rewardPercentiles)
+}
+
+func (b *LesApiBackend) PricePrediction(ctx context.Context) ([]uint, error) {
+	return nil, errors.New("not implement")
 }
 
 func (b *LesApiBackend) ChainDb() ethdb.Database {
@@ -330,4 +348,8 @@ func (b *LesApiBackend) StateAtBlock(ctx context.Context, block *types.Block, re
 
 func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error) {
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
+}
+
+func (b *LesApiBackend) ChainHeaderReader() consensus.ChainHeaderReader {
+	return b.eth.blockchain
 }

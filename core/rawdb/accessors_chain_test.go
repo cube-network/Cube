@@ -20,13 +20,14 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
 	"os"
 	"reflect"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -897,13 +898,12 @@ func TestWriteAndReadBlockBasJustified1(t *testing.T) {
 	db := NewMemoryDatabase()
 	blockNumber1 := new(big.Int).SetUint64(1)
 	blockHash := common.BytesToHash([]byte{0xaa, 0xbb, 0xcc, 0x12, 0x34})
-	err := WriteBlockStatus(db, blockNumber1, blockHash, new(big.Int).SetUint64(types.BasJustified))
+	err := WriteBlockStatus(db, blockNumber1, blockHash, types.BasJustified)
 	require.True(t, err == nil)
 
-	statusList := ReadAllBlockStatus(db)
-	require.True(t, statusList[0].Status.Uint64() == types.BasJustified)
-	require.True(t, statusList[0].BlockNumber.Uint64() == blockNumber1.Uint64())
-	require.True(t, statusList[0].Hash == blockHash)
+	status, hash := ReadBlockStatusByNum(db, blockNumber1)
+	require.True(t, status == types.BasJustified)
+	require.True(t, hash == blockHash)
 }
 
 func TestWriteAndReadAndDeleteAndClearViolateCasperFFGPunish(t *testing.T) {

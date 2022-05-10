@@ -51,8 +51,7 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 		return errors.New("inspection interval not conforming to attestation")
 	}
 	if !bc.VerifyValidLimit(targetNumber, currentBlockNumber) {
-		log.Warn("VerifyValidLimit", "targetNumber", targetNumber, "currentBlockNumber", currentBlockNumber)
-		return errors.New("attestation does not meet the valid limit inspection")
+		return nil
 	}
 	if targetNumber <= currentBlockNumber {
 		isExist, err := bc.IsExistsRecentCache(a)

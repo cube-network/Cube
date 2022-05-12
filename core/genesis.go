@@ -378,10 +378,11 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 		// init system contract
 		gInit := &genesisInit{statedb, head, g}
 		for name, initSystemContract := range map[string]func() error{
-			"Staking":       gInit.initStaking,
-			"CommunityPool": gInit.initCommunityPool,
-			"BonusPool":     gInit.initBonusPool,
-			"GenesisLock":   gInit.initGenesisLock,
+			"Staking":              gInit.initStaking,
+			"CommunityPool":        gInit.initCommunityPool,
+			"DAOCharityFoundation": gInit.initDAOCharityFoundation,
+			"BonusPool":            gInit.initBonusPool,
+			"GenesisLock":          gInit.initGenesisLock,
 		} {
 			if err = initSystemContract(); err != nil {
 				log.Crit("Failed to init system contract", "contract", name, "err", err)

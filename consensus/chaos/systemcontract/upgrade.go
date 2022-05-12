@@ -1,8 +1,6 @@
 package systemcontract
 
 import (
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -15,15 +13,16 @@ const (
 )
 
 var sysContracts map[SysContractVersion][]IUpgradeAction = map[SysContractVersion][]IUpgradeAction{
-	SysContractV1: {},
+	SysContractV1: {
+		&HardFork1{},
+	},
 }
 
 type SysContractVersion int
 
 type IUpgradeAction interface {
 	GetName() string
-	Update(config *params.ChainConfig, height *big.Int, state *state.StateDB) error
-	Execute(state *state.StateDB, header *types.Header, chainContext core.ChainContext, config *params.ChainConfig) error
+	DoUpdate(state *state.StateDB, header *types.Header, chainContext core.ChainContext, config *params.ChainConfig) error
 }
 
 func ApplySystemContractUpgrade(version SysContractVersion, state *state.StateDB, header *types.Header, chainContext core.ChainContext, config *params.ChainConfig) (err error) {
@@ -31,7 +30,6 @@ func ApplySystemContractUpgrade(version SysContractVersion, state *state.StateDB
 		return
 	}
 	height := header.Number
-
 	contracts, ok := sysContracts[version]
 	if !ok {
 		log.Crit("unsupported SysContractVersion", "version", version)
@@ -39,21 +37,11 @@ func ApplySystemContractUpgrade(version SysContractVersion, state *state.StateDB
 
 	for _, contract := range contracts {
 		log.Info("system contract upgrade", "version", version, "name", contract.GetName(), "height", height, "chainId", config.ChainID.String())
-
-		err = contract.Update(config, height, state)
-		if err != nil {
-			log.Error("Upgrade system contract update error", "version", version, "name", contract.GetName(), "err", err)
-			return
-		}
-
-		log.Info("system contract upgrade execution", "version", version, "name", contract.GetName(), "height", header.Number, "chainId", config.ChainID.String())
-
-		err = contract.Execute(state, header, chainContext, config)
+		err = contract.DoUpdate(state, header, chainContext, config)
 		if err != nil {
 			log.Error("Upgrade system contract execute error", "version", version, "name", contract.GetName(), "err", err)
 			return
 		}
 	}
-
 	return
 }

@@ -88,6 +88,10 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
 
     mapping(bytes32 => bool) public doubleSignPunished;
 
+    // DAO Charity Foundation Hard Fork
+    address payable public dAOCharityFoundation;
+    uint256 public constant DaoCharityFoundationFeePercent = 1; // 1%
+
     event LogDecreaseMissedBlocksCounter();
     event LogLazyPunishValidator(address indexed val, uint256 time);
     event LogDoubleSignPunishValidator(address indexed val, uint256 time);
@@ -163,6 +167,11 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
 
         bonusPool = _bonusPool;
         communityPool = _communityPool;
+    }
+
+    function initializeV2(address payable _dAOCharityFoundation) external {
+        require(dAOCharityFoundation == address(0), "E41");
+        dAOCharityFoundation = _dAOCharityFoundation;
     }
 
     // @param _stakes, the staking amount in ether.
@@ -274,7 +283,15 @@ contract Staking is Initializable, Params, SafeSend, WithAdmin, ReentrancyGuard 
                 IValidator val = valMaps[activeValidators[i]];
                 val.receiveFee{value : feePerValidator}();
             }
-            sendValue(communityPool, cpFee);
+
+            uint dcfFee = msg.value.mul(DaoCharityFoundationFeePercent).div(100);
+            if (dcfFee > 0) {
+                sendValue(dAOCharityFoundation, dcfFee);
+                cpFee = cpFee.sub(dcfFee);
+            }
+            if (cpFee > 0) {
+                sendValue(communityPool, cpFee);
+            }
         }
     }
 

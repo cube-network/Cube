@@ -132,6 +132,16 @@ func (env *genesisInit) initStaking() error {
 		contract.Init.RuEpoch,
 		system.CommunityPoolContract,
 		system.BonusPoolContract)
+	if err != nil {
+		return err
+	}
+	if env.genesis.Config != nil && env.genesis.Config.IsHardfork1(common.Big0) {
+		_, err = env.callContract(system.StakingContract, "initializeV2",
+			system.DAOCharityFoundationContract)
+		if err != nil {
+			return err
+		}
+	}
 	return err
 }
 
@@ -143,6 +153,19 @@ func (env *genesisInit) initCommunityPool() error {
 	}
 	_, err := env.callContract(system.CommunityPoolContract, "initialize", contract.Init.Admin)
 	return err
+}
+
+// initDAOCharityFoundation initializes DAOCharityFoundation Contract
+func (env *genesisInit) initDAOCharityFoundation() error {
+	if env.genesis.Config != nil && env.genesis.Config.IsHardfork1(common.Big0) {
+		contract, ok := env.genesis.Alloc[system.DAOCharityFoundationContract]
+		if !ok {
+			return errors.New("DAOCharityFoundation Contract is missing in genesis")
+		}
+		_, err := env.callContract(system.DAOCharityFoundationContract, "initialize", contract.Init.Admin)
+		return err
+	}
+	return nil
 }
 
 // initBonusPool initializes BonusPool Contract

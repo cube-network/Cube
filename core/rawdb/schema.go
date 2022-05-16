@@ -94,7 +94,8 @@ var (
 	lastAttestPrefix          = []byte("LA")   // lastAttestPrefix + address -> the latest block number that a local validator have given an attestation
 	blockStatusKey            = []byte("BSK")  // blockStatusKey
 	lastBlockStatusKey        = []byte("LBSK") // lastBlockStatusKey
-	casperFFGAttestationsKey  = []byte("CFA")  // casperFFGAttestationsKey
+	lastFinalizedNumKey       = []byte("LFBNK")
+	casperFFGAttestationsKey  = []byte("CFA") // casperFFGAttestationsKey
 	epochCheckBpsKey          = []byte("ECB")
 	violateCasperFFGPunishKey = []byte("VCF")
 

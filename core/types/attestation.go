@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"math/big"
 	"sync/atomic"
@@ -287,3 +288,8 @@ const (
 	AttestationStart   = uint8(1)
 	AttestationStop    = uint8(2)
 )
+
+type StatusBlockInfo struct {
+	Number hexutil.Uint64
+	Hash   common.Hash
+}

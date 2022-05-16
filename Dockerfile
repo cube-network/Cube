@@ -14,7 +14,7 @@ FROM ubuntu:18.04
 
 COPY --from=builder /go-ethereum/build/bin/geth /usr/local/bin/
 
-EXPOSE 8545 8546 30303 30303/udp
+EXPOSE 8545 8546 33688 33688/udp
 ENTRYPOINT ["geth"]
 
 # Add some metadata labels to help programatic image consumption

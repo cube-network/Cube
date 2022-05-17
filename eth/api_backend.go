@@ -118,6 +118,10 @@ func (b *EthAPIBackend) BlockPredictStatus(ctx context.Context, hash common.Hash
 	return b.eth.blockchain.GetBlockPredictStatus(hash, uint64(number)), nil
 }
 
+func (b *EthAPIBackend) LastFinalizedBlockNumber(ctx context.Context) uint64 {
+	return b.eth.blockchain.GetLastFinalizedBlockNumber()
+}
+
 func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*types.Block, error) {
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.BlockByNumber(ctx, blockNr)

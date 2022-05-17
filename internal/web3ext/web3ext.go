@@ -635,6 +635,15 @@ web3._extend({
 			params: 2,
 			inputFormatter: [web3._extend.utils.toHex,web3._extend.formatters.inputBlockNumberFormatter]
 		}),
+		new web3._extend.Method({
+			name: 'getLastFinalizedBlockInfo',
+			call: 'eth_getLastFinalizedBlockInfo',
+			outputFormatter: function(statusBlockInfo) {
+				statusBlockInfo.Number = web3._extend.utils.toDecimal(statusBlockInfo.Number);
+				statusBlockInfo.Hash = web3._extend.utils.toHex(statusBlockInfo.Hash);
+				return statusBlockInfo;
+			}
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

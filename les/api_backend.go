@@ -52,6 +52,11 @@ func (b *LesApiBackend) BlockPredictStatus(ctx context.Context, hash common.Hash
 	panic("implement me")
 }
 
+func (b *LesApiBackend) LastFinalizedBlockNumber(ctx context.Context) uint64 {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (b *LesApiBackend) SubscribeBlockPredictStatusEvent(ch chan<- core.NewJustifiedOrFinalizedBlockEvent) event.Subscription {
 	//TODO implement me
 	panic("implement me")

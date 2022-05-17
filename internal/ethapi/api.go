@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"math/big"
 	"sort"
 	"strconv"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/accounts/scwallet"
 	"github.com/ethereum/go-ethereum/common"
@@ -865,6 +865,15 @@ func (s *PublicBlockChainAPI) GetBlockPredictStatus(ctx context.Context, hash co
 		return 0, errors.New("the current query data is inconsistent with the node data")
 	}
 	return s.b.BlockPredictStatus(ctx, hash, number)
+}
+
+func (s *PublicBlockChainAPI) GetLastFinalizedBlockInfo(ctx context.Context) types.StatusBlockInfo {
+	num := s.b.LastFinalizedBlockNumber(ctx)
+	block, err := s.b.BlockByNumber(ctx, rpc.BlockNumber(num))
+	if err != nil || block == nil {
+		return types.StatusBlockInfo{Number: hexutil.Uint64(0), Hash: common.Hash{}}
+	}
+	return types.StatusBlockInfo{Number: hexutil.Uint64(num), Hash: block.Hash()}
 }
 
 // GetUncleByBlockNumberAndIndex returns the uncle block for the given block hash and index. When fullTx is true

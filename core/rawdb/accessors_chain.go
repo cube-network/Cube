@@ -982,6 +982,18 @@ func LastBlockStatusNumber(db ethdb.Reader) *big.Int {
 	return new(big.Int).SetBytes(data)
 }
 
+func WriteLastFinalizedBlockNumber(db ethdb.KeyValueWriter, num *big.Int) {
+	err := db.Put(lastFinalizedNumKey, num.Bytes())
+	if err != nil {
+		log.Crit("Failed to store last attest status number", "err", err)
+	}
+}
+
+func LastFinalizedBlockNumber(db ethdb.Reader) *big.Int {
+	data, _ := db.Get(lastFinalizedNumKey)
+	return new(big.Int).SetBytes(data)
+}
+
 func IsReadyReadBlockStatus(db ethdb.Reader) (bool, error) {
 	return db.Has(blockStatusKey)
 }

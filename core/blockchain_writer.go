@@ -34,6 +34,12 @@ func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status u
 		bc.currentBlockStatusNumber.Store(new(big.Int).Set(num))
 	}
 
+	last = bc.lastFinalizedBlockNumber.Load().(*big.Int)
+	if num.Cmp(last) > 0 && status == types.BasFinalized {
+		rawdb.WriteLastFinalizedBlockNumber(bc.db, num)
+		bc.lastFinalizedBlockNumber.Store(new(big.Int).Set(num))
+	}
+
 	if bc.ChaosEngine.AttestationStatus() == types.AttestationPending {
 		firstCatchup := bc.firstCatchUpNumber.Load().(*big.Int)
 		if firstCatchup.Uint64() > 0 && num.Uint64() > firstCatchup.Uint64() {

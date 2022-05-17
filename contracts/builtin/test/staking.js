@@ -70,15 +70,12 @@ describe("Staking test", function () {
         let cpFactory = await hre.ethers.getContractFactory("CommunityPool", owner);
         bonusPool = await bpFactory.deploy();
         communityPool = await cpFactory.deploy();
-
         await bonusPool.initialize(staking.address, {value: params.totalRewards});
         await communityPool.initialize(owner.address);
         expect(await bonusPool.owner()).to.eq(staking.address);
         expect(await communityPool.admin()).to.eq(owner.address);
         expect(await ethers.provider.getBalance(bonusPool.address)).to.eq(params.totalRewards);
-
         valFactory = await hre.ethers.getContractFactory("cache/solpp-generated-contracts/Validator.sol:Validator", owner);
-
     });
 
     it('1. initialize', async () => {
@@ -104,9 +101,6 @@ describe("Staking test", function () {
     });
 
     it('2. initValidator', async () => {
-        // let balance = await ethers.provider.getBalance(staking.address);
-        // console.log(utils.weiToEth(balance));
-
         for (let i = 1; i < 25; i++) {
             let val = signers[i].address;
             let admin = signers[25 + i].address;
@@ -283,14 +277,6 @@ describe("Staking test", function () {
             expect(await staking.getPunishRecord(activeValidators[i])).equal(1);
             expect(lazyVal).equal(activeValidators[i]);
         }
-        /*while (true) {
-            let number = await ethers.provider.getBlockNumber();
-            if ((number + 1) % params.ruEpoch !== 0) {
-                await utils.mineEmptyBlock();
-            } else {
-                break;
-            }
-        }*/
         let topVals = await staking.getTopValidators(100);
         let oldInfo = await staking.valInfos(activeValidators[0]);
         let oldTotalStakeGWei = await staking.totalStakeGWei();
@@ -325,11 +311,6 @@ describe("Staking test", function () {
                 expect(newInfo.debt).to.eq(accRewardsPerStake.mul(newInfo.stakeGWei));
                 expect(newInfo.unWithdrawn).to.eq(oldInfo.unWithdrawn.sub(slashAmount));
                 expect(await staking.totalStakeGWei()).to.eq(oldTotalStakeGWei.sub(amountFromCurrStakes));
-                // Only the test token has been transferred. The detailed test is checked by the verifier's contract test case
-                // let newBalance = await ethers.provider.getBalance(valContractAddr);
-                // let settledRewards = oldAccRewardsPerStake.mul(oldInfo.stakeGWei).sub(oldInfo.debt);
-                // expect(newBalance).to.eq(oldBalance.add(settledRewards));
-                // TODO
             }
         }
     });
@@ -604,26 +585,12 @@ describe("Staking test", function () {
         // locking == true
         let signer20 = signers[20];
         let admin20 = signers[45];
-        // locking == false
-        let signer50 = signers[51];
-        let admin50 = signers[52];
 
         let staking2 = staking.connect(admin2);
         await expect(staking2.exitStaking(signer2.address)).to.be.revertedWith("E22");
 
         let staking20 = staking.connect(admin20);
         await expect(staking20.exitStaking(signer20.address)).to.be.revertedWith("E22");
-
-        /*let staking50 = staking.connect(admin50);
-        let tx = await staking50.exitStaking(signer50.address);
-        let receipt = await tx.wait();
-        expect(receipt.status).equal(1);
-
-        let valContractAddr = await staking.valMaps(signer50.address);
-        let valContract = valFactory.attach(valContractAddr);
-        await expect(tx).to
-            .emit(valContract,"StateChanged")
-            .withArgs(signer50.address, admin50.address, State.Idle, State.Exit)*/
 
         // Forced arrival at the end of the lock period
         tx = await staking.testReduceBasicLockEnd(params.releasePeriod * params.releaseCount);
@@ -693,5 +660,14 @@ describe("Staking test", function () {
         await expect(tx).to
             .emit(valContract,"StateChanged")
             .withArgs(signer50.address, delegator.address, State.Ready, State.Idle)
+
+        // locking == false
+        let staking50 = staking.connect(admin50);
+        tx = await staking50.exitStaking(signer50.address);
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(valContract,"StateChanged")
+            .withArgs(signer50.address, admin50.address, State.Idle, State.Exit)
     });
 })

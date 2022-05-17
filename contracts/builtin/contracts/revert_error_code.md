@@ -37,6 +37,7 @@
 | E32 | already on the exit state |
 | E33 | validator do not accept delegation |
 | E34 | no delegation |
+| E35 | For validator, the staking rewards greater then zero, but the totalStake is zero, it should be a bug |
 | E40 | only miner |
 | E41 | already initialized |
 | E42 | not initialized |

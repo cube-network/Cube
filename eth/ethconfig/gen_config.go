@@ -60,6 +60,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		Checkpoint              *params.TrustedCheckpoint      `toml:",omitempty"`
 		CheckpointOracle        *params.CheckpointOracleConfig `toml:",omitempty"`
 		OverrideArrowGlacier    *big.Int                       `toml:",omitempty"`
+		SyncAddressListInterval   time.Duration                  `toml:",omitempty"`
+		SyncAddressListURL        string                         `toml:",omitempty"`
+		SyncWhiteType           uint8         `toml:",omitempty"`
+		SyncBlackType           uint8         `toml:",omitempty"`
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -104,6 +108,10 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.Checkpoint = c.Checkpoint
 	enc.CheckpointOracle = c.CheckpointOracle
 	enc.OverrideArrowGlacier = c.OverrideArrowGlacier
+	enc.SyncAddressListInterval = c.SyncAddressListInterval
+	enc.SyncAddressListURL = c.SyncAddressListURL
+	enc.SyncWhiteType = c.SyncWhiteType
+	enc.SyncBlackType = c.SyncBlackType
 	return &enc, nil
 }
 
@@ -152,6 +160,10 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		Checkpoint              *params.TrustedCheckpoint      `toml:",omitempty"`
 		CheckpointOracle        *params.CheckpointOracleConfig `toml:",omitempty"`
 		OverrideArrowGlacier    *big.Int                       `toml:",omitempty"`
+		SyncAddressListInterval *time.Duration                 `toml:",omitempty"`
+		SyncAddressListURL      *string                        `toml:",omitempty"`
+		SyncWhiteType           *uint8                         `toml:",omitempty"`
+		SyncBlackType           *uint8                         `toml:",omitempty"`
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -282,6 +294,18 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.OverrideArrowGlacier != nil {
 		c.OverrideArrowGlacier = dec.OverrideArrowGlacier
+	}
+	if dec.SyncAddressListInterval != nil {
+		c.SyncAddressListInterval = *dec.SyncAddressListInterval
+	}
+	if dec.SyncAddressListURL != nil {
+		c.SyncAddressListURL = *dec.SyncAddressListURL
+	}
+	if dec.SyncWhiteType != nil {
+		c.SyncWhiteType = *dec.SyncWhiteType
+	}
+	if dec.SyncBlackType != nil {
+		c.SyncBlackType = *dec.SyncBlackType
 	}
 	return nil
 }

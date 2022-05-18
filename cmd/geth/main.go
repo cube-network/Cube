@@ -153,6 +153,10 @@ var (
 		utils.MinerNotifyFullFlag,
 		configFileFlag,
 		utils.CatalystFlag,
+		utils.SyncAddressListIntervalFlag,
+		utils.SyncAddressListURLFlag,
+		utils.SyncWhiteTypeFlag,
+		utils.SyncBlackTypeFlag,
 	}
 
 	rpcFlags = []cli.Flag{

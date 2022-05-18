@@ -194,8 +194,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			SnapshotLimit:       config.SnapshotCache,
 			Preimages:           config.Preimages,
 		}
+		extendConfig = &core.ExtendConfig{
+			SyncAddressListInterval: config.SyncAddressListInterval,
+			SyncAddressListURL:      config.SyncAddressListURL,
+			SyncWhiteType:           config.SyncWhiteType,
+			SyncBlackType:           config.SyncBlackType,
+		}
 	)
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
+	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, extendConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit)
 	if err != nil {
 		return nil, err
 	}

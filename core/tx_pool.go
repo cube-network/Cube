@@ -86,6 +86,8 @@ var (
 	// than some meaningful limit a user might use. This is not a consensus error
 	// making the transaction invalid, rather a DOS protection.
 	ErrOversizedData = errors.New("oversized data")
+
+	ErrNotInWhiteList = errors.New("the current deployment contract address is not in the white list")
 )
 
 var (
@@ -151,6 +153,7 @@ type blockChain interface {
 	StateAt(root common.Hash) (*state.StateDB, error)
 
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
+	IsAllowedExecute(from common.Address, to *common.Address) (bool, error)
 }
 
 type exTxValidator interface {
@@ -669,6 +672,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
+	}
+
+	if b, err := pool.chain.IsAllowedExecute(from, tx.To()); !b {
+		toAddress := common.Address{}
+		if tx.To() != nil {
+			toAddress = *tx.To()
+		}
+		log.Warn("The current transaction is prohibited from execution", "from", from, "to", toAddress, "error", err)
+		return errors.New("unexpected error")
 	}
 	return nil
 }

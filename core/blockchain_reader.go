@@ -17,6 +17,7 @@
 package core
 
 import (
+	"errors"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -447,4 +448,41 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 		})
 	}
 	return status, hash
+}
+
+func (bc *BlockChain) IsInWhiteList(addr common.Address) bool {
+	bc.lockWhiteAddressCache.Lock()
+	defer bc.lockWhiteAddressCache.Unlock()
+
+	return bc.WhiteAddressCache.Contains(addr)
+}
+
+func (bc *BlockChain) IsInBlackList(addr common.Address) bool {
+	bc.lockBlackAddressCache.Lock()
+	defer bc.lockBlackAddressCache.Unlock()
+
+	return bc.BlackAddressCache.Contains(addr)
+}
+
+func (bc *BlockChain) IsAllowedExecute(from common.Address, to *common.Address) (bool, error) {
+	if bc.extendConfig == nil || bc.extendConfig.SyncWhiteType == SyncWhiteNoneType && bc.extendConfig.SyncBlackType == SyncBlackNoneType {
+		return true, nil
+	}
+
+	if (bc.extendConfig.SyncBlackType == SyncBlackFromType || bc.extendConfig.SyncBlackType == SyncBlackFromAndToType) && bc.IsInBlackList(from) {
+		return false, errors.New("the current from address is in the blacklist")
+	}
+
+	if bc.extendConfig.SyncBlackType == SyncBlackFromAndToType && (to != nil && bc.IsInBlackList(*to)) {
+		return false, errors.New("the current to address is in the blacklist")
+	}
+
+	if bc.extendConfig.SyncWhiteType == SyncWhiteContractType && to == nil && !bc.IsInWhiteList(from) {
+		return false, errors.New("the current from address is not in the whitelist. Contract deployment is prohibited")
+	}
+
+	if bc.extendConfig.SyncWhiteType == SyncWhiteContractAndTrxType && !bc.IsInWhiteList(from) {
+		return false, errors.New("the current from address is not in the whitelist. Any transaction is prohibited")
+	}
+	return true, nil
 }

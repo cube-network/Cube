@@ -21,6 +21,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	lru "github.com/hashicorp/golang-lru"
 	"math/big"
 	"sort"
 
@@ -1104,4 +1105,96 @@ func WriteViolateCasperFFGPunish(db ethdb.KeyValueStore, before *types.Attestati
 		log.Crit("Failed to write violate casperFFG punish", "err", err)
 	}
 	return nil
+}
+
+func WriteWhiteAddress(db ethdb.KeyValueStore, addr common.Address) {
+	key := append(whiteAddressKey, addr.Bytes()...)
+	err := db.Put(key, new(big.Int).SetUint64(1).Bytes())
+	if err != nil {
+		log.Error("Failed to store white address", "err", err)
+	}
+}
+
+func DeleteWhiteAddress(db ethdb.KeyValueStore, addr common.Address) {
+	key := append(whiteAddressKey, addr.Bytes()...)
+	if err := db.Delete(key); err != nil {
+		log.Warn("May have been deleted in advance", "err", err)
+	}
+}
+
+func IsInWhiteList(db ethdb.Reader, addr common.Address) (bool, error) {
+	key := append(whiteAddressKey, addr.Bytes()...)
+	return db.Has(key)
+}
+
+func WriteLastWhiteListId(db ethdb.KeyValueWriter, id uint64) {
+	err := db.Put(lastWhiteListIdKey, new(big.Int).SetUint64(id).Bytes())
+	if err != nil {
+		log.Error("Failed to store last white list datetime", "err", err)
+	}
+}
+
+func LastWhiteListId(db ethdb.Reader) uint64 {
+	data, _ := db.Get(lastWhiteListIdKey)
+	return new(big.Int).SetBytes(data).Uint64()
+}
+
+func WriteBlackAddress(db ethdb.KeyValueStore, addr common.Address) {
+	key := append(blackAddressKey, addr.Bytes()...)
+	err := db.Put(key, new(big.Int).SetUint64(1).Bytes())
+	if err != nil {
+		log.Error("Failed to store black address", "err", err)
+	}
+}
+
+func DeleteBlackAddress(db ethdb.KeyValueStore, addr common.Address) {
+	key := append(blackAddressKey, addr.Bytes()...)
+	if err := db.Delete(key); err != nil {
+		log.Warn("May have been deleted in advance", "err", err)
+	}
+}
+
+func IsInBlackList(db ethdb.Reader, addr common.Address) (bool, error) {
+	key := append(blackAddressKey, addr.Bytes()...)
+	return db.Has(key)
+}
+
+func WriteLastBlackListId(db ethdb.KeyValueWriter, id uint64) {
+	err := db.Put(lastBlackListIdKey, new(big.Int).SetUint64(id).Bytes())
+	if err != nil {
+		log.Error("Failed to store last black list datetime", "err", err)
+	}
+}
+
+func LastBlackListId(db ethdb.Reader) uint64 {
+	data, _ := db.Get(lastBlackListIdKey)
+	return new(big.Int).SetBytes(data).Uint64()
+}
+
+func loadAddressFromDb(db ethdb.Database, key []byte, cache *lru.Cache) error {
+	it := db.NewIterator(key, nil)
+	defer it.Release()
+
+	for it.Next() {
+		if len(it.Key()) != len(key)+common.AddressLength {
+			continue
+		}
+		cache.Add(common.BytesToAddress(it.Key()[:len(key)]), 1)
+		log.Debug("loadAddressFromDb", "address", common.BytesToAddress(it.Key()))
+	}
+	return it.Error()
+}
+
+func LoadBlackAddressFromDb(db ethdb.Database, cache *lru.Cache) {
+	err := loadAddressFromDb(db, blackAddressKey, cache)
+	if err != nil {
+		log.Crit("Failed to load black address", "err", err.Error())
+	}
+}
+
+func LoadWhiteAddressFromDb(db ethdb.Database, cache *lru.Cache) {
+	err := loadAddressFromDb(db, whiteAddressKey, cache)
+	if err != nil {
+		log.Crit("Failed to load white address", "err", err.Error())
+	}
 }

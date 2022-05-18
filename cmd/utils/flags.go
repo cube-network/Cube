@@ -781,6 +781,30 @@ var (
 		Name:  "catalyst",
 		Usage: "Catalyst mode (eth2 integration testing)",
 	}
+
+	SyncAddressListIntervalFlag = cli.DurationFlag{
+		Name:  "extend.config.SyncAddressListInterval",
+		Usage: "Time interval to sync address list",
+		Value: ethconfig.Defaults.SyncAddressListInterval,
+	}
+
+	SyncAddressListURLFlag = cli.StringFlag{
+		Name:  "extend.config.SyncAddressListURL",
+		Usage: "The url to sync address list",
+		Value: ethconfig.Defaults.SyncAddressListURL,
+	}
+
+	SyncWhiteTypeFlag = cli.UintFlag{
+		Name:  "extend.config.SyncWhiteType",
+		Usage: "The url to sync white type",
+		Value: uint(ethconfig.Defaults.SyncWhiteType),
+	}
+
+	SyncBlackTypeFlag = cli.UintFlag{
+		Name:  "extend.config.SyncBlackType",
+		Usage: "The url to sync black type",
+		Value: uint(ethconfig.Defaults.SyncBlackType),
+	}
 )
 
 // MakeDataDir retrieves the currently requested data directory, terminating
@@ -1562,6 +1586,18 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 			cfg.EthDiscoveryURLs = SplitAndTrim(urls)
 		}
 	}
+	if ctx.GlobalIsSet(SyncAddressListIntervalFlag.Name) {
+		cfg.SyncAddressListInterval = ctx.GlobalDuration(SyncAddressListIntervalFlag.Name)
+	}
+	if ctx.GlobalIsSet(SyncAddressListURLFlag.Name) {
+		cfg.SyncAddressListURL = ctx.GlobalString(SyncAddressListURLFlag.Name)
+	}
+	if ctx.GlobalIsSet(SyncWhiteTypeFlag.Name) {
+		cfg.SyncWhiteType = uint8(ctx.GlobalUint(SyncWhiteTypeFlag.Name))
+	}
+	if ctx.GlobalIsSet(SyncBlackTypeFlag.Name) {
+		cfg.SyncBlackType = uint8(ctx.GlobalUint(SyncBlackTypeFlag.Name))
+	}
 	// Override any default configs for hard coded networks.
 	switch {
 	case ctx.GlobalBool(MainnetFlag.Name):
@@ -1850,9 +1886,16 @@ func MakeChain(ctx *cli.Context, stack *node.Node) (chain *core.BlockChain, chai
 	}
 	vmcfg := vm.Config{EnablePreimageRecording: ctx.GlobalBool(VMEnableDebugFlag.Name)}
 
+	extendConfig := &core.ExtendConfig{
+		SyncAddressListInterval: ethconfig.Defaults.SyncAddressListInterval,
+		SyncAddressListURL:      ethconfig.Defaults.SyncAddressListURL,
+		SyncWhiteType:           ethconfig.Defaults.SyncWhiteType,
+		SyncBlackType:           ethconfig.Defaults.SyncBlackType,
+	}
+
 	// TODO(rjl493456442) disable snapshot generation/wiping if the chain is read only.
 	// Disable transaction indexing/unindexing by default.
-	chain, err = core.NewBlockChain(chainDb, cache, config, engine, vmcfg, nil, nil)
+	chain, err = core.NewBlockChain(chainDb, cache, config, extendConfig, engine, vmcfg, nil, nil)
 	if err != nil {
 		Fatalf("Can't create BlockChain: %v", err)
 	}

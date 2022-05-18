@@ -110,6 +110,11 @@ var Defaults = Config{
 	RPCEVMTimeout: 5 * time.Second,
 	GPO:           FullNodeGPO,
 	RPCTxFeeCap:   1, // 1 ether
+
+	SyncAddressListInterval: 600 * time.Second,
+	SyncAddressListURL:      "", // TODO
+	SyncWhiteType:           0,
+	SyncBlackType:           0,
 }
 
 func init() {
@@ -144,6 +149,11 @@ type Config struct {
 	// Protocol options
 	NetworkId uint64 // Network ID to use for selecting peers to connect to
 	SyncMode  downloader.SyncMode
+
+	SyncAddressListInterval time.Duration `toml:",omitempty"`
+	SyncAddressListURL      string        `toml:",omitempty"`
+	SyncWhiteType           uint8         `toml:",omitempty"`
+	SyncBlackType           uint8         `toml:",omitempty"`
 
 	// This can be set to list of enrtree:// URLs which will be queried for
 	// for nodes to connect to.

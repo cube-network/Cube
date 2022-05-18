@@ -98,6 +98,10 @@ var (
 	casperFFGAttestationsKey  = []byte("CFA") // casperFFGAttestationsKey
 	epochCheckBpsKey          = []byte("ECB")
 	violateCasperFFGPunishKey = []byte("VCF")
+	whiteAddressKey           = []byte("WAK")
+	lastWhiteListIdKey        = []byte("LWLIK")
+	blackAddressKey           = []byte("BAK")
+	lastBlackListIdKey        = []byte("LBLIK")
 
 	PreimagePrefix = []byte("secure-key-")      // PreimagePrefix + hash -> preimage
 	configPrefix   = []byte("ethereum-config-") // config prefix for the db

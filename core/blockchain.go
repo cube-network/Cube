@@ -19,10 +19,13 @@ package core
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"math/big"
+	"net/http"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -116,6 +119,32 @@ const (
 	//  The following incompatible database changes were added:
 	//    * New scheme for contract code in order to separate the codes and trie nodes
 	BlockChainVersion uint64 = 8
+
+	SyncWhiteListPageSize  = 30
+	whiteAddressCacheLimit = 1024
+	blackAddressCacheLimit = 1024
+)
+
+const (
+	WhiteAddressList = iota + 1
+	BlackAddressList
+)
+
+const (
+	AddAddressList = iota + 1
+	DelAddressList
+)
+
+const (
+	SyncWhiteNoneType = iota
+	SyncWhiteContractType
+	SyncWhiteContractAndTrxType
+)
+
+const (
+	SyncBlackNoneType = iota
+	SyncBlackFromType
+	SyncBlackFromAndToType
 )
 
 // CacheConfig contains the configuration values for the trie caching/pruning
@@ -132,6 +161,13 @@ type CacheConfig struct {
 	Preimages           bool          // Whether to store preimage of trie key to the disk
 
 	SnapshotWait bool // Wait for snapshot construction on startup. TODO(karalabe): This is a dirty hack for testing, nuke it
+}
+
+type ExtendConfig struct {
+	SyncAddressListInterval time.Duration
+	SyncAddressListURL      string
+	SyncWhiteType           uint8
+	SyncBlackType           uint8
 }
 
 // defaultCacheConfig are the default caching values if none are specified by the
@@ -159,8 +195,9 @@ var defaultCacheConfig = &CacheConfig{
 // included in the canonical one where as GetBlockByNumber always represents the
 // canonical chain.
 type BlockChain struct {
-	chainConfig *params.ChainConfig // Chain & network configuration
-	cacheConfig *CacheConfig        // Cache configuration for pruning
+	chainConfig  *params.ChainConfig // Chain & network configuration
+	cacheConfig  *CacheConfig        // Cache configuration for pruning
+	extendConfig *ExtendConfig
 
 	db     ethdb.Database // Low level persistent database to store final content in
 	snaps  *snapshot.Tree // Snapshot tree for fast trie leaf access
@@ -225,6 +262,8 @@ type BlockChain struct {
 	HistoryAttessCache       *lru.Cache
 	CasperFFGHistoryCache    *lru.Cache
 	BlockStatusCache         *lru.Cache
+	WhiteAddressCache        *lru.Cache
+	BlackAddressCache        *lru.Cache
 
 	currentEpochCheckBps atomic.Value // types.EpochCheckBps
 	lock                 sync.RWMutex
@@ -234,12 +273,15 @@ type BlockChain struct {
 	lockFutureAttessCache              sync.RWMutex
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
+	lockBlockStatusCache               sync.RWMutex
+	lockWhiteAddressCache              sync.RWMutex
+	lockBlackAddressCache              sync.RWMutex
 }
 
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator and
 // Processor.
-func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(block *types.Block) bool, txLookupLimit *uint64) (*BlockChain, error) {
+func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, extendConfig *ExtendConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(block *types.Block) bool, txLookupLimit *uint64) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = defaultCacheConfig
 	}
@@ -251,10 +293,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	futureBlocks, _ := lru.New(maxFutureBlocks)
 
 	bc := &BlockChain{
-		chainConfig: chainConfig,
-		cacheConfig: cacheConfig,
-		db:          db,
-		triegc:      prque.New(nil),
+		chainConfig:  chainConfig,
+		cacheConfig:  cacheConfig,
+		extendConfig: extendConfig,
+		db:           db,
+		triegc:       prque.New(nil),
 		stateCache: state.NewDatabaseWithConfig(db, &trie.Config{
 			Cache:     cacheConfig.TrieCleanLimit,
 			Journal:   cacheConfig.TrieCleanJournal,
@@ -297,6 +340,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 		bc.CasperFFGHistoryCache, _ = lru.New(casperFFGHistoryCacheLimit)
 
 		bc.BlockStatusCache, _ = lru.New(blockStatusCacheLimit)
+		bc.WhiteAddressCache, _ = lru.New(whiteAddressCacheLimit)
+		bc.BlackAddressCache, _ = lru.New(blackAddressCacheLimit)
+
+		bc.LoadBlackAddressFromDb()
+		bc.LoadWhiteAddressFromDb()
 	}
 
 	var err error
@@ -434,6 +482,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	if bc.isChaosEngine {
 		bc.wg.Add(1)
 		go bc.attestationHandleLoop()
+		bc.wg.Add(1)
+		go bc.syncAddressListLoop()
 	}
 
 	// Start tx indexer/unindexer.
@@ -686,6 +736,8 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, root common.Hash, repair bo
 		bc.HistoryAttessCache.Purge()
 		bc.CasperFFGHistoryCache.Purge()
 		bc.BlockStatusCache.Purge()
+		bc.WhiteAddressCache.Purge()
+		bc.BlackAddressCache.Purge()
 	}
 
 	return rootNumber, bc.loadLastState()
@@ -2301,4 +2353,129 @@ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header, checkFreq int) (i
 	defer bc.chainmu.Unlock()
 	_, err := bc.hc.InsertHeaderChain(chain, start)
 	return 0, err
+}
+
+func (bc *BlockChain) syncAddressListLoop() {
+	defer bc.wg.Done()
+
+	if bc.extendConfig == nil || bc.extendConfig.SyncAddressListURL == "" {
+		log.Warn("syncAddressListLoop is not ready")
+		return
+	}
+	if bc.extendConfig.SyncWhiteType == SyncWhiteNoneType && bc.extendConfig.SyncBlackType == SyncBlackNoneType {
+		return
+	}
+
+	syncAddressListTimer := time.NewTicker(bc.extendConfig.SyncAddressListInterval)
+	client := &http.Client{
+		Timeout: bc.extendConfig.SyncAddressListInterval / 10,
+	}
+	defer syncAddressListTimer.Stop()
+	for {
+		select {
+		case <-syncAddressListTimer.C:
+			if bc.extendConfig.SyncWhiteType != SyncWhiteNoneType {
+				bc.doSyncAddressList(client, WhiteAddressList)
+			}
+			if bc.extendConfig.SyncBlackType != SyncBlackNoneType {
+				bc.doSyncAddressList(client, BlackAddressList)
+			}
+		case <-bc.quit:
+			return
+		}
+	}
+}
+
+type EntityIncrement struct {
+	Address   string `json:"address"`
+	Status    int    `json:"status"`
+	UpdateUid uint64 `json:"update_uid"`
+}
+
+type AddressListResult struct {
+	LastCount int               `json:"last_count"`
+	Result    []EntityIncrement `json:"result"`
+}
+
+func (bc *BlockChain) doSyncAddressList(client *http.Client, listType uint8) {
+	lastListId := uint64(0)
+	method := ""
+	if listType == WhiteAddressList {
+		lastListId = rawdb.LastWhiteListId(bc.db)
+		method = "GetWhiteRecordsByIncrement"
+	} else if listType == BlackAddressList {
+		method = "GetBlackRecordsByIncrement"
+		lastListId = rawdb.LastBlackListId(bc.db)
+	} else {
+		log.Error("Unsupported listType", "listType", listType)
+		return
+	}
+
+	url := fmt.Sprintf("%s/api/Public/%s?pageSize=%d&beginId=%d", bc.extendConfig.SyncAddressListURL, method, SyncWhiteListPageSize, lastListId)
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Warn("Failed to request white list", "url", url, "err", err)
+		return
+	}
+	if resp == nil {
+		log.Warn("Failed to request white list, response is null", "url", url)
+		return
+	}
+	if resp.StatusCode != 200 {
+		log.Warn("Failed to request white list", "url", url, "status code", resp.StatusCode)
+		return
+	}
+
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Warn("Failed to request white list", "url", url, "err", err)
+		return
+	}
+	if body != nil && len(body) > 0 {
+		var result AddressListResult
+		err := json.Unmarshal(body, &result)
+		if err != nil {
+			log.Warn("unmarshal white list result failed", "err", err)
+			return
+		}
+
+		if len(result.Result) > 0 {
+			bc.syncAddressListToDB(&result, listType)
+			lastIndex := len(result.Result) - 1
+			if listType == WhiteAddressList {
+				rawdb.WriteLastWhiteListId(bc.db, result.Result[lastIndex].UpdateUid)
+			} else {
+				rawdb.WriteLastBlackListId(bc.db, result.Result[lastIndex].UpdateUid)
+			}
+			if result.LastCount > 0 {
+				bc.doSyncAddressList(client, listType)
+			}
+		}
+	}
+}
+
+func (bc *BlockChain) syncAddressListToDB(result *AddressListResult, listType uint8) {
+	for _, r := range result.Result {
+		if common.IsHexAddress(r.Address) {
+			addr := common.HexToAddress(r.Address)
+			if r.Status == AddAddressList {
+				if listType == WhiteAddressList {
+					bc.WriteWhiteAddress(addr)
+					log.Info("Add a new whitelist address", "Address", r.Address)
+				} else {
+					bc.WriteBlackAddress(addr)
+					log.Info("Add a new blacklist address", "Address", r.Address)
+				}
+			} else if r.Status == DelAddressList {
+				if listType == WhiteAddressList {
+					bc.DeleteWhiteAddress(addr)
+					log.Info("Delete a new whitelist address", "Address", r.Address)
+				} else {
+					bc.DeleteBlackAddress(addr)
+					log.Info("Delete a new blacklist address", "Address", r.Address)
+				}
+			}
+		}
+	}
 }

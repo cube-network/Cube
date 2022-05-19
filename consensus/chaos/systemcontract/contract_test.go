@@ -210,7 +210,8 @@ func TestDistributeBlockFee(t *testing.T) {
 
 	assert.Equal(t, new(big.Int).Sub(origin, fee), ctx.Statedb.GetBalance(ctx.Header.Coinbase))
 
-	assert.Equal(t, big.NewInt(fee.Int64()/5), ctx.Statedb.GetBalance(system.CommunityPoolContract))
+	assert.Equal(t, big.NewInt(fee.Int64()/100*19), ctx.Statedb.GetBalance(system.CommunityPoolContract))
+	assert.Equal(t, big.NewInt(fee.Int64()/100), ctx.Statedb.GetBalance(system.DAOCharityFoundationContract))
 
 	valAmount := big.NewInt(fee.Int64() / 5 * 4 / 2)
 	assert.Equal(t, valAmount, getValidatorFee(GenesisValidators[0]))

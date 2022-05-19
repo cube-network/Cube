@@ -73,6 +73,19 @@ const (
 		},
 		{
 			"inputs": [
+			{
+			  "internalType": "address payable",
+			  "name": "_dAOCharityFoundation",
+			  "type": "address"
+			}
+			],
+			"name": "initializeV2",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
+			"inputs": [
 				{
 					"internalType": "address",
 					"name": "_val",
@@ -245,6 +258,23 @@ const (
 		}
 	]`
 
+	// DAOCharityFoundationABI contains methods to interactive with CommunityPool contract.
+	DAOCharityFoundationABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_admin",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]`
+
 	// BonusPoolABI contains methods to interactive with BonusPool contract.
 	BonusPoolABI = `[
 		{
@@ -314,10 +344,11 @@ const (
 )
 
 var (
-	StakingContract       = common.HexToAddress("0x000000000000000000000000000000000000F000")
-	CommunityPoolContract = common.HexToAddress("0x000000000000000000000000000000000000F001")
-	BonusPoolContract     = common.HexToAddress("0x000000000000000000000000000000000000F002")
-	GenesisLockContract   = common.HexToAddress("0x000000000000000000000000000000000000F003")
+	StakingContract              = common.HexToAddress("0x000000000000000000000000000000000000F000")
+	CommunityPoolContract        = common.HexToAddress("0x000000000000000000000000000000000000F001")
+	BonusPoolContract            = common.HexToAddress("0x000000000000000000000000000000000000F002")
+	GenesisLockContract          = common.HexToAddress("0x000000000000000000000000000000000000F003")
+	DAOCharityFoundationContract = common.HexToAddress("0x000000000000000000000000000000000000F004")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -327,7 +358,7 @@ func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
 
 	rawAbiMap := map[common.Address]string{StakingContract: StakingABI, CommunityPoolContract: CommunityPoolABI,
-		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI}
+		DAOCharityFoundationContract: DAOCharityFoundationABI, BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI}
 
 	for addr, rawAbi := range rawAbiMap {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {

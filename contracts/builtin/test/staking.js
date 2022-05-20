@@ -609,17 +609,32 @@ describe("Staking test", function () {
             .emit(valContract,"StateChanged")
             .withArgs(signer2.address, admin2.address, State.Jail, State.Exit)
 
+        // Initialize some data in advance to verify the delegatorClaimAny
+        let delegator = signers[53];
+        let diffGwei = utils.ethToGwei(params.ThresholdStakes - params.MinSelfStakes);
+        let diffWei = utils.ethToWei(params.ThresholdStakes - params.MinSelfStakes);
+        valContractAddr = await staking.valMaps(signer20.address);
+        valContract = valFactory.attach(valContractAddr);
+        let oldValTotalStake = await valContract.totalStake();
+
+        let stakingDelegator = staking.connect(delegator);
+        tx = await stakingDelegator.addDelegation(signer20.address, {value: diffWei.div(2)});
+        receipt = await tx.wait();
+        expect(receipt.status).equal(1);
+        await expect(tx).to
+            .emit(valContract,"StakesChanged")
+            .withArgs(signer20.address, delegator.address, oldValTotalStake.add(diffGwei.div(2)))
+
         // Idle
         staking20 = staking.connect(admin20);
         tx = await staking20.exitStaking(signer20.address);
         receipt = await tx.wait();
         expect(receipt.status).equal(1);
-
-        valContractAddr = await staking.valMaps(signer20.address);
-        valContract = valFactory.attach(valContractAddr);
         await expect(tx).to
             .emit(valContract,"StateChanged")
-            .withArgs(signer20.address, admin20.address, State.Idle, State.Exit)
+            .withArgs(signer20.address, admin20.address, State.Ready, State.Exit)
+
+        await expect(staking20.addStake(signer20.address, {value: diffWei.div(2)})).to.be.revertedWith("E28");
     });
 
     it('17. check exitDelegation', async () => {
@@ -669,5 +684,12 @@ describe("Staking test", function () {
         await expect(tx).to
             .emit(valContract,"StateChanged")
             .withArgs(signer50.address, admin50.address, State.Idle, State.Exit)
+    });
+
+    it('18. Bypass the stacking contract and call the verifier contract directly', async () => {
+        let signer50 = signers[51];
+        valContractAddr = await staking.valMaps(signer50.address);
+        valContract = valFactory.attach(valContractAddr);
+        await expect(valContract.addStake(1000)).to.be.revertedWith("E01");
     });
 })

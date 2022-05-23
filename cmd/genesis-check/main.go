@@ -23,6 +23,7 @@ import (
 	"os"
 
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 func init() {
@@ -40,7 +41,9 @@ func checkGenesis(file *os.File) {
 		die(err)
 	}
 	genesisHash := genesis.ToBlock(nil).Hash()
-	fmt.Printf("Genesis Hash: %v\n", genesisHash)
+	fmt.Printf("Genesis Hash: %v\nIs Mainnet: %v\nIs Testnet: %v\n", genesisHash,
+		genesisHash == params.MainnetGenesisHash,
+		genesisHash == params.TestnetGenesisHash)
 }
 
 // Example

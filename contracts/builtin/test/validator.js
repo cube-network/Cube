@@ -288,6 +288,16 @@ describe("Validator independent test", function () {
         expect(await validator.totalStake()).eq(oldTotalStake.sub(oldSelfStakeGWei));
         expect(await validator.accRewardsPerStake()).eq(accRewardsPerStake);
         expect(await validator.currCommission()).eq(currCommission);
+        expect(await validator.selfStakeGWei()).eq(0);
+
+        let dlg = await validator.delegators(delegator);
+        let oldStakeGWei = dlg.stakeGWei;
+        console.log(oldStakeGWei)
+        await expect(validator.delegatorClaimAny(delegator, {value: 0})).to
+            .emit(validator, "RewardsWithdrawn")
+            .withArgs(vaddr, delegator, oldStakeGWei);
+        dlg = await validator.delegators(delegator);
+        expect(dlg.stakeGWei).eq(0);
     });
 
     it('4. exitDelegation with correct rewards calculation', async () => {

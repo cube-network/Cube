@@ -154,10 +154,15 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
         if (oldSt == State.Ready) {
             op = RankingOp.Remove;
         }
-        // subtract the selfStake from totalStake
+        // subtract the selfStake from totalStake, settle rewards, and add unbound record.
+        selfSettledRewards += selfStakeGWei * accRewardsPerStake;
         totalStake -= selfStakeGWei;
+        addUnboundRecord(validator, selfStakeGWei);
+        uint deltaStake = selfStakeGWei;
+        selfStakeGWei = 0;
+
         emit StateChanged(validator, admin, oldSt, State.Exit);
-        return (op, selfStakeGWei);
+        return (op, deltaStake);
     }
 
     function receiveFee() external override payable onlyOwner {
@@ -185,10 +190,6 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
         uint unboundAmount = processClaimableUnbound(validator);
         _stakeGWei += unboundAmount;
 
-        if (state == State.Exit && exitLockEnd <= block.timestamp) {
-            _stakeGWei += selfStakeGWei;
-            selfStakeGWei = 0;
-        }
         totalUnWithdrawn -= _stakeGWei;
         return _stakeGWei;
     }
@@ -320,6 +321,7 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
     function handleReceivedRewards() private {
         // take commission and update rewards record
         if (msg.value > 0) {
+            require(totalStake > 0, "E35");
             uint c = msg.value.mul(commissionRate).div(100);
             uint newRewards = msg.value - c;
             // update accRewardsPerStake
@@ -457,15 +459,19 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
     }
 
     function anyClaimable(uint _unsettledRewards, address _stakeOwner) external override view onlyOwner returns (uint) {
-        // calculates _unsettledRewards
-        uint c = _unsettledRewards.mul(commissionRate).div(100);
-        uint newRewards = _unsettledRewards - c;
-        // expected accRewardsPerStake
-        uint rps = newRewards / totalStake;
-        uint expectedAccRPS = accRewardsPerStake + rps;
+        uint expectedAccRPS = accRewardsPerStake;
+        uint rps = 0;
+        if (totalStake > 0) {
+            // calculates _unsettledRewards
+            uint c = _unsettledRewards.mul(commissionRate).div(100);
+            uint newRewards = _unsettledRewards - c;
+            // expected accRewardsPerStake
+            rps = newRewards / totalStake;
+            expectedAccRPS = expectedAccRPS.add(rps);
+        }
 
         if (_stakeOwner == admin) {
-            uint expectedCommission = currCommission + _unsettledRewards - (rps * totalStake);
+            uint expectedCommission = currCommission.add(_unsettledRewards.sub(rps * totalStake));
             return validatorClaimable(expectedCommission, expectedAccRPS);
         } else {
             return delegatorClaimable(expectedAccRPS, _stakeOwner);
@@ -473,16 +479,20 @@ contract Validator is Params, WithAdmin, SafeSend, IValidator {
     }
 
     function claimableRewards(uint _unsettledRewards, address _stakeOwner) external override view onlyOwner returns (uint) {
-        // calculates _unsettledRewards
-        uint c = _unsettledRewards.mul(commissionRate).div(100);
-        uint newRewards = _unsettledRewards - c;
-        // expected accRewardsPerStake
-        uint rps = newRewards / totalStake;
-        uint expectedAccRPS = accRewardsPerStake + rps;
+        uint expectedAccRPS = accRewardsPerStake;
+        uint rps = 0;
+        if (totalStake > 0) {
+            // calculates _unsettledRewards
+            uint c = _unsettledRewards.mul(commissionRate).div(100);
+            uint newRewards = _unsettledRewards - c;
+            // expected accRewardsPerStake
+            rps = newRewards / totalStake;
+            expectedAccRPS = expectedAccRPS.add(rps);
+        }
 
         uint claimable = 0;
         if (_stakeOwner == admin) {
-            uint expectedCommission = currCommission + _unsettledRewards - (rps * totalStake);
+            uint expectedCommission = currCommission.add(_unsettledRewards.sub(rps * totalStake));
             claimable = expectedAccRPS.mul(selfStakeGWei).add(selfSettledRewards).sub(selfDebt);
             claimable = claimable.add(expectedCommission).add(currFeeRewards);
         } else {

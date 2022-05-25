@@ -1019,6 +1019,9 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 }
 
 func (c *Chaos) PreHandle(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
+	if c.chainConfig.Hardfork1Block != nil && c.chainConfig.Hardfork1Block.Cmp(header.Number) == 0 {
+		return systemcontract.ApplySystemContractUpgrade(systemcontract.SysContractV1, state, header, newChainContext(chain, c), c.chainConfig)
+	}
 	return nil
 }
 

@@ -40,7 +40,6 @@ const (
 // The certificates that meet the inspection will be stored according to the height of the current chain plot.
 // If they are higher than the local height, they will be stored in the future cache.
 func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
-	//log.Debug("Received a untreated attestation")
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
 	if err := a.SanityCheck(); err != nil {
 		return err
@@ -53,6 +52,10 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	if !bc.VerifyValidLimit(targetNumber, currentBlockNumber) {
 		return nil
 	}
+
+	bc.lockHandleAttestation.Lock()
+	defer bc.lockHandleAttestation.Unlock()
+
 	if targetNumber <= currentBlockNumber {
 		isExist, err := bc.IsExistsRecentCache(a)
 		if err != nil {

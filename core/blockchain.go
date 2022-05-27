@@ -229,6 +229,7 @@ type BlockChain struct {
 	currentEpochCheckBps atomic.Value // types.EpochCheckBps
 	lock                 sync.RWMutex
 
+	lockHandleAttestation              sync.RWMutex
 	lockAddOneAttestationToRecentCache sync.RWMutex
 	lockHistoryAttessCache             sync.RWMutex
 	lockFutureAttessCache              sync.RWMutex

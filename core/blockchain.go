@@ -234,7 +234,6 @@ type BlockChain struct {
 	lockFutureAttessCache              sync.RWMutex
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
-	lockBlockStatusCache               sync.RWMutex
 }
 
 // NewBlockChain returns a fully initialised block chain using information

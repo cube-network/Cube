@@ -178,7 +178,8 @@ type ChaosEngine interface {
 	// IsDoubleSignPunishTransaction checks whether a specific transaction is a system transaction.
 	IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error)
 
-	IsDoubleSignPunished(chain ChainHeaderReader, header *types.Header, state *state.StateDB, punishHash common.Hash) (bool, error)
+	// ExtraValidateOfTx do some consensus related validation to a given transaction.
+	ExtraValidateOfTx(sender common.Address, tx *types.Transaction, header *types.Header) error
 
 	ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
 }

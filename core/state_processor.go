@@ -115,6 +115,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			if err != nil {
 				return nil, nil, 0, err
 			}
+			if err = chaosEngine.ExtraValidateOfTx(sender, tx, header); err != nil {
+				return nil, nil, 0, err
+			}
 			ok, err := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
 			if err != nil {
 				return nil, nil, 0, err

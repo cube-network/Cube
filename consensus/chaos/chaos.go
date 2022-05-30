@@ -609,27 +609,7 @@ func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header
 		ntxs := make([]*types.Transaction, 0)
 		txs = &ntxs
 	}
-	if len(*txs) > 0 {
-		// check invalid call to the Staking contract;
-		// Miner should not call the following funcs through transaction:
-		// "doubleSignPunish(bytes32,address)": "01036cae",
-		// "lazyPunish(address)": "e818ef86",
-		signer := types.MakeSigner(c.chainConfig, header.Number)
-		for _, tx := range *txs {
-			if tx.To() != nil && *(tx.To()) == (system.StakingContract) {
-				sender, _ := types.Sender(signer, tx)
-				if sender == header.Coinbase {
-					if len(tx.Data()) >= 4 {
-						b4 := tx.Data()[:4]
-						if bytes.Equal(b4, doubleSignPunishByte4) || bytes.Equal(b4, lazyPunishByte4) {
-							log.Error(errInvalidDifficulty.Error(), "number", header.Number, "blockHash", header.Hash().String(), "miner", header.Coinbase.String(), "txHash", tx.Hash().String(), "txData", common.Bytes2Hex(tx.Data()))
-							return errContainIllegalTx
-						}
-					}
-				}
-			}
-		}
-	}
+
 	// Preparing jobs before finalize
 	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, false); err != nil {
 		return err
@@ -1063,4 +1043,22 @@ func (c *Chaos) CalculateGasPool(header *types.Header) uint64 {
 		return header.GasLimit / 2
 	}
 	return header.GasLimit
+}
+
+func (c *Chaos) ExtraValidateOfTx(sender common.Address, tx *types.Transaction, header *types.Header) error {
+	// check invalid call to the Staking contract;
+	// Miner should not call the following funcs through transaction:
+	// "doubleSignPunish(bytes32,address)": "01036cae",
+	// "lazyPunish(address)": "e818ef86",
+	if sender == header.Coinbase &&
+		tx.To() != nil && *(tx.To()) == (system.StakingContract) {
+		if len(tx.Data()) >= 4 {
+			b4 := tx.Data()[:4]
+			if bytes.Equal(b4, doubleSignPunishByte4) || bytes.Equal(b4, lazyPunishByte4) {
+				log.Error(errInvalidDifficulty.Error(), "number", header.Number, "blockHash", header.Hash().String(), "miner", header.Coinbase.String(), "txHash", tx.Hash().String(), "txData", common.Bytes2Hex(tx.Data()))
+				return errContainIllegalTx
+			}
+		}
+	}
+	return nil
 }

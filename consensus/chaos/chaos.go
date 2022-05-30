@@ -27,13 +27,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/rawdb"
-
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/contracts/system"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -69,6 +69,11 @@ var (
 
 	diffInTurn = big.NewInt(2) // Block difficulty for in-turn signatures
 	diffNoTurn = big.NewInt(1) // Block difficulty for out-of-turn signatures
+
+	// "doubleSignPunish(bytes32,address)": "01036cae",
+	// "lazyPunish(address)": "e818ef86",
+	doubleSignPunishByte4 = []byte{0x01, 0x03, 0x6c, 0xae}
+	lazyPunishByte4       = []byte{0xe8, 0x18, 0xef, 0x86}
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -148,6 +153,7 @@ var (
 	errInclusion               = errors.New("inclusion relationship with last submission")
 	errIsNotAuthorizedAtHeight = errors.New("the current verifier is invalid at the specified height")
 	errSignFailed              = errors.New("sign attestation data failed")
+	errContainIllegalTx        = errors.New("contains illegal transactions")
 )
 
 // StateFn gets state by the state root hash.
@@ -599,6 +605,31 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 // rewards given.
 func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB,
 	txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error {
+	if nil == txs {
+		ntxs := make([]*types.Transaction, 0)
+		txs = &ntxs
+	}
+	if len(*txs) > 0 {
+		// check invalid call to the Staking contract;
+		// Miner should not call the following funcs through transaction:
+		// "doubleSignPunish(bytes32,address)": "01036cae",
+		// "lazyPunish(address)": "e818ef86",
+		signer := types.MakeSigner(c.chainConfig, header.Number)
+		for _, tx := range *txs {
+			if tx.To() != nil && *(tx.To()) == (system.StakingContract) {
+				sender, _ := types.Sender(signer, tx)
+				if sender == header.Coinbase {
+					if len(tx.Data()) >= 4 {
+						b4 := tx.Data()[:4]
+						if bytes.Equal(b4, doubleSignPunishByte4) || bytes.Equal(b4, lazyPunishByte4) {
+							log.Error(errInvalidDifficulty.Error(), "number", header.Number, "blockHash", header.Hash().String(), "miner", header.Coinbase.String(), "txHash", tx.Hash().String(), "txData", common.Bytes2Hex(tx.Data()))
+							return errContainIllegalTx
+						}
+					}
+				}
+			}
+		}
+	}
 	// Preparing jobs before finalize
 	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, false); err != nil {
 		return err

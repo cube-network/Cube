@@ -38,7 +38,7 @@ func validatorAddress(index int64) common.Address {
 	return common.BigToAddress(big.NewInt(6666 + index))
 }
 
-func genFields(waterdropFork *big.Int, block uint64) fields {
+func genFields(block uint64) fields {
 	result := fields{config: &params.ChainConfig{}, Number: block,
 		Validators: make(map[common.Address]struct{}), Recents: make(map[uint64]common.Address)}
 	continuousInturn := result.config.ChaosContinuousInturn(big.NewInt(int64(block)))
@@ -66,9 +66,9 @@ func TestSnapshot_SignedRecently(t *testing.T) {
 		args   args
 		want   bool
 	}{
-		{"case1", genFields(big.NewInt(100), 100), args{101, validatorAddress(11)}, false},
-		{"case2", genFields(big.NewInt(100), 100), args{101, validatorAddress(10)}, true},
-		{"case3", genFields(big.NewInt(100), 99), args{100, validatorAddress(10)}, false},
+		{"case1", genFields(100), args{101, validatorAddress(11)}, false},
+		{"case2", genFields(100), args{101, validatorAddress(10)}, true},
+		{"case3", genFields(99), args{100, validatorAddress(0)}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -98,12 +98,12 @@ func TestSnapshot_inturn(t *testing.T) {
 		args   args
 		want   bool
 	}{
-		{"case1", genFields(big.NewInt(100), 100), args{100, validatorAddress(4)}, true},
-		{"case2", genFields(big.NewInt(100), 100), args{101, validatorAddress(4)}, true},
-		{"case3", genFields(big.NewInt(100), 100), args{102, validatorAddress(4)}, true},
-		{"case4", genFields(big.NewInt(100), 100), args{103, validatorAddress(4)}, true},
-		{"case5", genFields(big.NewInt(100), 100), args{104, validatorAddress(4)}, false},
-		{"case5", genFields(big.NewInt(100), 100), args{104, validatorAddress(5)}, true},
+		{"case1", genFields(100), args{100, validatorAddress(4)}, true},
+		{"case2", genFields(100), args{101, validatorAddress(4)}, true},
+		{"case3", genFields(100), args{102, validatorAddress(4)}, true},
+		{"case4", genFields(100), args{103, validatorAddress(4)}, true},
+		{"case5", genFields(100), args{104, validatorAddress(4)}, false},
+		{"case5", genFields(100), args{104, validatorAddress(5)}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

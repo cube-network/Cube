@@ -119,7 +119,6 @@ func (c *Chaos) IsAuthorizedByHeader(chain consensus.ChainHeaderReader, val comm
 func (c *Chaos) CurrentNeedHandleHeight(headerNum uint64) (uint64, error) {
 	// Witness voting is postponed for two heights(config.AttestationDelay).
 	if headerNum <= c.config.AttestationDelay {
-		// WaterdropBlock must be greater than AttestationDelay
 		return 0, errors.New("execution height not reached")
 	}
 	return headerNum - c.config.AttestationDelay, nil

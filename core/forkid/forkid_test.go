@@ -40,12 +40,12 @@ func TestCreation(t *testing.T) {
 	}{
 		// Mainnet test cases
 		{
-			params.MainnetChainConfig,
-			params.MainnetGenesisHash,
+			params.TestnetChainConfig,
+			params.TestnetGenesisHash,
 			[]testcase{
-				{0, ID{Hash: checksumToBytes(0x577e0276), Next: 6618800}},       // Unsynced
-				{6618799, ID{Hash: checksumToBytes(0x577e0276), Next: 6618800}}, // RedCoastBlock
-				{8576999, ID{Hash: checksumToBytes(0x2d19357e), Next: 8577000}}, // BerlinBlock LondonBlock SophonBlock
+				{0, ID{Hash: checksumToBytes(0x02715256), Next: 1000000}}, // Unsynced
+				{6618799, ID{Hash: checksumToBytes(0x47507b98), Next: 0}}, // RedCoastBlock
+				{8576999, ID{Hash: checksumToBytes(0x47507b98), Next: 0}}, // BerlinBlock LondonBlock SophonBlock
 			},
 		},
 	}
@@ -66,11 +66,11 @@ func TestValidation(t *testing.T) {
 		id   ID
 		err  error
 	}{
-		{6618799, ID{Hash: checksumToBytes(0x577e0276), Next: 6618800}, nil},
-		{8576999, ID{Hash: checksumToBytes(0x2d19357e), Next: 8577000}, nil},
+		{6618799, ID{Hash: checksumToBytes(0x47507b98), Next: 0}, nil},
+		{8576999, ID{Hash: checksumToBytes(0x47507b98), Next: 0}, nil},
 	}
 	for i, tt := range tests {
-		filter := newFilter(params.MainnetChainConfig, params.MainnetGenesisHash, func() uint64 { return tt.head })
+		filter := newFilter(params.TestnetChainConfig, params.TestnetGenesisHash, func() uint64 { return tt.head })
 		if err := filter(tt.id); err != tt.err {
 			t.Errorf("test %d: validation error mismatch: have %v, want %v", i, err, tt.err)
 		}

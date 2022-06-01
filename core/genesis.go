@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -59,7 +60,7 @@ type Genesis struct {
 	Mixhash    common.Hash         `json:"mixHash"`
 	Coinbase   common.Address      `json:"coinbase"`
 	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
-	Validators []ValidatorInfo     `json:"validators" gencodec:"required"`
+	Validators []ValidatorInfo     `json:"validators"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -374,7 +375,7 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 	}
 
 	// Handle the Chaos related
-	if g.Config.Chaos != nil {
+	if g.Config != nil && g.Config.Chaos != nil {
 		// init system contract
 		gInit := &genesisInit{statedb, head, g}
 		for name, initSystemContract := range map[string]func() error{
@@ -460,7 +461,7 @@ func DefaultGenesisBlock() *Genesis {
 		Difficulty: big.NewInt(1),
 		Alloc:      decodePrealloc(mainnetAllocData),
 		Validators: []ValidatorInfo{
-			makeValidator("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0", "0x352BbF453fFdcba6b126a73eD684260D7968dDc8", "20", "350000000000000000000", true),
+			makeValidator("0x8Cc5A1a0802DB41DB826C2FcB72423744338DcB0", "0x352BbF453fFdcba6b126a73eD684260D7968dDc8", "20", "50000", true),
 		},
 	}
 }
@@ -501,22 +502,25 @@ func DefaultRopstenGenesisBlock() *Genesis {
 // BasicChaosGenesisBlock returns a genesis containing basic allocation for Chais engine,
 func BasicChaosGenesisBlock(config *params.ChainConfig, initialValidators []common.Address, faucet common.Address) *Genesis {
 	extraVanity := 32
-	extraData := make([]byte, extraVanity+common.AddressLength*len(initialValidators)+65)
-	for i, validator := range initialValidators {
-		copy(extraData[extraVanity+i*common.AddressLength:], validator[:])
-	}
+	extraData := make([]byte, extraVanity+65)
 	alloc := decodePrealloc(basicAllocForChaos)
 	if (faucet != common.Address{}) {
 		// 100M
 		b, _ := new(big.Int).SetString("100000000000000000000000000", 10)
 		alloc[faucet] = GenesisAccount{Balance: b}
 	}
+	validators := make([]ValidatorInfo, 0, len(initialValidators))
+	for _, val := range initialValidators {
+		validators = append(validators, ValidatorInfo{val, faucet, big.NewInt(20), big.NewInt(50000), true})
+	}
+	alloc[system.StakingContract].Init.Admin = faucet
 	return &Genesis{
 		Config:     config,
 		ExtraData:  extraData,
 		GasLimit:   0x280de80,
 		Difficulty: big.NewInt(2),
 		Alloc:      alloc,
+		Validators: validators,
 	}
 }
 

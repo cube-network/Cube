@@ -39,8 +39,8 @@ const (
 )
 
 var (
-	// Rewards plan of version 0
-	RewardsByMonth0 = []*big.Int{
+	// Rewards plan of version 1
+	RewardsByMonth1 = []*big.Int{
 		fromGwei(460590277777778), fromGwei(516685474537037), fromGwei(573248131269290), fromGwei(630282143474312), fromGwei(687791439114376), fromGwei(745779978884773),
 		fromGwei(838973978708813), fromGwei(932944595198053), fromGwei(1027698300158040), fromGwei(1123241619326020), fromGwei(1219581132820400), fromGwei(1316723475593910),
 		fromGwei(1449397560112750), fromGwei(1583177262002570), fromGwei(1718071794741480), fromGwei(1854090448586550), fromGwei(1991242591213660), fromGwei(2129537668362660),
@@ -51,7 +51,7 @@ var (
 		fromGwei(6276633654864210), fromGwei(6415918101988080), fromGwei(6556363252837980), fromGwei(6697978779944960), fromGwei(6840774436444510), fromGwei(6984760056748220),
 	}
 
-	// Default rewards plan, which is version 1
+	// Default rewards plan, which is version 2
 	RewardsByMonth = []*big.Int{
 		fromGwei(384027777800000), fromGwei(446255787000000), fromGwei(509002363000000), fromGwei(572271827200000), fromGwei(636068536800000), fromGwei(700396885800000),
 		fromGwei(799983526500000), fromGwei(900400055900000), fromGwei(1001653390000000), fromGwei(1095417168000000), fromGwei(1189962311000000), fromGwei(1285295330000000),
@@ -64,8 +64,8 @@ var (
 	}
 
 	rewardsPlans = map[uint64][]*big.Int{
-		0: RewardsByMonth0,
-		1: RewardsByMonth,
+		1: RewardsByMonth1,
+		2: RewardsByMonth,
 	}
 )
 
@@ -130,7 +130,8 @@ func (env *genesisInit) initStaking() error {
 		totalValidatorStake = new(big.Int).Add(totalValidatorStake, new(big.Int).Mul(validator.Stake, big.NewInt(1000000000000000000)))
 	}
 	rewardsByMonth := RewardsByMonth
-	if contract.Init.RewardsVer != nil {
+	// We use default plan when contract.Init.RewardsVer is nil or 0
+	if contract.Init.RewardsVer != nil && contract.Init.RewardsVer.Uint64() != 0 {
 		if rewardsByMonth, ok = rewardsPlans[contract.Init.RewardsVer.Uint64()]; !ok {
 			return errors.New(fmt.Sprintf("Unknown RewardsVer: %v", contract.Init.RewardsVer.Uint64()))
 		}

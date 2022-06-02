@@ -40,7 +40,6 @@ const (
 // The certificates that meet the inspection will be stored according to the height of the current chain plot.
 // If they are higher than the local height, they will be stored in the future cache.
 func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
-	//log.Debug("Received a untreated attestation")
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
 	if err := a.SanityCheck(); err != nil {
 		return err
@@ -53,11 +52,9 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 	if !bc.VerifyValidLimit(targetNumber, currentBlockNumber) {
 		return nil
 	}
+
 	if targetNumber <= currentBlockNumber {
-		isExist, err := bc.IsExistsRecentCache(a)
-		if err != nil {
-			return err
-		}
+		isExist := bc.IsExistsRecentCache(a)
 		if isExist {
 			return nil
 		}
@@ -197,11 +194,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 		if a == nil {
 			return
 		}
-		isExist, err := bc.IsExistsRecentCache(a)
-		if err != nil {
-			log.Error(err.Error())
-			return
-		}
+		isExist := bc.IsExistsRecentCache(a)
 		if isExist {
 			return
 		}
@@ -252,6 +245,10 @@ func (bc *BlockChain) StoreLastAttested(num *big.Int) {
 func (bc *BlockChain) AddOneAttestationToRecentCache(a *types.Attestation, signer common.Address, isTest bool) error {
 	bc.lockAddOneAttestationToRecentCache.Lock()
 	defer bc.lockAddOneAttestationToRecentCache.Unlock()
+	// check again whether it's already exists or not
+	if bc.IsExistsRecentCache(a) {
+		return nil
+	}
 	// The CasperFFG rule penalty cannot be added because regular block rollback is easy to occur
 	if !isTest {
 		branch, err := bc.IsFiliation(a.SourceRangeEdge, a.TargetRangeEdge)
@@ -329,8 +326,8 @@ func (bc *BlockChain) AddOneValidAttestationToRecentCache(a *types.Attestation, 
 	log.Debug("🙋 Received a valid attestation", "number", treNumberUint64, "totalCount", totalCount,
 		"threshold", threshold, "GoId", bc.goID())
 	bc.BroadcastNewAttestationToOtherNodes(a)
-	bc.AddOneValidAttestationToHistoryCache(a)
-	return bc.AddOneValidAttestationForCasperFFG(signer, a)
+	bc.addOneValidAttestationToHistoryCache(a)
+	return bc.addOneValidAttestationForCasperFFG(signer, a)
 }
 
 // AddOneAttestationToFutureCache Provide storage for the blocks received by handleattesting that are higher than the local height. When the local
@@ -339,6 +336,9 @@ func (bc *BlockChain) AddOneAttestationToFutureCache(a *types.Attestation) error
 	bc.lockFutureAttessCache.Lock()
 	defer bc.lockFutureAttessCache.Unlock()
 
+	if bc.IsExistsFutureCache(a) {
+		return nil
+	}
 	as, found := bc.FutureAttessCache.Get(a.TargetRangeEdge.Number.Uint64())
 	var cAs *types.FutureAttestations
 	if found {
@@ -390,9 +390,9 @@ func (bc *BlockChain) AddBlockBasJustified(num *big.Int, hash common.Hash) (uint
 	return currentBlockStatus, bc.UpdateBlockStatus(num, hash, currentBlockStatus)
 }
 
-// AddOneValidAttestationForCasperFFG Store corresponding data for casperffg rule judgment.
+// addOneValidAttestationForCasperFFG Store corresponding data for casperffg rule judgment.
 // The data here is stored in the cache. For punishment, only try your best
-func (bc *BlockChain) AddOneValidAttestationForCasperFFG(signer common.Address, a *types.Attestation) error {
+func (bc *BlockChain) addOneValidAttestationForCasperFFG(signer common.Address, a *types.Attestation) error {
 	bc.lockCasperFFGHistoryCache.Lock()
 	defer bc.lockCasperFFGHistoryCache.Unlock()
 
@@ -429,8 +429,8 @@ func (bc *BlockChain) MoveAttestsCacheFutureToRecent(num *big.Int) error {
 	if found {
 		cAs := as.(*types.FutureAttestations)
 		for _, a := range cAs.Attestations {
-			isExist, err := bc.IsExistsRecentCache(a)
-			if err != nil || isExist {
+			isExist := bc.IsExistsRecentCache(a)
+			if isExist {
 				continue
 			}
 			signer, err := a.RecoverSigner()
@@ -446,9 +446,6 @@ func (bc *BlockChain) MoveAttestsCacheFutureToRecent(num *big.Int) error {
 
 // VerifyCasperFFGRecentCache Verify whether there are multiple signatures or include
 func (bc *BlockChain) VerifyCasperFFGRecentCache(a *types.Attestation, signer common.Address) error {
-	bc.lockCasperFFGHistoryCache.Lock()
-	defer bc.lockCasperFFGHistoryCache.Unlock()
-
 	blob, found := bc.CasperFFGHistoryCache.Get(signer)
 	if found {
 		cfhList := blob.(types.CasperFFGHistoryList)
@@ -508,17 +505,17 @@ func (bc *BlockChain) VerifyValidLimit(num uint64, currentNum uint64) bool {
 	return bc.VerifyLowerLimit(num, currentNum) && bc.VerifyUpperLimit(num, currentNum)
 }
 
-func (bc *BlockChain) IsExistsRecentCache(a *types.Attestation) (bool, error) {
+func (bc *BlockChain) IsExistsRecentCache(a *types.Attestation) bool {
 	bc.lockRecentAttessCache.Lock()
 	defer bc.lockRecentAttessCache.Unlock()
 
 	if bna, found := bc.RecentAttessCache.Get(a.TargetRangeEdge.Number.Uint64()); found {
 		oldBna := bna.(*types.BlockNumAttestations)
 		if oldAddrMap, found := oldBna.AttestsMap[a.SignHash()]; found {
-			return oldAddrMap[a.Hash()], nil
+			return oldAddrMap[a.Hash()]
 		}
 	}
-	return false, nil
+	return false
 }
 
 func (bc *BlockChain) IsExistsFutureCache(a *types.Attestation) bool {
@@ -632,9 +629,9 @@ func (bc *BlockChain) VerifySignerInEpochValidBP(number uint64, signer common.Ad
 	return false
 }
 
-// AddOneValidAttestationToHistoryCache Adding valid certificates to the historical data will be obtained
+// addOneValidAttestationToHistoryCache Adding valid certificates to the historical data will be obtained
 // by other nodes and provide corresponding original data for casperffg
-func (bc *BlockChain) AddOneValidAttestationToHistoryCache(a *types.Attestation) bool {
+func (bc *BlockChain) addOneValidAttestationToHistoryCache(a *types.Attestation) bool {
 	bc.lockHistoryAttessCache.Lock()
 	defer bc.lockHistoryAttessCache.Unlock()
 

@@ -11,9 +11,6 @@ import (
 // Maximize performance, space for time
 
 func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status uint8) error {
-	bc.lockBlockStatusCache.Lock()
-	defer bc.lockBlockStatusCache.Unlock()
-
 	s, h := rawdb.ReadBlockStatusByNum(bc.db, num)
 	if s == status && h == hash {
 		return nil

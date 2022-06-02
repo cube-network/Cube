@@ -431,9 +431,6 @@ func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) uint8 {
 }
 
 func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
-	bc.lockBlockStatusCache.Lock()
-	defer bc.lockBlockStatusCache.Unlock()
-
 	// Short circuit if the status's already in the cache, retrieve otherwise
 	if blob, ok := bc.BlockStatusCache.Get(number); ok {
 		data := blob.(*types.BlockStatus)

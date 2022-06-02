@@ -249,7 +249,7 @@ func TestGenesisUnmarshal(t *testing.T) {
 }
 
 func TestDecodePrealloc(t *testing.T) {
-	alloc := decodePrealloc(mainnetAllocData)
+	alloc := decodePrealloc(testnetAllocData)
 	for addr, account := range alloc {
 		t.Logf("addr : %v", addr)
 		account.Code = nil

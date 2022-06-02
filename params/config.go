@@ -27,7 +27,7 @@ import (
 
 // Genesis hashes to enforce below configs on.
 var (
-	MainnetGenesisHash = common.HexToHash("0xa136f689858ee2bc81cbfa307dded93a0953f992c6a003b45106d4b87dd4b5f0")
+	MainnetGenesisHash = common.HexToHash("0x672c68fd24c28578e408c254bfab411f08b3370dbfae74a55a91628be02e7e5e")
 	TestnetGenesisHash = common.HexToHash("0x2eeaa9dab31682321c7d8afd3ec0ddef772f9361e7f21126e3d17f2756e49482")
 )
 
@@ -56,7 +56,6 @@ var (
 		MuirGlacierBlock:    nil,
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
-		ArrowGlacierBlock:   nil,
 		Hardfork1Block:      big.NewInt(0),
 		Chaos: &ChaosConfig{
 			Period:           3,

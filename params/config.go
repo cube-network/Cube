@@ -56,7 +56,7 @@ var (
 		MuirGlacierBlock:    nil,
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
-		Hardfork1Block:      big.NewInt(0),
+		HeliocentrismBlock:  big.NewInt(0),
 		Chaos: &ChaosConfig{
 			Period:           3,
 			Epoch:            200,
@@ -80,7 +80,7 @@ var (
 		MuirGlacierBlock:    nil,
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
-		Hardfork1Block:      big.NewInt(1000000), // TODO
+		HeliocentrismBlock:  big.NewInt(10000000), // TODO
 		Chaos: &ChaosConfig{
 			Period:           3,
 			Epoch:            200,
@@ -207,7 +207,7 @@ type ChainConfig struct {
 	BerlinBlock         *big.Int `json:"berlinBlock,omitempty"`         // Berlin switch block (nil = no fork, 0 = already on berlin)
 	LondonBlock         *big.Int `json:"londonBlock,omitempty"`         // London switch block (nil = no fork, 0 = already on london)
 	ArrowGlacierBlock   *big.Int `json:"arrowGlacierBlock,omitempty"`   // Eip-4345 (bomb delay) switch block (nil = no fork, 0 = already activated)
-	Hardfork1Block      *big.Int `json:"hardfork1Block,omitempty"`      // Used to support DAOCharityFoundation contracts (nil = no fork, 0 = already activated)
+	HeliocentrismBlock  *big.Int `json:"heliocentrismBlock,omitempty"`  // Used to support builtin contracts update for testnet (nil or 0 = should be already activated)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
@@ -347,8 +347,8 @@ func (c *ChainConfig) IsLondon(num *big.Int) bool {
 	return isForked(c.LondonBlock, num)
 }
 
-func (c *ChainConfig) IsHardfork1(num *big.Int) bool {
-	return isForked(c.Hardfork1Block, num)
+func (c *ChainConfig) IsHeliocentrism(num *big.Int) bool {
+	return isForked(c.HeliocentrismBlock, num)
 }
 
 // IsArrowGlacier returns whether num is either equal to the Arrow Glacier (EIP-4345) fork block or greater.
@@ -480,6 +480,9 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 	}
 	if isForkIncompatible(c.ArrowGlacierBlock, newcfg.ArrowGlacierBlock, head) {
 		return newCompatError("Arrow Glacier fork block", c.ArrowGlacierBlock, newcfg.ArrowGlacierBlock)
+	}
+	if isForkIncompatible(c.HeliocentrismBlock, newcfg.HeliocentrismBlock, head) {
+		return newCompatError("Heliocentrism fork block", c.HeliocentrismBlock, newcfg.HeliocentrismBlock)
 	}
 	return nil
 }

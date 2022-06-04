@@ -39,6 +39,10 @@ func TestDefaultGenesisBlock(t *testing.T) {
 	if block.Hash() != params.MainnetGenesisHash {
 		t.Errorf("wrong mainnet genesis hash, got %v, want %v", block.Hash(), params.MainnetGenesisHash)
 	}
+	block = DefaultTestnetGenesisBlock().ToBlock(nil)
+	if block.Hash() != params.TestnetGenesisHash {
+		t.Errorf("wrong testnet genesis hash, got %v, want %v", block.Hash(), params.TestnetGenesisHash)
+	}
 }
 
 func TestSetupGenesis(t *testing.T) {
@@ -249,7 +253,7 @@ func TestGenesisUnmarshal(t *testing.T) {
 }
 
 func TestDecodePrealloc(t *testing.T) {
-	alloc := decodePrealloc(mainnetAllocData)
+	alloc := decodePrealloc(testnetAllocData)
 	for addr, account := range alloc {
 		t.Logf("addr : %v", addr)
 		account.Code = nil

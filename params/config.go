@@ -85,6 +85,7 @@ var (
 			Period:           3,
 			Epoch:            200,
 			AttestationDelay: 2,
+			Rule:             1,
 		},
 	}
 
@@ -246,6 +247,8 @@ type ChaosConfig struct {
 	// AttestationDelay is the delay number for a validator to provide an attestation.
 	// That is: only attest to a block which height is ≤ `currentHead - AttestationDelay`
 	AttestationDelay uint64 `json:"attestationDelay"`
+
+	Rule uint64 `json:"rule"` // Version of Chaos, which differ in behavious, 0 is the lastest default one
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -485,6 +488,15 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 		return newCompatError("Heliocentrism fork block", c.HeliocentrismBlock, newcfg.HeliocentrismBlock)
 	}
 	return nil
+}
+
+// IsChaosCompatible checks whether consensus config of Chaos is compatible
+func (c *ChainConfig) IsChaosCompatible(newcfg *ChainConfig) bool {
+	if c.Chaos != nil && newcfg.Chaos != nil {
+		return c.Chaos.Period == newcfg.Chaos.Period && c.Chaos.Epoch == newcfg.Chaos.Epoch &&
+			c.Chaos.AttestationDelay == newcfg.Chaos.AttestationDelay
+	}
+	return c.Chaos == nil && newcfg.Chaos == nil
 }
 
 // isForkIncompatible returns true if a fork scheduled at s1 cannot be rescheduled to

@@ -101,7 +101,6 @@ type Init struct {
 	FirstLockPeriod *big.Int        `json:"firstLockPeriod,omitempty"`
 	ReleasePeriod   *big.Int        `json:"releasePeriod,omitempty"`
 	ReleaseCnt      *big.Int        `json:"releaseCnt,omitempty"`
-	RewardsVer      *big.Int        `json:"rewardsVer,omitempty"`
 	RuEpoch         *big.Int        `json:"ruEpoch,omitempty"`
 	PeriodTime      *big.Int        `json:"periodTime,omitempty"`
 	LockedAccounts  []LockedAccount `json:"lockedAccounts,omitempty"`
@@ -170,7 +169,6 @@ type initMarshaling struct {
 	FirstLockPeriod *math.HexOrDecimal256
 	ReleasePeriod   *math.HexOrDecimal256
 	ReleaseCnt      *math.HexOrDecimal256
-	RewardsVer      *math.HexOrDecimal256
 	RuEpoch         *math.HexOrDecimal256
 	PeriodTime      *math.HexOrDecimal256
 }
@@ -306,8 +304,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, genesis *Genesis, override
 		return newcfg, stored, fmt.Errorf("missing block number for head header hash")
 	}
 	// Check whether consensus config of Chaos is changed
-	if (storedcfg.Chaos != nil || newcfg.Chaos != nil) && (storedcfg.Chaos == nil ||
-		newcfg.Chaos == nil || *storedcfg.Chaos != *newcfg.Chaos) {
+	if !storedcfg.IsChaosCompatible(newcfg) {
 		return nil, common.Hash{}, errors.New("ChaosConfig is not compatiable with stored")
 	}
 	compatErr := storedcfg.CheckCompatible(newcfg, *height)
@@ -591,7 +588,6 @@ func decodePrealloc(data string) GenesisAlloc {
 		FirstLockPeriod *big.Int
 		ReleasePeriod   *big.Int
 		ReleaseCnt      *big.Int
-		RewardsVer      *big.Int
 		RuEpoch         *big.Int
 		PeriodTime      *big.Int
 		LockedAccounts  []locked
@@ -616,7 +612,6 @@ func decodePrealloc(data string) GenesisAlloc {
 				FirstLockPeriod: account.Init.FirstLockPeriod,
 				ReleasePeriod:   account.Init.ReleasePeriod,
 				ReleaseCnt:      account.Init.ReleaseCnt,
-				RewardsVer:      account.Init.RewardsVer,
 				RuEpoch:         account.Init.RuEpoch,
 				PeriodTime:      account.Init.PeriodTime,
 			}

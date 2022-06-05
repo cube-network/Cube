@@ -136,7 +136,8 @@ func UpdateRewardsInfo(ctx *CallContext) error {
 	month := new(big.Int).Div(ctx.Header.Number, blocksPerMonth).Int64()
 	// After 4 years, rewards is 0
 	if month < 48 {
-		rewardsPerBlock = new(big.Int).Div(core.RewardsByMonth[month], blocksPerMonth)
+		rewardsByMonth := core.RewardsByMonth(ctx.ChainConfig.Chaos.Rule)
+		rewardsPerBlock = new(big.Int).Div(rewardsByMonth[month], blocksPerMonth)
 	}
 
 	// Execute contract

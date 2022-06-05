@@ -43,9 +43,8 @@ func TestCreation(t *testing.T) {
 			params.TestnetChainConfig,
 			params.TestnetGenesisHash,
 			[]testcase{
-				{0, ID{Hash: checksumToBytes(0x02715256), Next: 1000000}}, // Unsynced
-				{6618799, ID{Hash: checksumToBytes(0x47507b98), Next: 0}}, // RedCoastBlock
-				{8576999, ID{Hash: checksumToBytes(0x47507b98), Next: 0}}, // BerlinBlock LondonBlock SophonBlock
+				{0, ID{Hash: checksumToBytes(0x02715256), Next: 10000000}},       // Unsynced
+				{8576999, ID{Hash: checksumToBytes(0x02715256), Next: 10000000}}, // BerlinBlock LondonBlock SophonBlock
 			},
 		},
 	}
@@ -66,8 +65,8 @@ func TestValidation(t *testing.T) {
 		id   ID
 		err  error
 	}{
-		{6618799, ID{Hash: checksumToBytes(0x47507b98), Next: 0}, nil},
-		{8576999, ID{Hash: checksumToBytes(0x47507b98), Next: 0}, nil},
+		{6618799, ID{Hash: checksumToBytes(0xc13c1746), Next: 0}, nil},
+		{8576999, ID{Hash: checksumToBytes(0xc13c1746), Next: 0}, nil},
 	}
 	for i, tt := range tests {
 		filter := newFilter(params.TestnetChainConfig, params.TestnetGenesisHash, func() uint64 { return tt.head })

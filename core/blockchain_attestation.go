@@ -336,9 +336,6 @@ func (bc *BlockChain) AddOneAttestationToFutureCache(a *types.Attestation) error
 	bc.lockFutureAttessCache.Lock()
 	defer bc.lockFutureAttessCache.Unlock()
 
-	if bc.IsExistsFutureCache(a) {
-		return nil
-	}
 	as, found := bc.FutureAttessCache.Get(a.TargetRangeEdge.Number.Uint64())
 	var cAs *types.FutureAttestations
 	if found {

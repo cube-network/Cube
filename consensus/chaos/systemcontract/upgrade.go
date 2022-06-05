@@ -13,7 +13,7 @@ const (
 )
 
 var sysContracts map[SysContractVersion][]IUpgradeAction = map[SysContractVersion][]IUpgradeAction{
-	SysContractV1: HardFork1(),
+	SysContractV1: HeliocentrismHardFork(),
 }
 
 type SysContractVersion int

@@ -265,7 +265,7 @@ func TestDoubleSignPunishGivenEVM(t *testing.T) {
 	blockContext := core.NewEVMBlockContext(ctx.Header, ctx.ChainContext, nil)
 	evm := vm.NewEVM(blockContext, vm.TxContext{}, ctx.Statedb, ctx.ChainConfig, vm.Config{})
 
-	assert.NoError(t, DoubleSignPunishGivenEVM(evm, ctx.Header.Coinbase, punishHash, GenesisValidators[0]))
+	assert.NoError(t, DoubleSignPunishWithGivenEVM(evm, ctx.Header.Coinbase, punishHash, GenesisValidators[0]))
 
 	punished, err = IsDoubleSignPunished(ctx, punishHash)
 	assert.NoError(t, err)
@@ -381,7 +381,7 @@ func (c *MockConsensusEngine) Prepare(chain consensus.ChainHeaderReader, header 
 	return nil
 }
 
-func (c *MockConsensusEngine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error {
+func (c *MockConsensusEngine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction) error {
 	return nil
 }
 

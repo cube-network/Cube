@@ -25,16 +25,17 @@ type CallContext struct {
 
 // CallContract executes transaction sent to system contracts.
 func CallContract(ctx *CallContext, to *common.Address, data []byte) (ret []byte, err error) {
-	return CallContractWithValue(ctx, to, data, big.NewInt(0))
+	return CallContractWithValue(ctx, ctx.Header.Coinbase, to, data, big.NewInt(0))
 }
 
 // CallContract executes transaction sent to system contracts.
-func CallContractWithValue(ctx *CallContext, to *common.Address, data []byte, value *big.Int) (ret []byte, err error) {
-	msg := types.NewMessage(ctx.Header.Coinbase, to, ctx.Statedb.GetNonce(ctx.Header.Coinbase), value, math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
-	blockContext := core.NewEVMBlockContext(ctx.Header, ctx.ChainContext, nil)
-	vmenv := vm.NewEVM(blockContext, core.NewEVMTxContext(msg), ctx.Statedb, ctx.ChainConfig, vm.Config{})
+func CallContractWithValue(ctx *CallContext, from common.Address, to *common.Address, data []byte, value *big.Int) (ret []byte, err error) {
+	evm := vm.NewEVM(core.NewEVMBlockContext(ctx.Header, ctx.ChainContext, nil), vm.TxContext{
+		Origin:   from,
+		GasPrice: big.NewInt(0),
+	}, ctx.Statedb, ctx.ChainConfig, vm.Config{})
 
-	ret, _, err = vmenv.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, math.MaxUint64, value)
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	ctx.Statedb.Finalise(true)
@@ -43,13 +44,12 @@ func CallContractWithValue(ctx *CallContext, to *common.Address, data []byte, va
 }
 
 // VMCallContract executes transaction sent to system contracts with given EVM.
-func VMCallContract(evm *vm.EVM, from common.Address, to *common.Address, data []byte) (ret []byte, err error) {
+func VMCallContract(evm *vm.EVM, from common.Address, to *common.Address, data []byte, gas uint64) (ret []byte, err error) {
 	state, ok := evm.StateDB.(*state.StateDB)
 	if !ok {
 		log.Crit("Unknown statedb type")
 	}
-	msg := types.NewMessage(from, to, state.GetNonce(from), big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
-	ret, _, err = evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	ret, _, err = evm.Call(vm.AccountRef(from), *to, data, gas, big.NewInt(0))
 	// Finalise the statedb so any changes can take effect,
 	// and especially if the `from` account is empty, it can be finally deleted.
 	state.Finalise(true)

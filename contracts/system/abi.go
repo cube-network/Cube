@@ -1,13 +1,27 @@
+// Copyright 2021 The Cube Authors
+// This file is part of the Cube library.
+//
+// The Cube library is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Lesser General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// The Cube library is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+// GNU Lesser General Public License for more details.
+//
+// You should have received a copy of the GNU Lesser General Public License
+// along with the Cube library. If not, see <http://www.gnu.org/licenses/>.
+
 package system
 
 import (
-	"math/big"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 const (
@@ -311,6 +325,182 @@ const (
 			"type": "function"
 		}
 	]`
+	// AddressListABI contains methods to interactive with AddressList contract.
+	AddressListABI = `[
+		{
+			"inputs": [],
+			"name": "getBlacksFrom",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "getBlacksTo",
+			"outputs": [
+				{
+					"internalType": "address[]",
+					"name": "",
+					"type": "address[]"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint32",
+					"name": "i",
+					"type": "uint32"
+				}
+			],
+			"name": "getRuleByIndex",
+			"outputs": [
+				{
+					"internalType": "bytes32",
+					"name": "",
+					"type": "bytes32"
+				},
+				{
+					"internalType": "uint128",
+					"name": "",
+					"type": "uint128"
+				},
+				{
+					"internalType": "enum AddressList.CheckType",
+					"name": "",
+					"type": "uint8"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [],
+			"name": "rulesLen",
+			"outputs": [
+				{
+					"internalType": "uint32",
+					"name": "",
+					"type": "uint32"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		}
+	]`
+
+	// OnChainDaoABI contains methods to interactive with OnChainDao contract.
+	OnChainDaoABI = `[
+		{
+			"inputs": [],
+			"name": "getPassedProposalCount",
+			"outputs": [
+				{
+					"internalType": "uint32",
+					"name": "",
+					"type": "uint32"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint32",
+					"name": "index",
+					"type": "uint32"
+				}
+			],
+			"name": "getPassedProposalByIndex",
+			"outputs": [
+				{
+					"internalType": "uint256",
+					"name": "id",
+					"type": "uint256"
+				},
+				{
+					"internalType": "uint256",
+					"name": "action",
+					"type": "uint256"
+				},
+				{
+					"internalType": "address",
+					"name": "from",
+					"type": "address"
+				},
+				{
+					"internalType": "address",
+					"name": "to",
+					"type": "address"
+				},
+				{
+					"internalType": "uint256",
+					"name": "value",
+					"type": "uint256"
+				},
+				{
+					"internalType": "bytes",
+					"name": "data",
+					"type": "bytes"
+				}
+			],
+			"stateMutability": "view",
+			"type": "function"
+		},
+		{
+			"inputs": [
+				{
+					"internalType": "uint256",
+					"name": "id",
+					"type": "uint256"
+				}
+			],
+			"name": "finishProposalById",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		}
+	]`
+)
+
+// DevMappingPosition is the position of the state variable `devs`.
+// Since the state variables are as follow:
+//    bool public initialized;
+//    bool public devVerifyEnabled;
+//    address public admin;
+//    address public pendingAdmin;
+//
+//    mapping(address => bool) private devs;
+//
+//    //NOTE: make sure this list is not too large!
+//    address[] blacksFrom;
+//    address[] blacksTo;
+//    mapping(address => uint256) blacksFromMap;      // address => index+1
+//    mapping(address => uint256) blacksToMap;        // address => index+1
+//
+//    uint256 public blackLastUpdatedNumber; // last block number when the black list is updated
+//    uint256 public rulesLastUpdatedNumber;  // last block number when the rules are updated
+//    // event check rules
+//    EventCheckRule[] rules;
+//    mapping(bytes32 => mapping(uint128 => uint256)) rulesMap;   // eventSig => checkIdx => indexInArray+1
+//
+// according to [Layout of State Variables in Storage](https://docs.soliditylang.org/en/v0.8.4/internals/layout_in_storage.html),
+// and after optimizer enabled, the `initialized`, `enabled` and `admin` will be packed, and stores at slot 0,
+// `pendingAdmin` stores at slot 1, so the position for `devs` is 2.
+const DevMappingPosition = 2
+
+var (
+	BlackLastUpdatedNumberPosition = common.BytesToHash([]byte{0x07})
+	RulesLastUpdatedNumberPosition = common.BytesToHash([]byte{0x08})
 )
 
 var (
@@ -318,6 +508,8 @@ var (
 	CommunityPoolContract = common.HexToAddress("0x000000000000000000000000000000000000F001")
 	BonusPoolContract     = common.HexToAddress("0x000000000000000000000000000000000000F002")
 	GenesisLockContract   = common.HexToAddress("0x000000000000000000000000000000000000F003")
+	AddressListContract   = common.HexToAddress("0x000000000000000000000000000000000000F004")
+	OnChainDaoContract    = common.HexToAddress("0x000000000000000000000000000000000000F005")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -326,10 +518,14 @@ var (
 func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
 
-	rawAbiMap := map[common.Address]string{StakingContract: StakingABI, CommunityPoolContract: CommunityPoolABI,
-		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI}
-
-	for addr, rawAbi := range rawAbiMap {
+	for addr, rawAbi := range map[common.Address]string{
+		StakingContract:       StakingABI,
+		CommunityPoolContract: CommunityPoolABI,
+		BonusPoolContract:     BonusPoolABI,
+		GenesisLockContract:   GenesisLockABI,
+		AddressListContract:   AddressListABI,
+		OnChainDaoContract:    OnChainDaoABI,
+	} {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {
 			panic(err)
 		} else {
@@ -350,10 +546,4 @@ func ABI(contract common.Address) abi.ABI {
 // ABIPack generates the data field for given contract calling
 func ABIPack(contract common.Address, method string, args ...interface{}) ([]byte, error) {
 	return ABI(contract).Pack(method, args...)
-}
-
-// StakingABIPack return abi for staking contract calling,
-// blockNum, config are used for hard fork contract uprading
-func GetStakingABI(blockNum *big.Int, config *params.ChainConfig) abi.ABI {
-	return ABI(StakingContract)
 }

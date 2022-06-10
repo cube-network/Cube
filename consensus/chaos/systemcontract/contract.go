@@ -3,10 +3,13 @@ package systemcontract
 import (
 	"bytes"
 	"errors"
+	"math"
 	"math/big"
 	"sort"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -26,32 +29,24 @@ func (s AddrAscend) Len() int           { return len(s) }
 func (s AddrAscend) Less(i, j int) bool { return bytes.Compare(s[i][:], s[j][:]) < 0 }
 func (s AddrAscend) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+type Proposal struct {
+	Id     *big.Int
+	Action *big.Int
+	From   common.Address
+	To     common.Address
+	Value  *big.Int
+	Data   []byte
+}
+
 // GetTopValidators return the result of calling method `getTopValidators` in Staking contract
 func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
-	method := "getTopValidators"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method, TopValidatorNum)
+	const method = "getTopValidators"
+	result, err := contractRead(ctx, system.StakingContract, method)
 	if err != nil {
-		log.Error("Can't pack data for getTopValidators", "error", err)
+		log.Error("GetTopValidators contractRead failed", "err", err)
 		return []common.Address{}, err
 	}
-
-	result, err := CallContract(ctx, &system.StakingContract, data)
-	if err != nil {
-		log.Error("Failed to perform GetTopValidators", "err", err)
-		return []common.Address{}, err
-	}
-
-	// unpack data
-	ret, err := abi.Unpack(method, result)
-	if err != nil {
-		return []common.Address{}, err
-	}
-	if len(ret) != 1 {
-		return []common.Address{}, errors.New("GetTopValidators: invalid result length")
-	}
-	validators, ok := ret[0].([]common.Address)
+	validators, ok := result.([]common.Address)
 	if !ok {
 		return []common.Address{}, errors.New("GetTopValidators: invalid validator format")
 	}
@@ -61,65 +56,33 @@ func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
 
 // UpdateActiveValidatorSet return the result of calling method `updateActiveValidatorSet` in Staking contract
 func UpdateActiveValidatorSet(ctx *CallContext, newValidators []common.Address) error {
-	method := "updateActiveValidatorSet"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method, newValidators)
+	const method = "updateActiveValidatorSet"
+	err := contractWrite(ctx, system.StakingContract, method, newValidators)
 	if err != nil {
-		log.Error("Can't pack data for updateActiveValidatorSet", "error", err)
-		return err
+		log.Error("UpdateActiveValidatorSet failed", "newValidators", newValidators, "err", err)
 	}
-
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform UpdateActiveValidatorSet", "newValidators", newValidators, "err", err)
-		return err
-	}
-	return nil
+	return err
 }
 
 // DecreaseMissedBlocksCounter return the result of calling method `decreaseMissedBlocksCounter` in Staking contract
 func DecreaseMissedBlocksCounter(ctx *CallContext) error {
-	method := "decreaseMissedBlocksCounter"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method)
+	const method = "decreaseMissedBlocksCounter"
+	err := contractWrite(ctx, system.StakingContract, method)
 	if err != nil {
-		log.Error("Can't pack data for decreaseMissedBlocksCounter", "error", err)
-		return err
+		log.Error("DecreaseMissedBlocksCounter failed", "err", err)
 	}
-
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform DecreaseMissedBlocksCounter", "err", err)
-		return err
-	}
-	return nil
+	return err
 }
 
 // GetRewardsUpdatePeroid return the blocks to update the reward in Staking contract
 func GetRewardsUpdatePeroid(ctx *CallContext) (uint64, error) {
-	method := "rewardsUpdateEpoch"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method)
+	const method = "rewardsUpdateEpoch"
+	result, err := contractRead(ctx, system.StakingContract, method)
 	if err != nil {
-		log.Error("Can't pack data for rewardsUpdateEpoch", "error", err)
+		log.Error("GetRewardsUpdatePeroid contractRead failed", "err", err)
 		return 0, err
 	}
-	result, err := CallContract(ctx, &system.StakingContract, data)
-	if err != nil {
-		log.Error("Failed to perform GetRewardsUpdatePeroid", "err", err)
-		return 0, err
-	}
-
-	// unpack data
-	ret, err := abi.Unpack(method, result)
-	if err != nil {
-		return 0, err
-	}
-	if len(ret) != 1 {
-		return 0, errors.New("GetRewardsUpdatePeroid: invalid result length")
-	}
-	rewardsUpdateEpoch, ok := ret[0].(*big.Int)
+	rewardsUpdateEpoch, ok := result.(*big.Int)
 	if !ok {
 		return 0, errors.New("GetRewardsUpdatePeroid: invalid result format")
 	}
@@ -128,9 +91,7 @@ func GetRewardsUpdatePeroid(ctx *CallContext) (uint64, error) {
 
 // UpdateRewardsInfo return the result of calling method `updateRewardsInfo` in Staking contract
 func UpdateRewardsInfo(ctx *CallContext) error {
-	method := "updateRewardsInfo"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-
+	const method = "updateRewardsInfo"
 	// Calculate rewards
 	rewardsPerBlock := big.NewInt(0)
 	month := new(big.Int).Div(ctx.Header.Number, blocksPerMonth).Int64()
@@ -139,34 +100,23 @@ func UpdateRewardsInfo(ctx *CallContext) error {
 		rewardsByMonth := core.RewardsByMonth(ctx.ChainConfig.Chaos.Rule)
 		rewardsPerBlock = new(big.Int).Div(rewardsByMonth[month], blocksPerMonth)
 	}
-
-	// Execute contract
-	data, err := abi.Pack(method, rewardsPerBlock)
+	err := contractWrite(ctx, system.StakingContract, method, rewardsPerBlock)
 	if err != nil {
-		log.Error("Can't pack data for updateRewardsInfo", "error", err)
-		return err
+		log.Error("UpdateRewardsInfo failed", "err", err)
 	}
-
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform UpdateRewardsInfo", "err", err)
-		return err
-	}
-	return nil
+	return err
 }
 
 // DistributeBlockFee return the result of calling method `distributeBlockFee` in Staking contract
 func DistributeBlockFee(ctx *CallContext, fee *big.Int) error {
-	method := "distributeBlockFee"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method)
+	const method = "distributeBlockFee"
+	data, err := system.ABIPack(system.StakingContract, method)
 	if err != nil {
 		log.Error("Can't pack data for distributeBlockFee", "error", err)
 		return err
 	}
-
-	if _, err := CallContractWithValue(ctx, &system.StakingContract, data, fee); err != nil {
-		log.Error("Failed to perform DistributeBlockFee", "fee", fee, "err", err)
+	if _, err := CallContractWithValue(ctx, ctx.Header.Coinbase, &system.StakingContract, data, fee); err != nil {
+		log.Error("DistributeBlockFee failed", "fee", fee, "err", err)
 		return err
 	}
 	return nil
@@ -174,51 +124,34 @@ func DistributeBlockFee(ctx *CallContext, fee *big.Int) error {
 
 // LazyPunish return the result of calling method `lazyPunish` in Staking contract
 func LazyPunish(ctx *CallContext, validator common.Address) error {
-	method := "lazyPunish"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method, validator)
+	const method = "lazyPunish"
+	err := contractWrite(ctx, system.StakingContract, method, validator)
 	if err != nil {
-		log.Error("Can't pack data for lazyPunish", "error", err)
-		return err
+		log.Error("LazyPunish failed", "validator", validator, "err", err)
 	}
-
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform LazyPunish", "validator", validator, "err", err)
-		return err
-	}
-	return nil
+	return err
 }
 
 // DoubleSignPunish return the result of calling method `doubleSignPunish` in Staking contract
 func DoubleSignPunish(ctx *CallContext, punishHash common.Hash, validator common.Address) error {
-	method := "doubleSignPunish"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method, punishHash, validator)
+	const method = "doubleSignPunish"
+	err := contractWrite(ctx, system.StakingContract, method, punishHash, validator)
 	if err != nil {
-		log.Error("Can't pack data for doubleSignPunish", "error", err)
-		return err
+		log.Error("DoubleSignPunish failed", "punishHash", punishHash, "validator", validator, "err", err)
 	}
-	if _, err := CallContract(ctx, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform DoubleSignPunish", "validator", validator, "punishHash", punishHash, "err", err)
-		return err
-	}
-	return nil
+	return err
 }
 
-// DoubleSignPunishGivenEVM return the result of calling method `doubleSignPunish` in Staking contract with given EVM
-func DoubleSignPunishGivenEVM(evm *vm.EVM, from common.Address, punishHash common.Hash, validator common.Address) error {
-	method := "doubleSignPunish"
-	abi := system.GetStakingABI(evm.Context.BlockNumber, evm.ChainConfig())
+// DoubleSignPunishWithGivenEVM return the result of calling method `doubleSignPunish` in Staking contract with given EVM
+func DoubleSignPunishWithGivenEVM(evm *vm.EVM, from common.Address, punishHash common.Hash, validator common.Address) error {
 	// execute contract
-	data, err := abi.Pack(method, punishHash, validator)
+	data, err := system.ABIPack(system.StakingContract, "doubleSignPunish", punishHash, validator)
 	if err != nil {
 		log.Error("Can't pack data for doubleSignPunish", "error", err)
 		return err
 	}
-	if _, err := VMCallContract(evm, from, &system.StakingContract, data); err != nil {
-		log.Error("Failed to perform DoubleSignPunishGivenEVM", "validator", validator, "punishHash", punishHash, "err", err)
+	if _, err := VMCallContract(evm, from, &system.StakingContract, data, math.MaxUint64); err != nil {
+		log.Error("DoubleSignPunishWithGivenEVM failed", "punishHash", punishHash, "validator", validator, "err", err)
 		return err
 	}
 	return nil
@@ -226,32 +159,221 @@ func DoubleSignPunishGivenEVM(evm *vm.EVM, from common.Address, punishHash commo
 
 // IsDoubleSignPunished return the result of calling method `isDoubleSignPunished` in Staking contract
 func IsDoubleSignPunished(ctx *CallContext, punishHash common.Hash) (bool, error) {
-	method := "isDoubleSignPunished"
-	abi := system.GetStakingABI(ctx.Header.Number, ctx.ChainConfig)
-	// execute contract
-	data, err := abi.Pack(method, punishHash)
+	const method = "isDoubleSignPunished"
+	result, err := contractRead(ctx, system.StakingContract, method, punishHash)
 	if err != nil {
-		log.Error("Can't pack data for isDoubleSignPunished", "error", err)
+		log.Error("IsDoubleSignPunished contractRead failed", "punishHash", punishHash, "err", err)
 		return true, err
 	}
-
-	result, err := CallContract(ctx, &system.StakingContract, data)
-	if err != nil {
-		log.Error("Failed to perform IsDoubleSignPunished", "punishHash", punishHash, "err", err)
-		return true, err
+	punished, ok := result.(bool)
+	if !ok {
+		return true, errors.New("IsDoubleSignPunished: invalid result format, punishHash" + punishHash.Hex())
 	}
+	return punished, nil
+}
 
+func GetBlacksFrom(ctx *CallContext) ([]common.Address, error) {
+	const method = "getBlacksFrom"
+	result, err := contractRead(ctx, system.AddressListContract, method)
+	if err != nil {
+		log.Error("GetBlacksFrom contractRead failed", "err", err)
+		return []common.Address{}, err
+	}
+	from, ok := result.([]common.Address)
+	if !ok {
+		return []common.Address{}, errors.New("GetBlacksFrom: invalid result format")
+	}
+	return from, nil
+}
+
+func GetBlacksTo(ctx *CallContext) ([]common.Address, error) {
+	const method = "getBlacksTo"
+	result, err := contractRead(ctx, system.AddressListContract, method)
+	if err != nil {
+		log.Error("GetBlacksTo contractRead failed", "err", err)
+		return []common.Address{}, err
+	}
+	to, ok := result.([]common.Address)
+	if !ok {
+		return []common.Address{}, errors.New("GetBlacksTo: invalid result format")
+	}
+	return to, nil
+}
+
+func GetRuleByIndex(ctx *CallContext, idx uint32) (common.Hash, int, common.AddressCheckType, error) {
+	const method = "getRuleByIndex"
+	results, err := contractReadAll(ctx, system.AddressListContract, method)
+	if err != nil {
+		log.Error("GetRuleByIndex contractRead failed", "err", err)
+		return common.Hash{}, 0, common.CheckNone, err
+	}
+	if len(results) != 3 {
+		return common.Hash{}, 0, common.CheckNone, errors.New("GetRuleByIndex: invalid results' length")
+	}
+	var (
+		ok    bool
+		sig   common.Hash
+		index *big.Int
+		ctype uint8
+	)
+	if sig, ok = results[0].([32]byte); !ok {
+		return common.Hash{}, 0, common.CheckNone, errors.New("GetRuleByIndex: invalid result sig format")
+	}
+	if index, ok = results[1].(*big.Int); !ok {
+		return common.Hash{}, 0, common.CheckNone, errors.New("GetRuleByIndex: invalid result index format")
+	}
+	if ctype, ok = results[2].(uint8); !ok {
+		return common.Hash{}, 0, common.CheckNone, errors.New("GetRuleByIndex: invalid result checktype format")
+	}
+	return sig, int(index.Int64()), common.AddressCheckType(ctype), nil
+}
+
+func GetRulesLen(ctx *CallContext) (uint32, error) {
+	const method = "rulesLen"
+	result, err := contractRead(ctx, system.AddressListContract, method)
+	if err != nil {
+		log.Error("GetRulesLen contractRead failed", "err", err)
+		return 0, err
+	}
+	n, ok := result.(uint32)
+	if !ok {
+		return 0, errors.New("GetRulesLen: invalid result format")
+	}
+	return n, nil
+}
+
+func GetPassedProposalCount(ctx *CallContext) (uint32, error) {
+	const method = "getPassedProposalCount"
+	result, err := contractRead(ctx, system.OnChainDaoContract, method)
+	if err != nil {
+		log.Error("GetPassedProposalCount contractRead failed", "err", err)
+		return 0, err
+	}
+	count, ok := result.(uint32)
+	if !ok {
+		return 0, errors.New("GetPassedProposalCount: invalid result format")
+	}
+	return count, nil
+}
+
+func GetPassedProposalByIndex(ctx *CallContext, idx uint32) (*Proposal, error) {
+	const method = "getPassedProposalByIndex"
+	abi := system.ABI(system.OnChainDaoContract)
+	result, err := contractReadBytes(ctx, system.OnChainDaoContract, &abi, method, idx)
+	if err != nil {
+		log.Error("GetPassedProposalByIndex contractReadBytes failed", "idx", idx, "err", err)
+		return nil, err
+	}
+	// unpack data
+	prop := &Proposal{}
+	if err = abi.UnpackIntoInterface(prop, method, result); err != nil {
+		log.Error("GetPassedProposalByIndex UnpackIntoInterface failed", "idx", idx, "err", err)
+		return nil, err
+	}
+	return prop, nil
+}
+
+func FinishProposalById(ctx *CallContext, id *big.Int) error {
+	const method = "finishProposalById"
+	err := contractWrite(ctx, system.OnChainDaoContract, method, id)
+	if err != nil {
+		log.Error("FinishProposalById failed", "id", id, "err", err)
+	}
+	return err
+}
+
+func ExecuteProposal(ctx *CallContext, prop *Proposal) error {
+	_, err := CallContractWithValue(ctx, prop.From, &prop.To, prop.Data, prop.Value)
+	if err != nil {
+		log.Error("ExecuteProposal failed", "proposal", prop, "err", err)
+	}
+	return err
+}
+
+func ExecuteProposalWithGivenEVM(evm *vm.EVM, prop *Proposal, gas uint64) (ret []byte, err error) {
+	if ret, err = VMCallContract(evm, prop.From, &prop.To, prop.Data, gas); err != nil {
+		log.Error("ExecuteProposalWithGivenEVM failed", "proposal", prop, "err", err)
+	}
+	return
+}
+
+// Since the state variables are as follow:
+//    bool public initialized;
+//    bool public enabled;
+//    address public admin;
+//    address public pendingAdmin;
+//    mapping(address => bool) private devs;
+//
+// according to [Layout of State Variables in Storage](https://docs.soliditylang.org/en/v0.8.4/internals/layout_in_storage.html),
+// and after optimizer enabled, the `initialized`, `enabled` and `admin` will be packed, and stores at slot 0,
+// `pendingAdmin` stores at slot 1, and the position for `devs` is 2.
+func IsDeveloperVerificationEnabled(state consensus.StateReader) bool {
+	compactValue := state.GetState(system.AddressListContract, common.Hash{})
+	// Layout of slot 0:
+	// [0   -    9][10-29][  30   ][    31     ]
+	// [zero bytes][admin][enabled][initialized]
+	enabledByte := compactValue.Bytes()[common.HashLength-2]
+	return enabledByte == 0x01
+}
+
+func LastBlackUpdatedNumber(state consensus.StateReader) uint64 {
+	value := state.GetState(system.AddressListContract, system.BlackLastUpdatedNumberPosition)
+	return value.Big().Uint64()
+}
+
+func LastRulesUpdatedNumber(state consensus.StateReader) uint64 {
+	value := state.GetState(system.AddressListContract, system.RulesLastUpdatedNumberPosition)
+	return value.Big().Uint64()
+}
+
+func contractRead(ctx *CallContext, contract common.Address, method string, args ...interface{}) (interface{}, error) {
+	ret, err := contractReadAll(ctx, contract, method, args...)
+	if err != nil {
+		return nil, err
+	}
+	if len(ret) != 1 {
+		return nil, errors.New(method + ": invalid result length")
+	}
+	return ret[0], nil
+}
+
+func contractReadAll(ctx *CallContext, contract common.Address, method string, args ...interface{}) ([]interface{}, error) {
+	abi := system.ABI(contract)
+	result, err := contractReadBytes(ctx, contract, &abi, method, args...)
+	if err != nil {
+		return nil, err
+	}
 	// unpack data
 	ret, err := abi.Unpack(method, result)
 	if err != nil {
-		return true, err
+		return nil, err
 	}
-	if len(ret) != 1 {
-		return true, errors.New("IsDoubleSignPunished: invalid result length")
+	return ret, nil
+}
+
+func contractReadBytes(ctx *CallContext, contract common.Address, abi *abi.ABI, method string, args ...interface{}) ([]byte, error) {
+	data, err := abi.Pack(method, args...)
+	if err != nil {
+		log.Error("Can't pack data", "method", method, "error", err)
+		return nil, err
 	}
-	punished, ok := ret[0].(bool)
-	if !ok {
-		return true, errors.New("IsDoubleSignPunished: invalid result format")
+	result, err := CallContract(ctx, &contract, data)
+	if err != nil {
+		log.Error("Failed to execute", "method", method, "err", err)
+		return nil, err
 	}
-	return punished, nil
+	return result, nil
+}
+
+func contractWrite(ctx *CallContext, contract common.Address, method string, args ...interface{}) error {
+	data, err := system.ABIPack(contract, method, args...)
+	if err != nil {
+		log.Error("Can't pack data", "method", method, "error", err)
+		return err
+	}
+	if _, err := CallContract(ctx, &system.OnChainDaoContract, data); err != nil {
+		log.Error("Failed to execute", "method", method, "err", err)
+		return err
+	}
+	return nil
 }

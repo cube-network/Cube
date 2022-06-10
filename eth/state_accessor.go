@@ -184,11 +184,17 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 	// Recompute transactions up to the target index.
 	signer := types.MakeSigner(eth.blockchain.Config(), block.Number())
 	header := block.Header()
+
+	var accessFilter vm.EvmAccessFilter
+	if eth.isChaosEngine {
+		accessFilter = eth.chaosEngine.CreateEvmAccessFilter(header, statedb)
+	}
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
+		context.AccessFilter = accessFilter
 		if idx == txIndex {
 			// Notice: for a chaos system transaction, the `msg` and `context` should not be used
 			return msg, context, statedb, nil
@@ -200,9 +206,15 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 
 		if eth.isChaosEngine {
 			sender, _ := types.Sender(signer, tx)
-			ok, _ := eth.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
-			if ok {
+			if ok := eth.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); ok {
 				if _, _, err := eth.chaosEngine.ApplyDoubleSignPunishTx(vmenv, sender, tx); err != nil {
+					return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
+				}
+				continue
+			}
+			if ok := eth.chaosEngine.IsSysTransaction(sender, tx, header); ok {
+				context.AccessFilter = nil
+				if _, _, err := eth.chaosEngine.ApplyProposalTx(vmenv, statedb, idx, sender, tx); err != nil {
 					return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 				}
 				continue

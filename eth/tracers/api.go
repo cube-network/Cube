@@ -222,6 +222,7 @@ type txTraceTask struct {
 	statedb              *state.StateDB // Intermediate state prepped for tracing
 	index                int            // Transaction offset in the block
 	isDoubleSignPunishTx bool           // Is chaos punish double sign transaction
+	isProposalTxs        bool           // Is posa system transaction ?
 }
 
 // TraceChain returns the structured logs created during the execution of EVM
@@ -281,6 +282,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 				blockCtx := core.NewEVMBlockContext(header, api.chainContext(localctx), nil)
 				if api.isChaosEngine {
 					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
+					blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
 				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
@@ -294,12 +296,17 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 						res                  interface{}
 						err                  error
 						isDoubleSignPunishTx bool
+						isProposalTxs        bool
 					)
 					if api.isChaosEngine {
-						isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+						isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+						isProposalTxs = api.chaosEngine.IsSysTransaction(msg.From(), tx, header)
+
 					}
 					if isDoubleSignPunishTx {
 						res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+					} else if isProposalTxs {
+						res, err = api.traceProposalTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
 					} else {
 						res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 					}
@@ -618,6 +625,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+		blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
 	blockHash := block.Hash()
 	for th := 0; th < threads; th++ {
@@ -637,6 +645,9 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 				if task.isDoubleSignPunishTx {
 					tx := txs[task.index]
 					res, err = api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
+				} else if task.isProposalTxs {
+					tx := txs[task.index]
+					res, err = api.traceProposalTx(ctx, msg.From(), tx, txctx, blockCtx, task.statedb, config)
 				} else {
 					res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 				}
@@ -651,13 +662,17 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	// Feed the transactions into the tracers and return
 	var failed error
 	for i, tx := range txs {
-		var isDoubleSignPunishTx bool
+		var (
+			isDoubleSignPunishTx bool
+			isProposalTxs        bool
+		)
 		if api.isChaosEngine {
 			sender, _ := types.Sender(signer, tx)
-			isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
+			isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
+			isProposalTxs = api.chaosEngine.IsSysTransaction(sender, tx, header)
 		}
 		// Send the trace task over for execution
-		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i, isDoubleSignPunishTx: isDoubleSignPunishTx}
+		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i, isDoubleSignPunishTx: isDoubleSignPunishTx, isProposalTxs: isProposalTxs}
 
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
@@ -665,6 +680,13 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		statedb.Prepare(tx.Hash(), i)
 		if isDoubleSignPunishTx {
 			if _, _, err := api.chaosEngine.ApplyDoubleSignPunishTx(vmenv, msg.From(), tx); err != nil {
+				failed = err
+				break
+			}
+			continue
+		}
+		if isProposalTxs {
+			if _, _, err := api.chaosEngine.ApplyProposalTx(vmenv, statedb, i, msg.From(), tx); err != nil {
 				failed = err
 				break
 			}
@@ -735,6 +757,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	)
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
+		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
 
 	// Check if there are any overrides: the caller may wish to enable a future
@@ -788,12 +811,18 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		// Execute the transaction and flush any traces to disk
 		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf)
 		statedb.Prepare(tx.Hash(), i)
-		var isDoubleSignPunishTx bool
+		var (
+			isDoubleSignPunishTx bool
+			isProposalTxs        bool
+		)
 		if api.isChaosEngine {
-			isDoubleSignPunishTx, _ = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+			isDoubleSignPunishTx = api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, header)
+			isProposalTxs = api.chaosEngine.IsSysTransaction(msg.From(), tx, header)
 		}
 		if isDoubleSignPunishTx {
 			_, _, err = api.chaosEngine.ApplyDoubleSignPunishTx(vmenv, msg.From(), tx)
+		} else if isProposalTxs {
+			_, _, err = api.chaosEngine.ApplyProposalTx(vmenv, statedb, i, msg.From(), tx)
 		} else {
 			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
 		}
@@ -860,8 +889,11 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	}
 	if api.isChaosEngine {
 		tx := block.Transactions()[int(index)]
-		if ok, _ := api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, block.Header()); ok {
+		if ok := api.chaosEngine.IsDoubleSignPunishTransaction(msg.From(), tx, block.Header()); ok {
 			return api.traceChaosApplyDoubleSignPunishTx(ctx, msg.From(), tx, txctx, vmctx, statedb, config)
+		}
+		if ok := api.chaosEngine.IsSysTransaction(msg.From(), tx, block.Header()); ok {
+			return api.traceProposalTx(ctx, msg.From(), tx, txctx, vmctx, statedb, config)
 		}
 	}
 	return api.traceTx(ctx, msg, txctx, vmctx, statedb, config)
@@ -908,6 +940,9 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 		return nil, err
 	}
 	vmctx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
+	if api.isChaosEngine {
+		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(block.Header(), statedb)
+	}
 	var traceConfig *TraceConfig
 	if config != nil {
 		traceConfig = &TraceConfig{
@@ -1012,6 +1047,58 @@ func (api *API) traceChaosApplyDoubleSignPunishTx(ctx context.Context, sender co
 	// Call Prepare to clear out the statedb access list
 	statedb.Prepare(txctx.TxHash, txctx.TxIndex)
 	ret, vmerr, err := api.chaosEngine.ApplyDoubleSignPunishTx(vmenvWithoutTxCtx, sender, tx)
+	if err != nil {
+		return nil, fmt.Errorf("tracing failed: %w", err)
+	}
+	return api.traceResult(tracer, &core.ExecutionResult{
+		Err:        vmerr,
+		ReturnData: ret,
+	})
+}
+
+// traceTx configures a new tracer according to the provided configuration, and
+// executes the given message in the provided environment. The return value will
+// be tracer dependent.
+func (api *API) traceProposalTx(ctx context.Context, sender common.Address, tx *types.Transaction, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
+	// Assemble the structured logger or the JavaScript tracer
+	var (
+		tracer vm.EVMLogger
+		err    error
+	)
+	switch {
+	case config != nil && config.Tracer != nil:
+		// Define a meaningful timeout of a single transaction trace
+		timeout := defaultTraceTimeout
+		if config.Timeout != nil {
+			if timeout, err = time.ParseDuration(*config.Timeout); err != nil {
+				return nil, err
+			}
+		}
+		// Constuct the JavaScript tracer to execute with
+		if tracer, err = New(*config.Tracer, txctx); err != nil {
+			return nil, err
+		}
+		// Handle timeouts and RPC cancellations
+		deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
+		go func() {
+			<-deadlineCtx.Done()
+			if deadlineCtx.Err() == context.DeadlineExceeded {
+				tracer.(Tracer).Stop(errors.New("execution timeout"))
+			}
+		}()
+		defer cancel()
+
+	case config == nil:
+		tracer = vm.NewStructLogger(nil)
+
+	default:
+		tracer = vm.NewStructLogger(config.LogConfig)
+	}
+	// Run the transaction with tracing enabled.
+	vmctx.AccessFilter = nil
+	vmenvWithoutTxCtx := vm.NewEVM(vmctx, vm.TxContext{}, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
+
+	ret, vmerr, err := api.chaosEngine.ApplyProposalTx(vmenvWithoutTxCtx, statedb, txctx.TxIndex, sender, tx)
 	if err != nil {
 		return nil, fmt.Errorf("tracing failed: %w", err)
 	}

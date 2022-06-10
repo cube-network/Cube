@@ -557,18 +557,16 @@ func TestIsDoubleSignPunishTransaction(t *testing.T) {
 		Coinbase:   common.HexToAddress("0x352BbF453fFdcba6b126a73eD684260D7968dDc8"),
 	}
 
-	abi := system.GetStakingABI(header.Number, nil)
+	abi := system.ABI(system.StakingContract)
 
 	data, err := abi.Pack("doubleSignPunish", common.BigToHash(big.NewInt(886)), header.Coinbase)
 	assert.NoError(t, err)
 
 	tx := types.NewTransaction(0, system.StakingContract, uint256Max, 0, common.Big0, data)
-	check, err := (&Chaos{}).IsDoubleSignPunishTransaction(header.Coinbase, tx, header)
-	assert.NoError(t, err)
+	check := (&Chaos{}).IsDoubleSignPunishTransaction(header.Coinbase, tx, header)
 	assert.False(t, check)
 
 	tx = types.NewTransaction(0, doubleSignIdentity, uint256Max, 0, common.Big0, data)
-	check, err = (&Chaos{}).IsDoubleSignPunishTransaction(header.Coinbase, tx, header)
-	assert.NoError(t, err)
+	check = (&Chaos{}).IsDoubleSignPunishTransaction(header.Coinbase, tx, header)
 	assert.True(t, check)
 }

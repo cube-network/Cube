@@ -89,6 +89,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		if err := chaosEngine.PreHandle(p.bc, header, statedb); err != nil {
 			return nil, nil, 0, err
 		}
+		vmenv.Context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
 
 	// preload from and to of txs
@@ -105,6 +106,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	commonTxs := make([]*types.Transaction, 0, len(block.Transactions()))
 	punishTxs := make([]*types.Transaction, 0)
+	proposalTxs := make([]*types.Transaction, 0)
 	for i, tx := range block.Transactions() {
 		// Check if tx is sent to preserved address
 		if IsPreserved(tx.To()) {
@@ -118,13 +120,17 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 			if err = chaosEngine.ExtraValidateOfTx(sender, tx, header); err != nil {
 				return nil, nil, 0, err
 			}
-			ok, err := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header)
-			if err != nil {
-				return nil, nil, 0, err
-			}
-			if ok {
+
+			if ok := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); ok {
 				punishTxs = append(punishTxs, tx)
 				continue
+			}
+			if ok := chaosEngine.IsSysTransaction(sender, tx, header); ok {
+				proposalTxs = append(proposalTxs, tx)
+				continue
+			}
+			if err = chaosEngine.ValidateTx(sender, tx, header, statedb); err != nil {
+				return nil, nil, 0, err
 			}
 		}
 		msg, err := tx.AsMessage(signer, header.BaseFee)
@@ -144,7 +150,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	returnErrBeforeWaitGroup = false
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs); err != nil {
+	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs); err != nil {
 		return nil, nil, 0, err
 	}
 
@@ -228,6 +234,12 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
+	if engine := bc.Engine(); engine != nil {
+		if chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine); isChaosEngine {
+			blockContext.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
+		}
+	}
+
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
 }

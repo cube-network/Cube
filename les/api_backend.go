@@ -203,6 +203,13 @@ func (b *LesApiBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 	}
 	txContext := core.NewEVMTxContext(msg)
 	context := core.NewEVMBlockContext(header, b.eth.blockchain, nil)
+	if b.eth.engine != nil {
+		if chaosEngine, isChaosEngine := b.eth.engine.(consensus.ChaosEngine); isChaosEngine {
+			parent := b.eth.blockchain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
+			parentState := light.NewState(ctx, parent, b.eth.odr)
+			context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, parentState)
+		}
+	}
 	return vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig), state.Error, nil
 }
 

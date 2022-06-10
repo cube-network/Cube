@@ -33,6 +33,78 @@ var (
 	executedDoubleSignPunishTopic = common.HexToHash("0x1874a4becdbc3c81b2409d3af931b783d9f5a7c77cb4a75fb2986b452b447688") // TODO
 )
 
+// punishDoubleSign punishes double sign attack in casper ffg
+func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *types.Header,
+	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
+	if !mined {
+		// handle violating CasperFFG rules
+		totalTxIndex := len(punishTxs)
+		for i := uint32(0); i < uint32(totalTxIndex); i++ {
+			log.Debug("Received a pending penalty", "Number", header.Number.Uint64())
+			// execute the doubleSignPunish
+			// If one transaction fails to execute, the whole block will be discarded
+			tx := punishTxs[int(i)]
+			receipt, err := c.replayDoubleSignPunish(chain, header, state, totalTxIndex, tx)
+			if err != nil {
+				return err
+			}
+			*txs = append(*txs, tx)
+			*receipts = append(*receipts, receipt)
+		}
+	} else if c.signTxFn != nil {
+		// Note:
+		// Even if the miner is not `running`, it's still working,
+		// the 'miner.worker' will try to FinalizeAndAssemble a block,
+		// in this case, the signTxFn is not set. A `non-miner node` can't execute tx.
+
+		// Add penalty transactions for violating CasperFFG rules
+		punishList := rawdb.ReadAllViolateCasperFFGPunish(c.db)
+		if len(punishList) > 0 {
+			for _, p := range punishList {
+				val, err := p.RecoverSigner()
+				if err != nil {
+					continue
+				}
+				b, err := c.IsDoubleSignPunished(chain, header, state, p.Hash())
+				if err != nil {
+					log.Error("IsDoubleSignPunished error", "error", err.Error())
+					return err
+				}
+				if !b {
+					// execute the Punish.sol doubleSignPunish
+					tx, receipt, err := c.executeDoubleSignPunish(chain, header, state, p, len(punishList))
+					if err != nil {
+						log.Error("executeDoubleSignPunish error", "error", err.Error())
+						return err
+					}
+					*txs = append(*txs, tx)
+					*receipts = append(*receipts, receipt)
+					log.Debug("executeDoubleSignPunish", "Violator", val, "Number", header.Number.Uint64())
+				} else {
+					rawdb.DeleteViolateCasperFFGPunish(c.db, p)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Chaos) AttestationStatus() uint8 {
+	return c.attestationStatus
+}
+
+func (c *Chaos) StartAttestation() {
+	c.attestationStatus = types.AttestationStart
+}
+
+func (c *Chaos) StopAttestation() {
+	c.attestationStatus = types.AttestationStop
+}
+
+func (c *Chaos) ClearAllViolateCasperFFGPunish() {
+	rawdb.ClearAllViolateCasperFFGPunish(c.db)
+}
+
 // VerifyAttestation checks whether an attestation is valid,
 // and if it's valid, return the signer,
 // and a threshold that indicates how many attestations can justify a block.
@@ -297,9 +369,9 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 
 // IsDoubleSignPunishTransaction Judge whether the transaction is a multi sign penalty transaction.
 // Due to the particularity of transaction data, a special to address is used to distinguish
-func (c *Chaos) IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error) {
+func (c *Chaos) IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) bool {
 	if tx.To() == nil || len(tx.Data()) < 4 {
-		return false, nil
+		return false
 	}
 	to := tx.To()
 	if sender == header.Coinbase &&
@@ -307,9 +379,9 @@ func (c *Chaos) IsDoubleSignPunishTransaction(sender common.Address, tx *types.T
 		tx.Value().Cmp(uint256Max) == 0 &&
 		tx.Gas() == 0 &&
 		tx.GasPrice().Sign() == 0 {
-		return true, nil
+		return true
 	}
-	return false, nil
+	return false
 }
 
 // ApplyDoubleSignPunishTx TODO
@@ -325,6 +397,6 @@ func (c *Chaos) ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *
 		Origin:   p.Plaintiff,
 		GasPrice: new(big.Int).Set(big.NewInt(0)),
 	}
-	err = systemcontract.DoubleSignPunishGivenEVM(evm, p.Plaintiff, p.Hash(), p.Defendant)
+	err = systemcontract.DoubleSignPunishWithGivenEVM(evm, p.Plaintiff, p.Hash(), p.Defendant)
 	return nil, nil, err
 }

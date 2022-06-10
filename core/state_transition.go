@@ -370,6 +370,14 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if rules := st.evm.ChainConfig().Rules(st.evm.Context.BlockNumber); rules.IsBerlin {
 		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
 	}
+
+	// Check if can create
+	if contractCreation && st.evm.Context.CanCreate != nil {
+		if !st.evm.Context.CanCreate(st.evm.StateDB, msg.From(), st.evm.Context.BlockNumber) {
+			return nil, ErrUnauthorizedDeveloper
+		}
+	}
+
 	var (
 		ret   []byte
 		vmerr error // vm errors do not effect consensus and are therefore not assigned to err

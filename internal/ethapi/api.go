@@ -20,12 +20,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"math/big"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -849,7 +850,48 @@ func (s *PublicBlockChainAPI) getDoubleSignPunishTransactions(block *types.Block
 	signer := types.MakeSigner(s.b.ChainConfig(), header.Number)
 	for i, tx := range txs {
 		sender, _ := types.Sender(signer, tx)
-		if yes, _ := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); yes {
+		if yes := chaosEngine.IsDoubleSignPunishTransaction(sender, tx, header); yes {
+			transactions = append(transactions, newRPCTransaction(tx, bhash, bnumber, uint64(i), nil, s.b.ChainConfig()))
+		}
+	}
+	return transactions, nil
+}
+
+func (s *PublicBlockChainAPI) GetSysTransactionsByBlockNumber(ctx context.Context, number rpc.BlockNumber) ([]*RPCTransaction, error) {
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a PoSA engine")
+	}
+
+	block, err := s.b.BlockByNumber(ctx, number)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getSysTransactions(block, chaosEngine)
+}
+
+func (s *PublicBlockChainAPI) GetSysTransactionsByBlockHash(ctx context.Context, hash common.Hash) ([]*RPCTransaction, error) {
+	chaosEngine, isChaosEngine := s.b.Engine().(consensus.ChaosEngine)
+	if !isChaosEngine {
+		return nil, errors.New("not a PoSA engine")
+	}
+	block, err := s.b.BlockByHash(ctx, hash)
+	if err != nil || block == nil {
+		return nil, err
+	}
+	return s.getSysTransactions(block, chaosEngine)
+}
+
+func (s *PublicBlockChainAPI) getSysTransactions(block *types.Block, chaosEngine consensus.ChaosEngine) ([]*RPCTransaction, error) {
+	header := block.Header()
+	bhash := block.Hash()
+	bnumber := block.NumberU64()
+	txs := block.Transactions()
+	transactions := make([]*RPCTransaction, 0)
+	signer := types.MakeSigner(s.b.ChainConfig(), header.Number)
+	for i, tx := range txs {
+		sender, _ := types.Sender(signer, tx)
+		if yes := chaosEngine.IsSysTransaction(sender, tx, header); yes {
 			transactions = append(transactions, newRPCTransaction(tx, bhash, bnumber, uint64(i), nil, s.b.ChainConfig()))
 		}
 	}

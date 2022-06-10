@@ -94,7 +94,7 @@ type Engine interface {
 	// Note: The block header and state database might be updated to reflect any
 	// consensus rules that happen at finalization (e.g. block rewards).
 	Finalize(chain ChainHeaderReader, header *types.Header, state *state.StateDB, txs *[]*types.Transaction,
-		uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error
+		uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction) error
 
 	// FinalizeAndAssemble runs any post-transaction state modifications (e.g. block
 	// rewards) and assembles the final block.
@@ -176,12 +176,30 @@ type ChaosEngine interface {
 
 	VerifyCasperFFGRule(beforeSourceNum uint64, beforeTargetNum uint64, afterSourceNum uint64, afterTargetNum uint64) int
 	// IsDoubleSignPunishTransaction checks whether a specific transaction is a system transaction.
-	IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) (bool, error)
+	IsDoubleSignPunishTransaction(sender common.Address, tx *types.Transaction, header *types.Header) bool
 
 	// ExtraValidateOfTx do some consensus related validation to a given transaction.
 	ExtraValidateOfTx(sender common.Address, tx *types.Transaction, header *types.Header) error
 
 	ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
+
+	// IsSysTransaction checks whether a specific transaction is a system transaction.
+	IsSysTransaction(sender common.Address, tx *types.Transaction, header *types.Header) bool
+
+	// CanCreate determines where a given address can create a new contract.
+	CanCreate(state StateReader, addr common.Address, height *big.Int) bool
+
+	// ValidateTx do a consensus-related validation on the given transaction at the given header and state.
+	ValidateTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+
+	// CreateEvmAccessFilter returns a EvmAccessFilter if necessary.
+	CreateEvmAccessFilter(header *types.Header, parentState *state.StateDB) vm.EvmAccessFilter
+
+	//Methods for debug trace
+
+	// ApplyProposalTx applies a system-transaction using a given evm,
+	// the main purpose of this method is for tracing a system-transaction.
+	ApplyProposalTx(evm *vm.EVM, state *state.StateDB, txIndex int, sender common.Address, tx *types.Transaction) (ret []byte, vmerr error, err error)
 }
 
 type StateReader interface {

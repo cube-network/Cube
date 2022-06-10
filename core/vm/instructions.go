@@ -818,6 +818,11 @@ func makeLog(size int) executionFunc {
 			// core/state doesn't know the current block number.
 			BlockNumber: interpreter.evm.Context.BlockNumber.Uint64(),
 		}
+		if interpreter.evm.Context.AccessFilter != nil {
+			if interpreter.evm.Context.AccessFilter.IsLogDenied(evLog) {
+				return nil, types.ErrAddressDenied
+			}
+		}
 		interpreter.evm.StateDB.AddLog(evLog)
 
 		return nil, nil

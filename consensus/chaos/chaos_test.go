@@ -327,7 +327,7 @@ func runChaosTest(t *testing.T, testID int, tc *testcase) {
 	engine := New(&config, db)
 	engine.fakeDiff = true
 	// Pass all the headers through chaos and ensure tallying succeeds
-	chain, err := core.NewBlockChain(db, nil, &config, engine, vm.Config{}, nil, nil)
+	chain, err := core.NewBlockChain(db, nil, &config, nil, engine, vm.Config{}, nil, nil)
 	if err != nil {
 		t.Errorf("test %d: failed to create test chain: %v", testID, err)
 		return

@@ -197,7 +197,7 @@ func MakeFakeChain() (*core.BlockChain, error) {
 		engine := New(&config, db)
 		engine.fakeDiff = true
 		// Pass all the headers through chaos and ensure tallying succeeds
-		return core.NewBlockChain(db, nil, &config, engine, vm.Config{}, nil, nil)
+		return core.NewBlockChain(db, nil, &config, nil, engine, vm.Config{}, nil, nil)
 	}
 }
 

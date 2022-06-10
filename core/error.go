@@ -103,4 +103,7 @@ var (
 
 	// ErrToSystemPreserved is returned if to address of a transaction is system preserved
 	ErrToSystemPreserved = errors.New("to address is system preserved")
+
+	// ErrUnauthorizedDeveloper is returned if from address of a contract creation transaction is unauthorized
+	ErrUnauthorizedDeveloper = errors.New("unauthorized developer")
 )

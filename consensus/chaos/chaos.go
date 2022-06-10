@@ -33,7 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/contracts/system"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -154,6 +153,9 @@ var (
 	errIsNotAuthorizedAtHeight = errors.New("the current verifier is invalid at the specified height")
 	errSignFailed              = errors.New("sign attestation data failed")
 	errContainIllegalTx        = errors.New("contains illegal transactions")
+
+	// errInvalidProposalCount is returned when the count of proposalTxs doesn't not match
+	errInvalidProposalCount = errors.New("invalid proposal tx count")
 )
 
 // StateFn gets state by the state root hash.
@@ -196,6 +198,13 @@ type Chaos struct {
 
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
+
+	accesslists     *lru.Cache // accesslists caches recent accesslist to speed up transactions validation
+	accessLock      sync.Mutex // Make sure only get accesslist once for each block
+	eventCheckRules *lru.Cache // eventCheckRules caches recent EventCheckRules to speed up log validation
+	rulesLock       sync.Mutex // Make sure only get eventCheckRules once for each block
+
+	proposals map[common.Address]bool // Current list of proposals we are pushing
 
 	signer types.Signer // the signer instance to recover tx sender
 
@@ -604,14 +613,14 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
 func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB,
-	txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction) error {
+	txs *[]*types.Transaction, uncles []*types.Header, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction) error {
 	if nil == txs {
 		ntxs := make([]*types.Transaction, 0)
 		txs = &ntxs
 	}
 
 	// Preparing jobs before finalize
-	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, false); err != nil {
+	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, proposalTxs, false); err != nil {
 		return err
 	}
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
@@ -631,7 +640,7 @@ func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *t
 		}
 	}()
 	// Preparing jobs before finalize
-	if err := c.prepareFinalize(chain, header, state, &txs, &receipts, nil, true); err != nil {
+	if err := c.prepareFinalize(chain, header, state, &txs, &receipts, nil, nil, true); err != nil {
 		panic(err)
 	}
 	// No block rewards in PoS, so the state remains as is and uncles are dropped
@@ -649,8 +658,9 @@ func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *t
 // * decrease missed blocks counter
 // * update rewards info
 // * punish double sign
+// * process proposal tx (after Gravitation hardfork)
 func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types.Header,
-	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
+	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction, mined bool) error {
 	// punish validator if low difficulty block found
 	if header.Difficulty.Cmp(diffInTurn) != 0 {
 		if err := c.tryLazyPunish(chain, header, state); err != nil {
@@ -691,7 +701,12 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 		}
 	}
 	// punish double sign
-	return c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined)
+	err := c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined)
+	if chain.Config().IsGravitation(header.Number) {
+		// process proposal
+		err = c.processProposalTx(chain, header, state, txs, receipts, proposalTxs, mined)
+	}
+	return err
 }
 
 // updateValidators updates validators info to system contracts
@@ -795,78 +810,6 @@ func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn
 	c.signTxFn = signTxFn
 	c.isReady = true
 	c.attestationStatus = types.AttestationPending
-}
-
-// punishDoubleSign punishes double sign attack in casper ffg
-func (c *Chaos) punishDoubleSign(chain consensus.ChainHeaderReader, header *types.Header,
-	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, mined bool) error {
-	if !mined {
-		// handle violating CasperFFG rules
-		totalTxIndex := len(punishTxs)
-		for i := uint32(0); i < uint32(totalTxIndex); i++ {
-			log.Debug("Received a pending penalty", "Number", header.Number.Uint64())
-			// execute the doubleSignPunish
-			// If one transaction fails to execute, the whole block will be discarded
-			tx := punishTxs[int(i)]
-			receipt, err := c.replayDoubleSignPunish(chain, header, state, totalTxIndex, tx)
-			if err != nil {
-				return err
-			}
-			*txs = append(*txs, tx)
-			*receipts = append(*receipts, receipt)
-		}
-	} else if c.signTxFn != nil {
-		// Note:
-		// Even if the miner is not `running`, it's still working,
-		// the 'miner.worker' will try to FinalizeAndAssemble a block,
-		// in this case, the signTxFn is not set. A `non-miner node` can't execute tx.
-
-		// Add penalty transactions for violating CasperFFG rules
-		punishList := rawdb.ReadAllViolateCasperFFGPunish(c.db)
-		if len(punishList) > 0 {
-			for _, p := range punishList {
-				val, err := p.RecoverSigner()
-				if err != nil {
-					continue
-				}
-				b, err := c.IsDoubleSignPunished(chain, header, state, p.Hash())
-				if err != nil {
-					log.Error("IsDoubleSignPunished error", "error", err.Error())
-					return err
-				}
-				if !b {
-					// execute the Punish.sol doubleSignPunish
-					tx, receipt, err := c.executeDoubleSignPunish(chain, header, state, p, len(punishList))
-					if err != nil {
-						log.Error("executeDoubleSignPunish error", "error", err.Error())
-						return err
-					}
-					*txs = append(*txs, tx)
-					*receipts = append(*receipts, receipt)
-					log.Debug("executeDoubleSignPunish", "Violator", val, "Number", header.Number.Uint64())
-				} else {
-					rawdb.DeleteViolateCasperFFGPunish(c.db, p)
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func (c *Chaos) AttestationStatus() uint8 {
-	return c.attestationStatus
-}
-
-func (c *Chaos) StartAttestation() {
-	c.attestationStatus = types.AttestationStart
-}
-
-func (c *Chaos) StopAttestation() {
-	c.attestationStatus = types.AttestationStop
-}
-
-func (c *Chaos) ClearAllViolateCasperFFGPunish() {
-	rawdb.ClearAllViolateCasperFFGPunish(c.db)
 }
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
@@ -1031,7 +974,10 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 
 func (c *Chaos) PreHandle(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	if c.chainConfig.HeliocentrismBlock != nil && c.chainConfig.HeliocentrismBlock.Cmp(header.Number) == 0 {
-		return systemcontract.ApplySystemContractUpgrade(systemcontract.SysContractV1, state, header, newChainContext(chain, c), c.chainConfig)
+		return systemcontract.ApplySystemContractUpgrade(systemcontract.Heliocentrism, state, header, newChainContext(chain, c), c.chainConfig)
+	}
+	if c.chainConfig.GravitationBlock != nil && c.chainConfig.GravitationBlock.Cmp(header.Number) == 0 {
+		return systemcontract.ApplySystemContractUpgrade(systemcontract.Gravitation, state, header, newChainContext(chain, c), c.chainConfig)
 	}
 	return nil
 }

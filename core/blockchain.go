@@ -121,8 +121,8 @@ const (
 	BlockChainVersion uint64 = 8
 
 	SyncWhiteListPageSize  = 30
-	whiteAddressCacheLimit = 1024
-	blackAddressCacheLimit = 1024
+	whiteAddressCacheLimit = 1000000
+	blackAddressCacheLimit = 1000000
 )
 
 const (

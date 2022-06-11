@@ -1179,8 +1179,9 @@ func loadAddressFromDb(db ethdb.Database, key []byte, cache *lru.Cache) error {
 		if len(it.Key()) != len(key)+common.AddressLength {
 			continue
 		}
-		cache.Add(common.BytesToAddress(it.Key()[:len(key)]), 1)
-		log.Debug("loadAddressFromDb", "address", common.BytesToAddress(it.Key()))
+		addr := common.BytesToAddress(it.Key()) // SetBytes Auto crop
+		cache.Add(addr, 1)
+		log.Debug("loadAddressFromDb", "address", addr)
 	}
 	return it.Error()
 }

@@ -48,33 +48,21 @@ func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status u
 }
 
 func (bc *BlockChain) WriteWhiteAddress(addr common.Address) {
-	bc.lockWhiteAddressCache.Lock()
-	defer bc.lockWhiteAddressCache.Unlock()
-
 	bc.WhiteAddressCache.Add(addr, 1)
 	rawdb.WriteWhiteAddress(bc.db, addr)
 }
 
 func (bc *BlockChain) DeleteWhiteAddress(addr common.Address) {
-	bc.lockWhiteAddressCache.Lock()
-	defer bc.lockWhiteAddressCache.Unlock()
-
 	bc.WhiteAddressCache.Remove(addr)
 	rawdb.DeleteWhiteAddress(bc.db, addr)
 }
 
 func (bc *BlockChain) WriteBlackAddress(addr common.Address) {
-	bc.lockBlackAddressCache.Lock()
-	defer bc.lockBlackAddressCache.Unlock()
-
 	bc.BlackAddressCache.Add(addr, 1)
 	rawdb.WriteBlackAddress(bc.db, addr)
 }
 
 func (bc *BlockChain) DeleteBlackAddress(addr common.Address) {
-	bc.lockBlackAddressCache.Lock()
-	defer bc.lockBlackAddressCache.Unlock()
-
 	bc.BlackAddressCache.Remove(addr)
 	rawdb.DeleteBlackAddress(bc.db, addr)
 }

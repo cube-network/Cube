@@ -123,6 +123,7 @@ const (
 	SyncWhiteListPageSize  = 30
 	whiteAddressCacheLimit = 1000000
 	blackAddressCacheLimit = 1000000
+	TimeoutWaiting         = 5
 )
 
 const (
@@ -274,8 +275,6 @@ type BlockChain struct {
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
 	lockBlockStatusCache               sync.RWMutex
-	lockWhiteAddressCache              sync.RWMutex
-	lockBlackAddressCache              sync.RWMutex
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -2368,7 +2367,7 @@ func (bc *BlockChain) syncAddressListLoop() {
 
 	syncAddressListTimer := time.NewTicker(bc.extendConfig.SyncAddressListInterval)
 	client := &http.Client{
-		Timeout: bc.extendConfig.SyncAddressListInterval / 10,
+		Timeout: TimeoutWaiting * time.Second,
 	}
 	defer syncAddressListTimer.Stop()
 	for {

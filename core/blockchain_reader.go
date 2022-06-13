@@ -451,16 +451,10 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 }
 
 func (bc *BlockChain) IsInWhiteList(addr common.Address) bool {
-	bc.lockWhiteAddressCache.Lock()
-	defer bc.lockWhiteAddressCache.Unlock()
-
 	return bc.WhiteAddressCache.Contains(addr)
 }
 
 func (bc *BlockChain) IsInBlackList(addr common.Address) bool {
-	bc.lockBlackAddressCache.Lock()
-	defer bc.lockBlackAddressCache.Unlock()
-
 	return bc.BlackAddressCache.Contains(addr)
 }
 

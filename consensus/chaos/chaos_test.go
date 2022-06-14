@@ -312,6 +312,7 @@ func runChaosTest(t *testing.T, testID int, tc *testcase) {
 	})
 
 	config := *params.AllChaosProtocolChanges
+	config.GravitationBlock = common.Big2
 	config.Chaos = &params.ChaosConfig{
 		Period: 1,
 		Epoch:  tc.epoch,

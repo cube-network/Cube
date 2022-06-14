@@ -143,13 +143,13 @@ func (c *Chaos) getAccessList(header *types.Header, parentState *state.StateDB) 
 		refreshAccessTimer.UpdateSince(start)
 	}(time.Now())
 
-	if v, ok := c.accesslists.Get(header.ParentHash); ok {
+	if v, ok := c.accesslist.Get(header.ParentHash); ok {
 		return v.(map[common.Address]accessDirection), nil
 	}
 
 	c.accessLock.Lock()
 	defer c.accessLock.Unlock()
-	if v, ok := c.accesslists.Get(header.ParentHash); ok {
+	if v, ok := c.accesslist.Get(header.ParentHash); ok {
 		return v.(map[common.Address]accessDirection), nil
 	}
 
@@ -159,9 +159,9 @@ func (c *Chaos) getAccessList(header *types.Header, parentState *state.StateDB) 
 	if num >= 2 && num > lastUpdated+1 {
 		parent := c.chain.GetHeader(header.ParentHash, num-1)
 		if parent != nil {
-			if v, ok := c.accesslists.Get(parent.ParentHash); ok {
+			if v, ok := c.accesslist.Get(parent.ParentHash); ok {
 				m := v.(map[common.Address]accessDirection)
-				c.accesslists.Add(header.ParentHash, m)
+				c.accesslist.Add(header.ParentHash, m)
 				return m, nil
 			}
 		} else {
@@ -197,7 +197,7 @@ func (c *Chaos) getAccessList(header *types.Header, parentState *state.StateDB) 
 			m[to] = DirectionTo
 		}
 	}
-	c.accesslists.Add(header.ParentHash, m)
+	c.accesslist.Add(header.ParentHash, m)
 	return m, nil
 }
 

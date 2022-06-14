@@ -50,6 +50,7 @@ const (
 	checkpointInterval = 1024 // Number of blocks after which to save the vote snapshot to the database
 	inmemorySnapshots  = 128  // Number of recent vote snapshots to keep in memory
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
+	inmemoryAccesslist = 21   // Number of recent accesslist snapshots to keep in memory
 
 	wiggleTime        = 500 * time.Millisecond // Random delay (per validator) to allow concurrent validators
 	minNotInTurnDelay = 100 * time.Millisecond // Minimal delay for a not-in-turn validator to seal a block
@@ -199,7 +200,7 @@ type Chaos struct {
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
 
-	accesslists     *lru.Cache // accesslists caches recent accesslist to speed up transactions validation
+	accesslist      *lru.Cache // accesslists caches recent accesslist to speed up transactions validation
 	accessLock      sync.Mutex // Make sure only get accesslist once for each block
 	eventCheckRules *lru.Cache // eventCheckRules caches recent EventCheckRules to speed up log validation
 	rulesLock       sync.Mutex // Make sure only get eventCheckRules once for each block
@@ -238,6 +239,8 @@ func New(chainConfig *params.ChainConfig, db ethdb.Database) *Chaos {
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
+	accesslist, _ := lru.New(inmemoryAccesslist)
+	eventCheckRules, _ := lru.New(inmemoryAccesslist)
 
 	return &Chaos{
 		chainConfig:         chainConfig,
@@ -245,6 +248,8 @@ func New(chainConfig *params.ChainConfig, db ethdb.Database) *Chaos {
 		db:                  db,
 		recents:             recents,
 		signatures:          signatures,
+		accesslist:          accesslist,
+		eventCheckRules:     eventCheckRules,
 		signer:              types.LatestSignerForChainID(chainConfig.ChainID),
 		rewardsUpdatePeroid: blocksPerDay, // default value is one day
 	}

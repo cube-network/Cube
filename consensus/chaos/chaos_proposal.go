@@ -182,10 +182,28 @@ func (c *Chaos) replayProposal(chain consensus.ChainHeaderReader, header *types.
 func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, prop *systemcontract.Proposal, totalTxIndex int, txHash, bHash common.Hash) *types.Receipt {
 	var receipt *types.Receipt
 	action := prop.Action.Uint64()
+	state.Prepare(txHash, totalTxIndex)
+	// emit an event defined as follows:
+	// event ProposalExecuted(address indexed _from, address indexed _to, uint256 indexed _value, uint256 _id, uint256 _action, bytes _data)
+	// event signature:  crypto.Keccak256([]byte("ProposalExecuted(address,address,uint256,uint256,uint256,bytes)"))
+	// "0xce6004e6e4497b8f4978e17f771f74179bea0aeb34ed808a76f26ae79f23c541"
+	topics := []common.Hash{
+		proposalExecutedEventSig,
+		prop.From.Hash(),
+		prop.To.Hash(),
+		common.BigToHash(prop.Value),
+	}
+	// build data
+	data := buildProposalExecutedEventData(prop)
+	state.AddLog(&types.Log{
+		Address:     system.OnChainDaoContract,
+		Topics:      topics,
+		Data:        data,
+		BlockNumber: header.Number.Uint64(),
+	})
 	switch action {
 	case 0:
 		// evm action.
-		state.Prepare(txHash, totalTxIndex)
 		err := systemcontract.ExecuteProposal(&systemcontract.CallContext{
 			Statedb:      state,
 			Header:       header,
@@ -194,8 +212,6 @@ func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *ty
 		}, prop)
 		receipt = types.NewReceipt([]byte{}, err != nil, header.GasUsed)
 		// Set the receipt logs and create a bloom for filtering
-		receipt.Logs = state.GetLogs(txHash, bHash)
-		receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 		log.Info("executeProposalMsg", "action", "evmCall", "id", prop.Id.String(), "from", prop.From, "to", prop.To, "value", prop.Value.String(), "data", hexutil.Encode(prop.Data), "txHash", txHash.String(), "err", err)
 
 	case 1:
@@ -208,12 +224,28 @@ func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *ty
 		log.Warn("executeProposalMsg failed, unsupported action", "action", action, "id", prop.Id.String(), "from", prop.From, "to", prop.To, "value", prop.Value.String(), "data", hexutil.Encode(prop.Data), "txHash", txHash.String())
 	}
 
+	receipt.Logs = state.GetLogs(txHash, bHash)
+	receipt.Bloom = types.CreateBloom(types.Receipts{receipt})
 	receipt.TxHash = txHash
 	receipt.BlockHash = bHash
 	receipt.BlockNumber = header.Number
 	receipt.TransactionIndex = uint(state.TxIndex())
 
 	return receipt
+}
+
+func buildProposalExecutedEventData(prop *systemcontract.Proposal) []byte {
+	// proposal data length, pad to n * HashLen(32 bytes)
+	propDataLen := ((len(prop.Data) + common.HashLength - 1) / common.HashLength) * common.HashLength
+	// id,action,propDataPosition(0x60),propDataLen, propData
+	dataLen := 4*common.HashLength + propDataLen
+	data := make([]byte, dataLen)
+	copy(data[:common.HashLength], common.BigToHash(prop.Id).Bytes())
+	copy(data[common.HashLength:2*common.HashLength], common.BigToHash(prop.Action).Bytes())
+	copy(data[2*common.HashLength:3*common.HashLength], common.BytesToHash([]byte{0x60}).Bytes())
+	copy(data[3*common.HashLength:4*common.HashLength], common.BigToHash(big.NewInt(int64(len(prop.Data)))).Bytes())
+	copy(data[4*common.HashLength:], prop.Data)
+	return data
 }
 
 // IsSysTransaction checks whether a specific transaction is a system transaction.

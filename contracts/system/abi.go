@@ -328,6 +328,19 @@ const (
 	// AddressListABI contains methods to interactive with AddressList contract.
 	AddressListABI = `[
 		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_admin",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
+		{
 			"inputs": [],
 			"name": "getBlacksFrom",
 			"outputs": [
@@ -399,6 +412,19 @@ const (
 
 	// OnChainDaoABI contains methods to interactive with OnChainDao contract.
 	OnChainDaoABI = `[
+		{
+			"inputs": [
+				{
+					"internalType": "address",
+					"name": "_admin",
+					"type": "address"
+				}
+			],
+			"name": "initialize",
+			"outputs": [],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		},
 		{
 			"inputs": [],
 			"name": "getPassedProposalCount",

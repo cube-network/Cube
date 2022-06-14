@@ -41,7 +41,7 @@ type Proposal struct {
 // GetTopValidators return the result of calling method `getTopValidators` in Staking contract
 func GetTopValidators(ctx *CallContext) ([]common.Address, error) {
 	const method = "getTopValidators"
-	result, err := contractRead(ctx, system.StakingContract, method)
+	result, err := contractRead(ctx, system.StakingContract, method, TopValidatorNum)
 	if err != nil {
 		log.Error("GetTopValidators contractRead failed", "err", err)
 		return []common.Address{}, err
@@ -172,6 +172,7 @@ func IsDoubleSignPunished(ctx *CallContext, punishHash common.Hash) (bool, error
 	return punished, nil
 }
 
+// GetBlacksFrom return the access tx-from list
 func GetBlacksFrom(ctx *CallContext) ([]common.Address, error) {
 	const method = "getBlacksFrom"
 	result, err := contractRead(ctx, system.AddressListContract, method)
@@ -186,6 +187,7 @@ func GetBlacksFrom(ctx *CallContext) ([]common.Address, error) {
 	return from, nil
 }
 
+// GetBlacksTo return access tx-to list
 func GetBlacksTo(ctx *CallContext) ([]common.Address, error) {
 	const method = "getBlacksTo"
 	result, err := contractRead(ctx, system.AddressListContract, method)
@@ -200,9 +202,10 @@ func GetBlacksTo(ctx *CallContext) ([]common.Address, error) {
 	return to, nil
 }
 
+// GetRuleByIndex return event log rules
 func GetRuleByIndex(ctx *CallContext, idx uint32) (common.Hash, int, common.AddressCheckType, error) {
 	const method = "getRuleByIndex"
-	results, err := contractReadAll(ctx, system.AddressListContract, method)
+	results, err := contractReadAll(ctx, system.AddressListContract, method, idx)
 	if err != nil {
 		log.Error("GetRuleByIndex contractRead failed", "err", err)
 		return common.Hash{}, 0, common.CheckNone, err
@@ -228,6 +231,7 @@ func GetRuleByIndex(ctx *CallContext, idx uint32) (common.Hash, int, common.Addr
 	return sig, int(index.Int64()), common.AddressCheckType(ctype), nil
 }
 
+// GetRulesLen return event log rules length
 func GetRulesLen(ctx *CallContext) (uint32, error) {
 	const method = "rulesLen"
 	result, err := contractRead(ctx, system.AddressListContract, method)
@@ -240,61 +244,6 @@ func GetRulesLen(ctx *CallContext) (uint32, error) {
 		return 0, errors.New("GetRulesLen: invalid result format")
 	}
 	return n, nil
-}
-
-func GetPassedProposalCount(ctx *CallContext) (uint32, error) {
-	const method = "getPassedProposalCount"
-	result, err := contractRead(ctx, system.OnChainDaoContract, method)
-	if err != nil {
-		log.Error("GetPassedProposalCount contractRead failed", "err", err)
-		return 0, err
-	}
-	count, ok := result.(uint32)
-	if !ok {
-		return 0, errors.New("GetPassedProposalCount: invalid result format")
-	}
-	return count, nil
-}
-
-func GetPassedProposalByIndex(ctx *CallContext, idx uint32) (*Proposal, error) {
-	const method = "getPassedProposalByIndex"
-	abi := system.ABI(system.OnChainDaoContract)
-	result, err := contractReadBytes(ctx, system.OnChainDaoContract, &abi, method, idx)
-	if err != nil {
-		log.Error("GetPassedProposalByIndex contractReadBytes failed", "idx", idx, "err", err)
-		return nil, err
-	}
-	// unpack data
-	prop := &Proposal{}
-	if err = abi.UnpackIntoInterface(prop, method, result); err != nil {
-		log.Error("GetPassedProposalByIndex UnpackIntoInterface failed", "idx", idx, "err", err)
-		return nil, err
-	}
-	return prop, nil
-}
-
-func FinishProposalById(ctx *CallContext, id *big.Int) error {
-	const method = "finishProposalById"
-	err := contractWrite(ctx, system.OnChainDaoContract, method, id)
-	if err != nil {
-		log.Error("FinishProposalById failed", "id", id, "err", err)
-	}
-	return err
-}
-
-func ExecuteProposal(ctx *CallContext, prop *Proposal) error {
-	_, err := CallContractWithValue(ctx, prop.From, &prop.To, prop.Data, prop.Value)
-	if err != nil {
-		log.Error("ExecuteProposal failed", "proposal", prop, "err", err)
-	}
-	return err
-}
-
-func ExecuteProposalWithGivenEVM(evm *vm.EVM, prop *Proposal, gas uint64) (ret []byte, err error) {
-	if ret, err = VMCallContract(evm, prop.From, &prop.To, prop.Data, gas); err != nil {
-		log.Error("ExecuteProposalWithGivenEVM failed", "proposal", prop, "err", err)
-	}
-	return
 }
 
 // Since the state variables are as follow:
@@ -316,16 +265,79 @@ func IsDeveloperVerificationEnabled(state consensus.StateReader) bool {
 	return enabledByte == 0x01
 }
 
+// LastBlackUpdatedNumber returns LastBlackUpdatedNumber of address list
 func LastBlackUpdatedNumber(state consensus.StateReader) uint64 {
 	value := state.GetState(system.AddressListContract, system.BlackLastUpdatedNumberPosition)
 	return value.Big().Uint64()
 }
 
+// LastRulesUpdatedNumber returns LastRulesUpdatedNumber of address list
 func LastRulesUpdatedNumber(state consensus.StateReader) uint64 {
 	value := state.GetState(system.AddressListContract, system.RulesLastUpdatedNumberPosition)
 	return value.Big().Uint64()
 }
 
+// GetPassedProposalCount returns passed proposal count
+func GetPassedProposalCount(ctx *CallContext) (uint32, error) {
+	const method = "getPassedProposalCount"
+	result, err := contractRead(ctx, system.OnChainDaoContract, method)
+	if err != nil {
+		log.Error("GetPassedProposalCount contractRead failed", "err", err)
+		return 0, err
+	}
+	count, ok := result.(uint32)
+	if !ok {
+		return 0, errors.New("GetPassedProposalCount: invalid result format")
+	}
+	return count, nil
+}
+
+// GetPassedProposalByIndex returns passed proposal by index
+func GetPassedProposalByIndex(ctx *CallContext, idx uint32) (*Proposal, error) {
+	const method = "getPassedProposalByIndex"
+	abi := system.ABI(system.OnChainDaoContract)
+	result, err := contractReadBytes(ctx, system.OnChainDaoContract, &abi, method, idx)
+	if err != nil {
+		log.Error("GetPassedProposalByIndex contractReadBytes failed", "idx", idx, "err", err)
+		return nil, err
+	}
+	// unpack data
+	prop := &Proposal{}
+	if err = abi.UnpackIntoInterface(prop, method, result); err != nil {
+		log.Error("GetPassedProposalByIndex UnpackIntoInterface failed", "idx", idx, "err", err)
+		return nil, err
+	}
+	return prop, nil
+}
+
+// FinishProposalById finish passed proposal by id
+func FinishProposalById(ctx *CallContext, id *big.Int) error {
+	const method = "finishProposalById"
+	err := contractWrite(ctx, system.OnChainDaoContract, method, id)
+	if err != nil {
+		log.Error("FinishProposalById failed", "id", id, "err", err)
+	}
+	return err
+}
+
+// ExecuteProposal executes proposal
+func ExecuteProposal(ctx *CallContext, prop *Proposal) error {
+	_, err := CallContractWithValue(ctx, prop.From, &prop.To, prop.Data, prop.Value)
+	if err != nil {
+		log.Error("ExecuteProposal failed", "proposal", prop, "err", err)
+	}
+	return err
+}
+
+// ExecuteProposalWithGivenEVM executes proposal by given evm
+func ExecuteProposalWithGivenEVM(evm *vm.EVM, prop *Proposal, gas uint64) (ret []byte, err error) {
+	if ret, err = VMCallContract(evm, prop.From, &prop.To, prop.Data, gas); err != nil {
+		log.Error("ExecuteProposalWithGivenEVM failed", "proposal", prop, "err", err)
+	}
+	return
+}
+
+// contractRead perform contract read
 func contractRead(ctx *CallContext, contract common.Address, method string, args ...interface{}) (interface{}, error) {
 	ret, err := contractReadAll(ctx, contract, method, args...)
 	if err != nil {
@@ -337,6 +349,7 @@ func contractRead(ctx *CallContext, contract common.Address, method string, args
 	return ret[0], nil
 }
 
+// contractReadAll perform contract Read and return all results
 func contractReadAll(ctx *CallContext, contract common.Address, method string, args ...interface{}) ([]interface{}, error) {
 	abi := system.ABI(contract)
 	result, err := contractReadBytes(ctx, contract, &abi, method, args...)
@@ -351,6 +364,7 @@ func contractReadAll(ctx *CallContext, contract common.Address, method string, a
 	return ret, nil
 }
 
+// contractReadBytes perform read contract and returns bytes
 func contractReadBytes(ctx *CallContext, contract common.Address, abi *abi.ABI, method string, args ...interface{}) ([]byte, error) {
 	data, err := abi.Pack(method, args...)
 	if err != nil {
@@ -365,13 +379,14 @@ func contractReadBytes(ctx *CallContext, contract common.Address, abi *abi.ABI, 
 	return result, nil
 }
 
+// contractWrite perform write contract
 func contractWrite(ctx *CallContext, contract common.Address, method string, args ...interface{}) error {
 	data, err := system.ABIPack(contract, method, args...)
 	if err != nil {
 		log.Error("Can't pack data", "method", method, "error", err)
 		return err
 	}
-	if _, err := CallContract(ctx, &system.OnChainDaoContract, data); err != nil {
+	if _, err := CallContract(ctx, &contract, data); err != nil {
 		log.Error("Failed to execute", "method", method, "err", err)
 		return err
 	}

@@ -35,8 +35,16 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+// event ProposalExecuted(address indexed _from, address indexed _to, uint256 indexed _value, uint256 _id, uint256 _action, bytes _data)
+// event signature:  crypto.Keccak256([]byte("ProposalExecuted(address,address,uint256,uint256,uint256,bytes)"))
+// "0xce6004e6e4497b8f4978e17f771f74179bea0aeb34ed808a76f26ae79f23c541"
+var (
+	proposalTxMark           = common.HexToAddress("0x000000000000000000000000000000000000FFFF")
+	proposalExecutedEventSig = common.HexToHash("0xce6004e6e4497b8f4978e17f771f74179bea0aeb34ed808a76f26ae79f23c541")
+)
+
 // processProposalTx process tx of system proposal
-// Due to the logics of the finish operation of contract `OnChainDao`, when finishing a proposal which
+// Due to the logics of the finish operation of contract ``, when finishing a proposal which
 // is not the last passed proposal, it will change the sequence. So in here we must first executes all
 // passed proposals, and then finish then all.
 func (c *Chaos) processProposalTx(chain consensus.ChainHeaderReader, header *types.Header,
@@ -137,7 +145,7 @@ func (c *Chaos) executeProposal(chain consensus.ChainHeaderReader, header *types
 	}
 	//make system governance transaction
 	nonce := state.GetNonce(c.validator)
-	tx := types.NewTransaction(nonce, system.OnChainDaoContract, common.Big0, header.GasLimit, new(big.Int), propRLP)
+	tx := types.NewTransaction(nonce, proposalTxMark, common.Big0, header.GasLimit, new(big.Int), propRLP)
 	if tx, err = c.signTxFn(accounts.Account{Address: c.validator}, tx, chain.Config().ChainID); err != nil {
 		return nil, nil, err
 	}
@@ -214,7 +222,7 @@ func (c *Chaos) IsSysTransaction(sender common.Address, tx *types.Transaction, h
 		return false
 	}
 	to := tx.To()
-	if sender == header.Coinbase && *to == system.OnChainDaoContract && tx.GasPrice().Sign() == 0 {
+	if sender == header.Coinbase && *to == proposalTxMark && tx.GasPrice().Sign() == 0 {
 		return true
 	}
 	// Make sure the miner can NOT call the system contract through a normal transaction.

@@ -196,7 +196,7 @@ func (c *Chaos) executeProposalMsg(chain consensus.ChainHeaderReader, header *ty
 	// build data
 	data := buildProposalExecutedEventData(prop)
 	state.AddLog(&types.Log{
-		Address:     system.OnChainDaoContract,
+		Address:     proposalTxMark,
 		Topics:      topics,
 		Data:        data,
 		BlockNumber: header.Number.Uint64(),

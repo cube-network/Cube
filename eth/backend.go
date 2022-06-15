@@ -214,8 +214,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// do some extra work if consensus engine is chaos.
 	if chaosEngine, ok := eth.engine.(*chaos.Chaos); ok {
-		// set state fn
+		// set chain & state fn
+		chaosEngine.SetChain(eth.blockchain)
 		chaosEngine.SetStateFn(eth.blockchain.StateAt)
+
 		// Init RewardsUpdatePeroid
 		currState, err := eth.blockchain.State()
 		if err != nil {

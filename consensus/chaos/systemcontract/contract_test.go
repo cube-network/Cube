@@ -636,6 +636,8 @@ func TestExecuteProposalWithGivenEVM(t *testing.T) {
 
 // Utils function to do system contracts update of hardforks
 func hardforksUpdate(ctx *CallContext) error {
+	ctx.ChainConfig.HeliocentrismBlock = common.Big1
+	ctx.ChainConfig.GravitationBlock = common.Big1
 	for _, hardfork := range []string{Heliocentrism, Gravitation} {
 		if err := ApplySystemContractUpgrade(hardfork, ctx.Statedb, ctx.Header, ctx.ChainContext, ctx.ChainConfig); err != nil {
 			return err

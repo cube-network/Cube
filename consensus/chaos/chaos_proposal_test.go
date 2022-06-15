@@ -2,11 +2,12 @@ package chaos
 
 import (
 	"bytes"
+	"math/big"
+	"testing"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/chaos/systemcontract"
 	"github.com/stretchr/testify/require"
-	"math/big"
-	"testing"
 )
 
 func TestBuildProposalExecutedEventData(t *testing.T) {

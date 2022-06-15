@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/modern-go/reflect2"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -234,8 +235,8 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
-	if engine := bc.Engine(); engine != nil {
-		if chaosEngine, isChaosEngine := engine.(consensus.ChaosEngine); isChaosEngine {
+	if !reflect2.IsNil(bc) && bc.Engine() != nil {
+		if chaosEngine, isChaosEngine := bc.Engine().(consensus.ChaosEngine); isChaosEngine {
 			blockContext.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
 		}
 	}

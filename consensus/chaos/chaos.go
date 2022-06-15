@@ -706,12 +706,14 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 		}
 	}
 	// punish double sign
-	err := c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined)
+	if err := c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined); err != nil {
+		return err
+	}
 	if chain.Config().IsGravitation(header.Number) {
 		// process proposal
-		err = c.processProposalTx(chain, header, state, txs, receipts, proposalTxs, mined)
+		return c.processProposalTx(chain, header, state, txs, receipts, proposalTxs, mined)
 	}
-	return err
+	return nil
 }
 
 // updateValidators updates validators info to system contracts

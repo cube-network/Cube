@@ -53,7 +53,7 @@ func (s *StakingV2) DoUpdate(state *state.StateDB, header *types.Header, chainCo
 	contractCode := common.FromHex(system.StakingV2Code)
 	//write code to sys contract
 	state.SetCode(system.StakingContract, contractCode)
-	log.Debug("Write code to system contract account", "addr", system.StakingContract.String(), "code", system.StakingV1Code)
+	log.Debug("Write code to system contract account", "addr", system.StakingContract.String(), "code", system.StakingV2Code)
 	return
 }
 

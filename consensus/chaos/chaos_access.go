@@ -114,9 +114,9 @@ func (c *Chaos) CanCreate(state consensus.StateReader, addr common.Address, heig
 	return true
 }
 
-// ValidateTx do a consensus-related validation on the given transaction at the given header and state.
+// FilterTx do a consensus-related validation on the given transaction at the given header and state.
 // the parentState must be the state of the header's parent block.
-func (c *Chaos) ValidateTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error {
+func (c *Chaos) FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error {
 	// Must use the parent state for current validation,
 	// so we must starting the validation after GravitationBlock
 	if c.chainConfig.GravitationBlock != nil && c.chainConfig.GravitationBlock.Cmp(header.Number) < 0 {

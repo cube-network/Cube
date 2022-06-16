@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/modern-go/reflect2"
 )
 
 // StateProcessor is a basic Processor, which takes care of transitioning
@@ -130,7 +129,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 				proposalTxs = append(proposalTxs, tx)
 				continue
 			}
-			if err = chaosEngine.ValidateTx(sender, tx, header, statedb); err != nil {
+			if err = chaosEngine.FilterTx(sender, tx, header, statedb); err != nil {
 				return nil, nil, 0, err
 			}
 		}
@@ -228,18 +227,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, accessFilter vm.EvmAccessFilter) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number), header.BaseFee)
 	if err != nil {
 		return nil, err
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
-	if !reflect2.IsNil(bc) && bc.Engine() != nil {
-		if chaosEngine, isChaosEngine := bc.Engine().(consensus.ChaosEngine); isChaosEngine {
-			blockContext.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
-		}
-	}
+	blockContext.AccessFilter = accessFilter
 
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)

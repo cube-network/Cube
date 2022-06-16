@@ -189,8 +189,8 @@ type ChaosEngine interface {
 	// CanCreate determines where a given address can create a new contract.
 	CanCreate(state StateReader, addr common.Address, height *big.Int) bool
 
-	// ValidateTx do a consensus-related validation on the given transaction at the given header and state.
-	ValidateTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+	// FilterTx do a consensus-related validation on the given transaction at the given header and state.
+	FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
 
 	// CreateEvmAccessFilter returns a EvmAccessFilter if necessary.
 	CreateEvmAccessFilter(header *types.Header, parentState *state.StateDB) vm.EvmAccessFilter

@@ -153,8 +153,8 @@ type blockChain interface {
 	SubscribeChainHeadEvent(ch chan<- ChainHeadEvent) event.Subscription
 }
 
-type exTxValidator interface {
-	ValidateTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+type txFilter interface {
+	FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
 }
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -271,6 +271,13 @@ type TxPool struct {
 
 	jamIndexer *txJamIndexer // tx jam indexer
 
+	txFilter         txFilter      // A specific consensus can use this to do some extra validation to a transaction
+	nextFilterHeader *types.Header // A mock header of next block for transaction filter
+
+	// there's a special case we need this: during a large chain insertion, the ChainHeadEvent will not be fired in time, then some old trie-nodes
+	// will be discarded due to GC, and it will cause failure to get blacklist.
+	disableTxFilter bool // disableTxFilter will disable the tx filter during a period if it's true,
+
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
 	reqResetCh      chan *txpoolResetRequest
@@ -344,6 +351,23 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 	go pool.loop()
 
 	return pool
+}
+
+// InitTxFilter sets the extra validator
+func (pool *TxPool) InitTxFilter(v txFilter) {
+	pool.makeFilterHeader(pool.chain.CurrentBlock().Header())
+	pool.txFilter = v
+}
+
+func (pool *TxPool) makeFilterHeader(currHead *types.Header) {
+	next := new(big.Int).Add(currHead.Number, big.NewInt(1))
+	pool.nextFilterHeader = &types.Header{
+		ParentHash: currHead.Hash(),
+		Difficulty: new(big.Int).Set(currHead.Difficulty),
+		Number:     next,
+		GasLimit:   currHead.GasLimit,
+		Time:       currHead.Time + 1,
+	}
 }
 
 // loop is the transaction pool's main event loop, waiting for and reacting to
@@ -669,6 +693,18 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
+	}
+
+	// do some extra validation if needed
+	if pool.txFilter != nil && !pool.disableTxFilter {
+		err := pool.txFilter.FilterTx(from, tx, pool.nextFilterHeader, pool.currentState)
+		if err == types.ErrAddressDenied {
+			return err
+		}
+		if err != nil {
+			log.Info("ValidateTx error", "err", err)
+			pool.disableTxFilter = true
+		}
 	}
 	return nil
 }
@@ -1331,6 +1367,12 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 
 	// Update all fork indicator by next pending block number.
 	next := new(big.Int).Add(newHead.Number, big.NewInt(1))
+
+	if pool.txFilter != nil {
+		pool.makeFilterHeader(newHead)
+		pool.disableTxFilter = false
+	}
+
 	pool.istanbul = pool.chainconfig.IsIstanbul(next)
 	pool.eip2718 = pool.chainconfig.IsBerlin(next)
 	pool.eip1559 = pool.chainconfig.IsLondon(next)

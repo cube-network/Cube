@@ -224,6 +224,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		chaosEngine.SetChain(eth.blockchain)
 		chaosEngine.SetStateFn(eth.blockchain.StateAt)
 
+		// set consensus-related transaction validator
+		eth.txPool.InitTxFilter(chaosEngine)
+
 		// Init RewardsUpdatePeroid
 		currState, err := eth.blockchain.State()
 		if err != nil {

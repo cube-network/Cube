@@ -123,17 +123,17 @@ func Transfer(db vm.StateDB, sender, recipient common.Address, amount *big.Int) 
 // GetCanCreateFn returns the checking function used to decide allowance of contract creation
 func GetCanCreateFn(chain ChainContext) vm.CanCreateFunc {
 	if reflect2.IsNil(chain) || chain.Engine() == nil {
-		return func(db vm.StateDB, address common.Address, height *big.Int) bool {
+		return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
 			return true
 		}
 	}
 	chaosEngine, isChaosEngine := chain.Engine().(consensus.ChaosEngine)
 	if isChaosEngine {
-		return func(db vm.StateDB, address common.Address, height *big.Int) bool {
-			return chaosEngine.CanCreate(db, address, height)
+		return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
+			return chaosEngine.CanCreate(db, address, isContract, height)
 		}
 	}
-	return func(db vm.StateDB, address common.Address, height *big.Int) bool {
+	return func(db vm.StateDB, address common.Address, isContract bool, height *big.Int) bool {
 		return true
 	}
 }

@@ -8,6 +8,9 @@ import "./library/initializable.sol";
 // NOTE: Never change the sequence of storage variables.
 contract AddressList is Initializable {
     bool public devVerifyEnabled;
+    // [precondition: the `devVerifyEnabled` is true] If contract `A` wants to create a new contract, then whether the address of `A` need to be a `developer`?
+    // true: a contract need to be a `developer` if it wants to create a new contract; false: contracts can create new contracts freely.
+    bool public checkInnerCreation;
     address public admin;
     address public pendingAdmin;
 
@@ -27,6 +30,7 @@ contract AddressList is Initializable {
     //=*=*= End of state variables =*=*=
 
     event EnableStateChanged(bool indexed newState);
+    event CheckInnerCreationStateChanged(bool indexed newState);
 
     event AdminChanging(address indexed newAdmin);
     event AdminChanged(address indexed newAdmin);
@@ -110,6 +114,18 @@ contract AddressList is Initializable {
         require(devVerifyEnabled, "already disabled");
         devVerifyEnabled = false;
         emit EnableStateChanged(false);
+    }
+
+    function enableCheckInnerCreation() external onlyAdmin {
+        require(checkInnerCreation == false, "already enabled");
+        checkInnerCreation = true;
+        emit CheckInnerCreationStateChanged(true);
+    }
+
+    function disableCheckInnerCreation() external onlyAdmin {
+        require(checkInnerCreation, "already disabled");
+        checkInnerCreation = false;
+        emit CheckInnerCreationStateChanged(false);
     }
 
     function commitChangeAdmin(address newAdmin) external onlyAdmin {

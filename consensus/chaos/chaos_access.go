@@ -102,13 +102,17 @@ func (b *chaosAccessFilter) IsLogDenied(evLog *types.Log) bool {
 //
 // This will queries the system Developers contract, by DIRECTLY to get the target slot value of the contract,
 // it means that it's strongly relative to the layout of the Developers contract's state variables
-func (c *Chaos) CanCreate(state consensus.StateReader, addr common.Address, height *big.Int) bool {
+func (c *Chaos) CanCreate(state consensus.StateReader, addr common.Address, isContract bool, height *big.Int) bool {
 	if c.chainConfig.IsGravitation(height) && c.config.EnableDevVerification {
-		if systemcontract.IsDeveloperVerificationEnabled(state) {
-			slot := calcSlotOfDevMappingKey(addr)
-			valueHash := state.GetState(system.AddressListContract, slot)
-			// none zero value means true
-			return valueHash.Big().Sign() > 0
+		devVerifyEnabled, checkInnerCreation := systemcontract.IsDeveloperVerificationEnabled(state)
+		if devVerifyEnabled {
+			if checkInnerCreation ||
+				(!checkInnerCreation && !isContract) {
+				slot := calcSlotOfDevMappingKey(addr)
+				valueHash := state.GetState(system.AddressListContract, slot)
+				// none zero value means true
+				return valueHash.Big().Sign() > 0
+			}
 		}
 	}
 	return true

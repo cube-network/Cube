@@ -187,7 +187,7 @@ type ChaosEngine interface {
 	IsSysTransaction(sender common.Address, tx *types.Transaction, header *types.Header) bool
 
 	// CanCreate determines where a given address can create a new contract.
-	CanCreate(state StateReader, addr common.Address, height *big.Int) bool
+	CanCreate(state StateReader, addr common.Address, isContract bool, height *big.Int) bool
 
 	// FilterTx do a consensus-related validation on the given transaction at the given header and state.
 	FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error

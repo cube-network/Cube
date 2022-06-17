@@ -41,7 +41,7 @@ type (
 	// and is used by the BLOCKHASH EVM op code.
 	GetHashFunc func(uint64) common.Hash
 	// CanCreateFunc is the signature of a contract creation guard function
-	CanCreateFunc func(db StateDB, address common.Address, height *big.Int) bool
+	CanCreateFunc func(db StateDB, address common.Address, isContract bool, height *big.Int) bool
 )
 
 func (evm *EVM) precompile(addr common.Address) (PrecompiledContract, bool) {
@@ -476,8 +476,8 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 	}
 
 	// check developer if needed
-	if evm.Context.CanCreate != nil {
-		if !evm.Context.CanCreate(evm.StateDB, caller.Address(), evm.Context.BlockNumber) {
+	if evm.Context.CanCreate != nil && evm.depth > 0 {
+		if !evm.Context.CanCreate(evm.StateDB, caller.Address(), true, evm.Context.BlockNumber) {
 			return nil, common.Address{}, gas, ErrUnauthorizedDeveloper
 		}
 	}

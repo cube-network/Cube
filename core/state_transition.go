@@ -371,9 +371,9 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		st.state.PrepareAccessList(msg.From(), msg.To(), vm.ActivePrecompiles(rules), msg.AccessList())
 	}
 
-	// Check if can create
+	// Check if the sender can create
 	if contractCreation && st.evm.Context.CanCreate != nil {
-		if !st.evm.Context.CanCreate(st.evm.StateDB, msg.From(), st.evm.Context.BlockNumber) {
+		if !st.evm.Context.CanCreate(st.evm.StateDB, msg.From(), false, st.evm.Context.BlockNumber) {
 			return nil, ErrUnauthorizedDeveloper
 		}
 	}

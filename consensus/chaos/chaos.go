@@ -236,6 +236,11 @@ func New(chainConfig *params.ChainConfig, db ethdb.Database) *Chaos {
 		conf.Epoch = epochLength
 	}
 
+	// set admin in system contracts of GravitationHardFork if it's provided for private/develop chain
+	if (conf.AdminDevnet != common.Address{}) {
+		systemcontract.AdminDevnet = conf.AdminDevnet
+	}
+
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)

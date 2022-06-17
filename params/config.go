@@ -251,8 +251,9 @@ type ChaosConfig struct {
 	// That is: only attest to a block which height is ≤ `currentHead - AttestationDelay`
 	AttestationDelay uint64 `json:"attestationDelay"`
 
-	Rule                  uint64 `json:"rule"`                  // Version of Chaos, which differ in behavious, 0 is the lastest default one
-	EnableDevVerification bool   `json:"enableDevVerification"` // Enable developer address verification
+	Rule                  uint64         `json:"rule"`                  // Version of Chaos, which differ in behavious, 0 is the lastest default one
+	EnableDevVerification bool           `json:"enableDevVerification"` // Enable developer address verification
+	AdminDevnet           common.Address `json:"adminDevnet,omitempty"` // admin address in system contracts of GravitationHardFork for a private chain, ONLY used by develop or private chain.
 }
 
 // String implements the stringer interface, returning the consensus engine details.

@@ -32,6 +32,8 @@ var (
 
 	onChainDaoAdmin        = common.HexToAddress("0x")
 	onChainDaoAdminTestnet = common.HexToAddress("0x")
+
+	AdminDevnet common.Address
 )
 
 func GravitationHardFork() []IUpgradeAction {
@@ -73,11 +75,11 @@ func (s *AddressList) DoUpdate(state *state.StateDB, header *types.Header, chain
 
 	method := "initialize"
 
-	var admin common.Address
+	admin := addressListAdminTestnet
 	if config.ChainID.Cmp(params.MainnetChainConfig.ChainID) == 0 {
 		admin = addressListAdmin
-	} else {
-		admin = addressListAdminTestnet
+	} else if config.ChainID.Cmp(params.TestnetChainConfig.ChainID) != 0 && (AdminDevnet != common.Address{}) {
+		admin = AdminDevnet
 	}
 
 	data, err := system.ABIPack(system.AddressListContract, method, admin)
@@ -111,11 +113,11 @@ func (s *OnChainDao) DoUpdate(state *state.StateDB, header *types.Header, chainC
 
 	method := "initialize"
 
-	var admin common.Address
+	admin := onChainDaoAdminTestnet
 	if config.ChainID.Cmp(params.MainnetChainConfig.ChainID) == 0 {
 		admin = onChainDaoAdmin
-	} else {
-		admin = onChainDaoAdminTestnet
+	} else if config.ChainID.Cmp(params.TestChainConfig.ChainID) != 0 && (AdminDevnet != common.Address{}) {
+		admin = AdminDevnet
 	}
 	data, err := system.ABIPack(system.OnChainDaoContract, method, admin)
 	if err != nil {

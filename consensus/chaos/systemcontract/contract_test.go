@@ -117,6 +117,27 @@ const testAbi = `[
 		"stateMutability": "nonpayable",
 		"type": "function"
 	},
+    {
+      "inputs": [],
+      "name": "disableCheckInnerCreation",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "disableDevVerify",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "enableCheckInnerCreation",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
 	{
 		"inputs": [],
 		"name": "enableDevVerify",
@@ -453,18 +474,26 @@ func TestIsDeveloperVerificationEnabled(t *testing.T) {
 
 	assert.NoError(t, hardforksUpdate(ctx), "hardforksUpdate error")
 
-	enabled := IsDeveloperVerificationEnabled(ctx.Statedb)
-	assert.NoError(t, err, "TestIsDeveloperVerificationEnabled error")
-
+	enabled, checkInnerCreation := IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.Equal(t, false, enabled)
+	assert.Equal(t, false, checkInnerCreation)
 
 	ctx.Header.Coinbase = addressListAdmin
 	writeContract(t, ctx, &system.AddressListContract, "enableDevVerify")
-
-	enabled = IsDeveloperVerificationEnabled(ctx.Statedb)
-	assert.NoError(t, err, "TestIsDeveloperVerificationEnabled error")
-
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.Equal(t, true, enabled)
+	assert.Equal(t, false, checkInnerCreation)
+
+	writeContract(t, ctx, &system.AddressListContract, "disableDevVerify")
+	writeContract(t, ctx, &system.AddressListContract, "enableCheckInnerCreation")
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
+	assert.Equal(t, false, enabled)
+	assert.Equal(t, true, checkInnerCreation)
+
+	writeContract(t, ctx, &system.AddressListContract, "enableDevVerify")
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
+	assert.Equal(t, true, enabled)
+	assert.Equal(t, true, checkInnerCreation)
 }
 
 func TestLastBlackUpdatedNumber(t *testing.T) {
@@ -583,12 +612,13 @@ func TestExecuteProposal(t *testing.T) {
 
 	assert.NoError(t, hardforksUpdate(ctx), "hardforksUpdate error")
 
-	enabled := IsDeveloperVerificationEnabled(ctx.Statedb)
+	enabled, checkInnerCreation := IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.NoError(t, err, "ExecuteProposal error")
 	assert.Equal(t, false, enabled)
+	assert.Equal(t, false, checkInnerCreation)
 
-	abi, err := abi.JSON(strings.NewReader(testAbi))
-	data, err := abi.Pack("enableDevVerify")
+	tabi, err := abi.JSON(strings.NewReader(testAbi))
+	data, err := tabi.Pack("enableDevVerify")
 	assert.NoError(t, err, "ExecuteProposal error")
 	prop := &Proposal{
 		From:  addressListAdmin,
@@ -599,9 +629,28 @@ func TestExecuteProposal(t *testing.T) {
 	err = ExecuteProposal(ctx, prop)
 	assert.NoError(t, err, "ExecuteProposal error")
 
-	enabled = IsDeveloperVerificationEnabled(ctx.Statedb)
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.NoError(t, err, "ExecuteProposal error")
 	assert.Equal(t, true, enabled)
+	assert.Equal(t, false, checkInnerCreation)
+
+	// enableCheckInnerCreation
+	tabi, err = abi.JSON(strings.NewReader(testAbi))
+	data, err = tabi.Pack("enableCheckInnerCreation")
+	assert.NoError(t, err, "ExecuteProposal error")
+	prop = &Proposal{
+		From:  addressListAdmin,
+		To:    system.AddressListContract,
+		Value: common.Big0,
+		Data:  data,
+	}
+	err = ExecuteProposal(ctx, prop)
+	assert.NoError(t, err, "ExecuteProposal error")
+
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
+	assert.NoError(t, err, "ExecuteProposal error")
+	assert.Equal(t, true, enabled)
+	assert.Equal(t, true, checkInnerCreation)
 }
 
 func TestExecuteProposalWithGivenEVM(t *testing.T) {
@@ -610,12 +659,13 @@ func TestExecuteProposalWithGivenEVM(t *testing.T) {
 
 	assert.NoError(t, hardforksUpdate(ctx), "hardforksUpdate error")
 
-	enabled := IsDeveloperVerificationEnabled(ctx.Statedb)
+	enabled, checkInnerCreation := IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.NoError(t, err, "ExecuteProposalWithGivenEVM error")
 	assert.Equal(t, false, enabled)
+	assert.Equal(t, false, checkInnerCreation)
 
-	abi, err := abi.JSON(strings.NewReader(testAbi))
-	data, err := abi.Pack("enableDevVerify")
+	tabi, err := abi.JSON(strings.NewReader(testAbi))
+	data, err := tabi.Pack("enableDevVerify")
 	assert.NoError(t, err, "ExecuteProposal error")
 	prop := &Proposal{
 		From:  addressListAdmin,
@@ -628,10 +678,23 @@ func TestExecuteProposalWithGivenEVM(t *testing.T) {
 	evm := vm.NewEVM(blockContext, vm.TxContext{}, ctx.Statedb, ctx.ChainConfig, vm.Config{})
 	_, err = ExecuteProposalWithGivenEVM(evm, prop, 100000)
 	assert.NoError(t, err, "ExecuteProposalWithGivenEVM error")
+	// enableCheckInnerCreation
+	tabi, err = abi.JSON(strings.NewReader(testAbi))
+	data, err = tabi.Pack("enableCheckInnerCreation")
+	assert.NoError(t, err, "ExecuteProposal error")
+	prop = &Proposal{
+		From:  addressListAdmin,
+		To:    system.AddressListContract,
+		Value: common.Big0,
+		Data:  data,
+	}
+	_, err = ExecuteProposalWithGivenEVM(evm, prop, 100000)
+	assert.NoError(t, err, "ExecuteProposalWithGivenEVM error")
 
-	enabled = IsDeveloperVerificationEnabled(ctx.Statedb)
+	enabled, checkInnerCreation = IsDeveloperVerificationEnabled(ctx.Statedb)
 	assert.NoError(t, err, "ExecuteProposalWithGivenEVM error")
 	assert.Equal(t, true, enabled)
+	assert.Equal(t, true, checkInnerCreation)
 }
 
 // Utils function to do system contracts update of hardforks

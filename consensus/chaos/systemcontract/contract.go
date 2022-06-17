@@ -246,23 +246,26 @@ func GetRulesLen(ctx *CallContext) (uint32, error) {
 	return n, nil
 }
 
-// Since the state variables are as follow:
+// IsDeveloperVerificationEnabled returns developer verification flags (devVerifyEnabled,checkInnerCreation).
+// Since the state variables are as follows:
 //    bool public initialized;
-//    bool public enabled;
+//    bool public devVerifyEnabled;
+//	  bool public checkInnerCreation;
 //    address public admin;
 //    address public pendingAdmin;
 //    mapping(address => bool) private devs;
 //
 // according to [Layout of State Variables in Storage](https://docs.soliditylang.org/en/v0.8.4/internals/layout_in_storage.html),
-// and after optimizer enabled, the `initialized`, `enabled` and `admin` will be packed, and stores at slot 0,
+// and after optimizer enabled, the `initialized`, `devVerifyEnabled`, `checkInnerCreation` and `admin` will be packed, and stores at slot 0,
 // `pendingAdmin` stores at slot 1, and the position for `devs` is 2.
-func IsDeveloperVerificationEnabled(state consensus.StateReader) bool {
-	compactValue := state.GetState(system.AddressListContract, common.Hash{})
+func IsDeveloperVerificationEnabled(state consensus.StateReader) (devVerifyEnabled, checkInnerCreation bool) {
+	compactValue := state.GetState(system.AddressListContract, common.Hash{}).Bytes()
 	// Layout of slot 0:
-	// [0   -    9][10-29][  30   ][    31     ]
-	// [zero bytes][admin][enabled][initialized]
-	enabledByte := compactValue.Bytes()[common.HashLength-2]
-	return enabledByte == 0x01
+	// [0   -    8][9-28][        29        ][       30       ][    31     ]
+	// [zero bytes][admin][checkInnerCreation][devVerifyEnabled][initialized]
+	devVerifyEnabled = compactValue[30] == 0x01
+	checkInnerCreation = compactValue[29] == 0x01
+	return
 }
 
 // LastBlackUpdatedNumber returns LastBlackUpdatedNumber of address list

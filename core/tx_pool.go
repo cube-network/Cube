@@ -155,6 +155,7 @@ type blockChain interface {
 
 type txFilter interface {
 	FilterTx(sender common.Address, tx *types.Transaction, header *types.Header, parentState *state.StateDB) error
+	CanCreate(state consensus.StateReader, addr common.Address, isContract bool, height *big.Int) bool
 }
 
 // TxPoolConfig are the configuration parameters of the transaction pool.
@@ -706,6 +707,13 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 			pool.disableTxFilter = true
 		}
 	}
+	if pool.txFilter != nil && tx.To() == nil {
+		canCreate := pool.txFilter.CanCreate(pool.currentState, from, false, pool.nextFilterHeader.Number)
+		if !canCreate {
+			return ErrUnauthorizedDeveloper
+		}
+	}
+
 	return nil
 }
 

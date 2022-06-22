@@ -570,3 +570,41 @@ func TestIsDoubleSignPunishTransaction(t *testing.T) {
 	check = (&Chaos{}).IsDoubleSignPunishTransaction(header.Coinbase, tx, header)
 	assert.True(t, check)
 }
+
+func TestExecutedDoubleSignPunishTopic(t *testing.T) {
+	keccak256Bytes := crypto.Keccak256([]byte("ExecutedDoubleSignPunish(address,address,uint8,bytes)"))
+	topicStr := common.BytesToHash(keccak256Bytes).String()
+	require.True(t, topicStr == "0x250969e8ccb0e19752686619d1ce1af974eeea52b88479ca3ec6cced6b7c9198")
+}
+
+func TestBuildDoubleSignPunishExecutedEventData(t *testing.T) {
+	testcases := []struct {
+		p      *types.ViolateCasperFFGPunish
+		expect []byte
+	}{
+		{
+			p: &types.ViolateCasperFFGPunish{
+				PunishType: big.NewInt(0),
+				Before:     nil,
+				After:      nil,
+				BlockNum:   big.NewInt(0),
+				Data:       common.Hex2Bytes("00000000000000000000000088e0231aedd860cd4b241ffa83ee944a9dfcd7b9"),
+			},
+			expect: common.Hex2Bytes("0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002000000000000000000000000088e0231aedd860cd4b241ffa83ee944a9dfcd7b9"),
+		},
+		{
+			p: &types.ViolateCasperFFGPunish{
+				PunishType: big.NewInt(0),
+				Before:     nil,
+				After:      nil,
+				BlockNum:   big.NewInt(0),
+				Data:       common.Hex2Bytes("a9059cbb00000000000000000000000088e0231aedd860cd4b241ffa83ee944a9dfcd7b90000000000000000000000000000000000000000000000006e8ff610f77700ac"),
+			},
+			expect: common.Hex2Bytes("00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000044a9059cbb00000000000000000000000088e0231aedd860cd4b241ffa83ee944a9dfcd7b90000000000000000000000000000000000000000000000006e8ff610f77700ac00000000000000000000000000000000000000000000000000000000"),
+		},
+	}
+	for i, tc := range testcases {
+		got := buildDoubleSignPunishExecutedEventData(tc.p)
+		require.True(t, bytes.Equal(tc.expect, got), i)
+	}
+}

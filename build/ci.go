@@ -255,7 +255,7 @@ func buildFlags(env build.Environment) (flags []string) {
 	// Strip DWARF on darwin. This used to be required for certain things,
 	// and there is no downside to this, so we just keep doing it.
 	if runtime.GOOS == "darwin" {
-		ld = append(ld, "-s")
+		// ld = append(ld, "-s")
 	}
 	// Enforce the stacksize to 8M, which is the case on most platforms apart from
 	// alpine Linux.

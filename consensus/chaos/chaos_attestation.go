@@ -29,8 +29,9 @@ var (
 	doubleSignIdentity = common.HexToAddress("0xfffffffffffffffffffffffffffffffffffffffe")
 	uint256Max, _      = new(big.Int).SetString("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", 0)
 
-	// event ExecutedDoubleSignPunish(address indexed plaintiff, address indexed defendant, uint8 punishType value);
-	executedDoubleSignPunishTopic = common.HexToHash("0x1874a4becdbc3c81b2409d3af931b783d9f5a7c77cb4a75fb2986b452b447688") // TODO
+	// event ExecutedDoubleSignPunish(address indexed plaintiff, address indexed defendant, uint8 indexed value, bytes data);
+	// event signature:  crypto.Keccak256([]byte("ExecutedDoubleSignPunish(address,address,uint8,bytes)"))
+	executedDoubleSignPunishEventSig = common.HexToHash("0x250969e8ccb0e19752686619d1ce1af974eeea52b88479ca3ec6cced6b7c9198")
 )
 
 // punishDoubleSign punishes double sign attack in casper ffg
@@ -335,10 +336,18 @@ func (c *Chaos) executeDoubleSignPunishMsg(chain consensus.ChainHeaderReader, he
 	var receipt *types.Receipt
 
 	state.Prepare(txHash, totalTxIndex)
+	topics := []common.Hash{
+		executedDoubleSignPunishEventSig,
+		p.Plaintiff.Hash(),
+		p.Defendant.Hash(),
+		common.BigToHash(p.PunishType),
+	}
+	// build data
+	data := buildDoubleSignPunishExecutedEventData(p)
 	pLog := &types.Log{
 		Address:     system.StakingContract,
-		Topics:      []common.Hash{executedDoubleSignPunishTopic, p.Plaintiff.Hash(), p.Defendant.Hash(), common.BigToHash(p.PunishType)},
-		Data:        p.Data,
+		Topics:      topics,
+		Data:        data,
 		BlockNumber: header.Number.Uint64(),
 	}
 	state.AddLog(pLog)
@@ -399,4 +408,14 @@ func (c *Chaos) ApplyDoubleSignPunishTx(evm *vm.EVM, sender common.Address, tx *
 	}
 	err = systemcontract.DoubleSignPunishWithGivenEVM(evm, p.Plaintiff, p.Hash(), p.Defendant)
 	return nil, nil, err
+}
+
+func buildDoubleSignPunishExecutedEventData(p *types.ViolateCasperFFGPunish) []byte {
+	doubleSignPunishDataLen := ((len(p.Data) + common.HashLength - 1) / common.HashLength) * common.HashLength
+	dataLen := 2*common.HashLength + doubleSignPunishDataLen
+	data := make([]byte, dataLen)
+	copy(data[:common.HashLength], common.BytesToHash([]byte{0x20}).Bytes())
+	copy(data[common.HashLength:2*common.HashLength], common.BigToHash(big.NewInt(int64(len(p.Data)))).Bytes())
+	copy(data[2*common.HashLength:], p.Data)
+	return data
 }

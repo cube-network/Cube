@@ -27,7 +27,10 @@ import (
 )
 
 func HeliocentrismHardFork() []IUpgradeAction {
-	return []IUpgradeAction{&StakingV1{}}
+	return []IUpgradeAction{
+		&StakingV1{},
+		&GenesisLockV1{},
+	}
 }
 
 type StakingV1 struct {
@@ -41,6 +44,21 @@ func (s *StakingV1) DoUpdate(state *state.StateDB, header *types.Header, chainCo
 	contractCode := common.FromHex(system.StakingV1Code)
 	//write code to sys contract
 	state.SetCode(system.StakingContract, contractCode)
-	log.Debug("Write code to system contract account", "addr", system.StakingContract.String(), "code", system.StakingV1Code)
+	log.Debug("Write code to system contract account", "addr", system.StakingContract, "code", system.StakingV1Code)
+	return
+}
+
+type GenesisLockV1 struct {
+}
+
+func (h *GenesisLockV1) GetName() string {
+	return "GenesisLockV1"
+}
+
+func (s *GenesisLockV1) DoUpdate(state *state.StateDB, header *types.Header, chainContext core.ChainContext, config *params.ChainConfig) (err error) {
+	contractCode := common.FromHex(system.GenesisLockV1Code)
+	//write code to sys contract
+	state.SetCode(system.GenesisLockContract, contractCode)
+	log.Debug("Write code to system contract account", "addr", system.GenesisLockContract, "code", system.GenesisLockV1Code)
 	return
 }

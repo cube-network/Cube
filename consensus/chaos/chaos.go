@@ -985,12 +985,12 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 // PreHandle handles before tx execution in miner
 func (c *Chaos) PreHandle(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
 	// handle all hardforks
-	for name, number := range map[string]*big.Int{
-		systemcontract.Heliocentrism: c.chainConfig.HeliocentrismBlock,
-		systemcontract.Gravitation:   c.chainConfig.GravitationBlock,
+	for _, hardfork := range []systemcontract.Hardfork{
+		{Name: systemcontract.Heliocentrism, Number: c.chainConfig.HeliocentrismBlock},
+		{Name: systemcontract.Gravitation, Number: c.chainConfig.GravitationBlock},
 	} {
-		if number != nil && number.Cmp(header.Number) == 0 {
-			if err := systemcontract.ApplySystemContractUpgrade(name, state, header,
+		if hardfork.Number != nil && hardfork.Number.Cmp(header.Number) == 0 {
+			if err := systemcontract.ApplySystemContractUpgrade(hardfork.Name, state, header,
 				newChainContext(chain, c), c.chainConfig); err != nil {
 				return err
 			}

@@ -205,8 +205,6 @@ type Chaos struct {
 	eventCheckRules *lru.Cache // eventCheckRules caches recent EventCheckRules to speed up log validation
 	rulesLock       sync.Mutex // Make sure only get eventCheckRules once for each block
 
-	proposals map[common.Address]bool // Current list of proposals we are pushing
-
 	signer types.Signer // the signer instance to recover tx sender
 
 	validator common.Address // Ethereum address of the signing key
@@ -984,12 +982,19 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	}
 }
 
+// PreHandle handles before tx execution in miner
 func (c *Chaos) PreHandle(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB) error {
-	if c.chainConfig.HeliocentrismBlock != nil && c.chainConfig.HeliocentrismBlock.Cmp(header.Number) == 0 {
-		return systemcontract.ApplySystemContractUpgrade(systemcontract.Heliocentrism, state, header, newChainContext(chain, c), c.chainConfig)
-	}
-	if c.chainConfig.GravitationBlock != nil && c.chainConfig.GravitationBlock.Cmp(header.Number) == 0 {
-		return systemcontract.ApplySystemContractUpgrade(systemcontract.Gravitation, state, header, newChainContext(chain, c), c.chainConfig)
+	// handle all hardforks
+	for name, number := range map[string]*big.Int{
+		systemcontract.Heliocentrism: c.chainConfig.HeliocentrismBlock,
+		systemcontract.Gravitation:   c.chainConfig.GravitationBlock,
+	} {
+		if number != nil && number.Cmp(header.Number) == 0 {
+			if err := systemcontract.ApplySystemContractUpgrade(name, state, header,
+				newChainContext(chain, c), c.chainConfig); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

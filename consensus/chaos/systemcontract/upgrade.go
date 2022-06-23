@@ -1,6 +1,8 @@
 package systemcontract
 
 import (
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -25,6 +27,12 @@ type IUpgradeAction interface {
 
 	// DoUpdate is used to add/update system contracts as well as initialization
 	DoUpdate(state *state.StateDB, header *types.Header, chainContext core.ChainContext, config *params.ChainConfig) error
+}
+
+// Hardfork conbines name and number
+type Hardfork struct {
+	Name   string
+	Number *big.Int
 }
 
 // ApplySystemContractUpgrade updates the system contract when hardfork happens

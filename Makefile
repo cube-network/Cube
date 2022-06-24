@@ -51,4 +51,4 @@ devtools:
 	@type "protoc" 2> /dev/null || echo 'Please install protoc'
 
 build_docker:
-	docker build -t cubenetwork/geth .
+	docker build -t cubenetwork/cube-client .

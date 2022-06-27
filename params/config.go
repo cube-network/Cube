@@ -57,6 +57,7 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		HeliocentrismBlock:  big.NewInt(0),
+		GravitationBlock:    big.NewInt(829915),
 		Chaos: &ChaosConfig{
 			Period:                3,
 			Epoch:                 200,
@@ -81,7 +82,8 @@ var (
 		MuirGlacierBlock:    nil,
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
-		HeliocentrismBlock:  big.NewInt(10000000), // TODO
+		HeliocentrismBlock:  big.NewInt(1404110),
+		GravitationBlock:    big.NewInt(1404110),
 		Chaos: &ChaosConfig{
 			Period:                3,
 			Epoch:                 200,

@@ -27,11 +27,11 @@ import (
 )
 
 var (
-	addressListAdmin        = common.HexToAddress("0x")
-	addressListAdminTestnet = common.HexToAddress("0x")
+	addressListAdmin        = common.HexToAddress("0x6f326b326fea7d1786e45ff25adb67c8532b5234")
+	addressListAdminTestnet = common.HexToAddress("0x148c4f33de145c11bdcfbb0f188dfc8fa75d3568")
 
-	onChainDaoAdmin        = common.HexToAddress("0x")
-	onChainDaoAdminTestnet = common.HexToAddress("0x")
+	onChainDaoAdmin        = common.HexToAddress("0x93b54cbed48d92fb891ded0d02336dd1e2faa627")
+	onChainDaoAdminTestnet = common.HexToAddress("0x91e8bafe89c485645beed0c26fabc79a98a0ce2e")
 
 	AdminDevnet common.Address
 )

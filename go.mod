@@ -2,6 +2,8 @@ module github.com/ethereum/go-ethereum
 
 go 1.15
 
+replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
+
 require (
 	github.com/Azure/azure-pipeline-go v0.2.2 // indirect
 	github.com/Azure/azure-storage-blob-go v0.7.0
@@ -70,4 +72,8 @@ require (
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/olebedev/go-duktape.v3 v3.0.0-20200619000410-60c24ae608a6
 	gopkg.in/urfave/cli.v1 v1.20.0
+	github.com/cosmos/cosmos-sdk v0.45.5
+	github.com/cosmos/ibc-go/v3 v3
 )
+
+replace github.com/cosmos/ibc-go/v3 => ./ibc/cosmos

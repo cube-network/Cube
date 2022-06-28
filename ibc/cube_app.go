@@ -1,6 +1,10 @@
 package ibc
 
 import (
+	"compress/gzip"
+	"encoding/json"
+	"fmt"
+	"github.com/cosmos/cosmos-sdk/client"
 	"github.com/cosmos/cosmos-sdk/version"
 	"github.com/cosmos/cosmos-sdk/x/auth"
 	authsims "github.com/cosmos/cosmos-sdk/x/auth/simulation"
@@ -26,14 +30,24 @@ import (
 	"github.com/cosmos/ibc-go/v3/modules/apps/transfer"
 	ibc "github.com/cosmos/ibc-go/v3/modules/core"
 	porttypes "github.com/cosmos/ibc-go/v3/modules/core/05-port/types"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/tendermint/tendermint/libs/log"
 	dbm "github.com/tendermint/tm-db"
+	"io"
+	"io/ioutil"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
-	"github.com/cosmos/cosmos-sdk/codec/types"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
 	authkeeper "github.com/cosmos/cosmos-sdk/x/auth/keeper"
@@ -64,12 +78,16 @@ import (
 	ibchost "github.com/cosmos/ibc-go/v3/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v3/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v3/testing/mock"
-	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/eth"
 )
 
 const appName = "CubeApp"
 
 var (
+	genesisFile   = "./cubetestdata/genesis.json"
+	halfchainFile = "./cubetestdata/halfchain.rlp"
+	fullchainFile = "./cubetestdata/chain.rlp"
+
 	// DefaultNodeHome default home directories for the application daemon
 	DefaultNodeHome string
 
@@ -89,7 +107,7 @@ var (
 )
 
 type CubeApp struct {
-	node *eth.Backend
+	eth *eth.Ethereum
 	*baseapp.BaseApp
 
 	// application's protocol version that increments on every upgrade
@@ -98,7 +116,7 @@ type CubeApp struct {
 
 	legacyAmino       *codec.LegacyAmino
 	appCodec          codec.Codec
-	interfaceRegistry types.InterfaceRegistry
+	interfaceRegistry codectypes.InterfaceRegistry
 
 	// keepers
 	AccountKeeper authkeeper.AccountKeeper
@@ -117,6 +135,9 @@ type CubeApp struct {
 	ICAControllerKeeper icacontrollerkeeper.Keeper
 	ICAHostKeeper       icahostkeeper.Keeper
 	TransferKeeper      ibctransferkeeper.Keeper // for cross-chain fungible token transfers
+
+	// make scoped keepers public for test purposes
+	ScopedIBCKeeper capabilitykeeper.ScopedKeeper
 
 	// the module manager
 	mm *module.Manager
@@ -139,7 +160,7 @@ func init() {
 
 func NewCubeApp() *CubeApp {
 	legacyAmino := codec.NewLegacyAmino()
-	interfaceRegistry := types.NewInterfaceRegistry()
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
 	appCodec := codec.NewProtoCodec(interfaceRegistry)
 
 	bApp := baseapp.NewBaseApp(appName, log.NewNopLogger(), dbm.NewMemDB(), tx.NewTxConfig(appCodec, tx.DefaultSignModes).TxDecoder())
@@ -154,11 +175,110 @@ func NewCubeApp() *CubeApp {
 		interfaceRegistry: interfaceRegistry,
 	}
 
+	app.setupGeth()
+
 	app.setupKeeper()
 
 	app.setupRouterAndManagers()
 
 	return app
+}
+
+func (app *CubeApp) setupGeth() {
+	stack, err := node.New(&node.Config{
+		P2P: p2p.Config{
+			ListenAddr:  "127.0.0.1:0",
+			NoDiscovery: true,
+			MaxPeers:    10, // in case a test requires multiple connections, can be changed in the future
+			NoDial:      true,
+		},
+	})
+	if err != nil {
+		return
+	}
+
+	genesis, blocks, err := loadGenesisAndBlocks(halfchainFile, genesisFile)
+	if err != nil {
+		return
+	}
+
+	backend, err := eth.New(stack, &ethconfig.Config{
+		Genesis:                 &genesis,
+		NetworkId:               genesis.Config.ChainID.Uint64(), // 19763
+		DatabaseCache:           10,
+		TrieCleanCache:          10,
+		TrieCleanCacheJournal:   "",
+		TrieCleanCacheRejournal: 60 * time.Minute,
+		TrieDirtyCache:          16,
+		TrieTimeout:             60 * time.Minute,
+		SnapshotCache:           10,
+	})
+	if err != nil {
+		return
+	} else {
+		app.eth = backend
+	}
+
+	_, err = backend.BlockChain().InsertChain(blocks[1:])
+	return
+}
+
+func loadGenesisAndBlocks(chainfile string, genesis string) (core.Genesis, []*types.Block, error) {
+	gen, err := loadGenesis(genesis)
+	if err != nil {
+		return core.Genesis{}, nil, err
+	}
+	gblock := gen.ToBlock(nil)
+
+	blocks, err := blocksFromFile(chainfile, gblock)
+	if err != nil {
+		return core.Genesis{}, nil, err
+	}
+
+	return gen, blocks, nil
+}
+
+func loadGenesis(genesisFile string) (core.Genesis, error) {
+	chainConfig, err := ioutil.ReadFile(genesisFile)
+	if err != nil {
+		return core.Genesis{}, err
+	}
+	var gen core.Genesis
+	if err := json.Unmarshal(chainConfig, &gen); err != nil {
+		return core.Genesis{}, err
+	}
+	return gen, nil
+}
+
+func blocksFromFile(chainfile string, gblock *types.Block) ([]*types.Block, error) {
+	// Load chain.rlp.
+	fh, err := os.Open(chainfile)
+	if err != nil {
+		return nil, err
+	}
+	defer fh.Close()
+	var reader io.Reader = fh
+	if strings.HasSuffix(chainfile, ".gz") {
+		if reader, err = gzip.NewReader(reader); err != nil {
+			return nil, err
+		}
+	}
+	stream := rlp.NewStream(reader, 0)
+	var blocks = make([]*types.Block, 1)
+	blocks[0] = gblock
+	for i := 0; ; i++ {
+		var b types.Block
+		if err := stream.Decode(&b); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("at block index %d: %v", i, err)
+		}
+		if b.NumberU64() != uint64(i+1) {
+			return nil, fmt.Errorf("block at index %d has wrong number %d", i, b.NumberU64())
+		}
+		blocks = append(blocks, &b)
+	}
+	return blocks, nil
 }
 
 func (app *CubeApp) setupKeeper() {
@@ -206,6 +326,8 @@ func (app *CubeApp) setupKeeper() {
 	scopedTransferKeeper := app.CapabilityKeeper.ScopeToModule(ibctransfertypes.ModuleName)
 	scopedICAControllerKeeper := app.CapabilityKeeper.ScopeToModule(icacontrollertypes.SubModuleName)
 	scopedICAHostKeeper := app.CapabilityKeeper.ScopeToModule(icahosttypes.SubModuleName)
+
+	app.ScopedIBCKeeper = scopedIBCKeeper
 
 	// Create IBC Keeper
 	app.IBCKeeper = ibckeeper.NewKeeper(
@@ -358,6 +480,42 @@ func (app *CubeApp) ModuleAccountAddrs() map[string]bool {
 // SetProtocolVersion sets the application's protocol version
 func (app *CubeApp) SetProtocolVersion(v uint64) {
 	app.appVersion = v
+}
+
+// TestingApp functions
+
+// GetBaseApp implements the TestingApp interface.
+func (app *CubeApp) GetBaseApp() *baseapp.BaseApp {
+	return app.BaseApp
+}
+
+// GetStakingKeeper implements the TestingApp interface.
+func (app *CubeApp) GetStakingKeeper() stakingkeeper.Keeper {
+	return app.StakingKeeper
+}
+
+// GetIBCKeeper implements the TestingApp interface.
+func (app *CubeApp) GetIBCKeeper() *ibckeeper.Keeper {
+	return app.IBCKeeper
+}
+
+// GetScopedIBCKeeper implements the TestingApp interface.
+func (app *CubeApp) GetScopedIBCKeeper() capabilitykeeper.ScopedKeeper {
+	return app.ScopedIBCKeeper
+}
+
+// GetTxConfig implements the TestingApp interface.
+func (app *CubeApp) GetTxConfig() client.TxConfig {
+	marshaler := codec.NewProtoCodec(app.interfaceRegistry)
+	return tx.NewTxConfig(marshaler, tx.DefaultSignModes)
+}
+
+// AppCodec returns CubeApp's app codec.
+//
+// NOTE: This is solely to be used for testing purposes as it may be desirable
+// for modules to register their own custom testing types.
+func (app *CubeApp) AppCodec() codec.Codec {
+	return app.appCodec
 }
 
 // initParamsKeeper init params keeper and its subspaces

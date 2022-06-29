@@ -384,3 +384,7 @@ func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 func (b *EthAPIBackend) ChainHeaderReader() consensus.ChainHeaderReader {
 	return b.eth.blockchain
 }
+
+func (b *EthAPIBackend) CrossChain() vm.CrossChainContract {
+	return b.eth.blockchain.Cosmosapp
+}

@@ -124,7 +124,7 @@ type EVM struct {
 	callGasTemp uint64
 
 	// TODO run crosschain tx
-	crosschain CrossChainContract
+	Crosschain CrossChainContract
 }
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
@@ -185,7 +185,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	snapshot := evm.StateDB.Snapshot()
 	p, isPrecompile := evm.precompile(addr)
 
-	isCrossChain := IsCrossChainContract(addr)
+	isCrossChain := false
+	if evm.Crosschain != nil {
+		isCrossChain = IsCrossChainContract(addr)
+	}
 
 	if !evm.StateDB.Exist(addr) {
 		if !isPrecompile && !isCrossChain && evm.chainRules.IsEIP158 && value.Sign() == 0 {
@@ -224,7 +227,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if isPrecompile {
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
 	} else if isCrossChain {
-		ret, gas, err = RunCrossChainContract(evm.crosschain, evm.Context, evm.StateDB, input, gas)
+		ret, gas, err = RunCrossChainContract(evm.Crosschain, evm.Context, evm.StateDB, input, gas)
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.

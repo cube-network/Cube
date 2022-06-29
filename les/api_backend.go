@@ -358,3 +358,7 @@ func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 func (b *LesApiBackend) ChainHeaderReader() consensus.ChainHeaderReader {
 	return b.eth.blockchain
 }
+
+func (b *LesApiBackend) CrossChain() vm.CrossChainContract {
+	return b.eth.blockchain.CrossChain
+}

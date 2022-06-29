@@ -162,6 +162,7 @@ func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
 	if len(c.light_block) > 100 {
 		delete(c.light_block, light_block.Header.Height-100)
 	}
+	log.Debug("new crosschain block, height ", light_block.Height)
 	c.light_block[light_block.Height] = light_block
 }
 

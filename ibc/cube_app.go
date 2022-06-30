@@ -109,6 +109,7 @@ var (
 type CubeApp struct {
 	eth *eth.Ethereum
 	*baseapp.BaseApp
+	ChainID string
 
 	// application's protocol version that increments on every upgrade
 	// if BaseApp is passed to the upgrade keeper's NewKeeper method.
@@ -217,6 +218,7 @@ func (app *CubeApp) setupGeth() {
 		return
 	} else {
 		app.eth = backend
+		app.ChainID = genesis.Config.ChainID.String()
 	}
 
 	_, err = backend.BlockChain().InsertChain(blocks[1:])

@@ -1,4 +1,4 @@
-package ibc
+package crosschain
 
 import (
 	"fmt"

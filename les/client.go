@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
@@ -141,6 +142,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	if leth.blockchain, err = light.NewLightChain(leth.odr, leth.chainConfig, leth.engine, checkpoint); err != nil {
 		return nil, err
 	}
+	// TODO
+	leth.blockchain.CrossChain = crosschain.NewCosmosApp()
+
 	leth.chainReader = leth.blockchain
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)
 

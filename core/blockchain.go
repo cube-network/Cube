@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/syncx"
@@ -234,6 +235,9 @@ type BlockChain struct {
 	lockFutureAttessCache              sync.RWMutex
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
+
+	// TODO IBC
+	Cosmosapp *crosschain.CosmosApp
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1360,6 +1364,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 	}
 
+	// TODO crosschain app hash
+	crosschain_app_hash := bc.Cosmosapp.CommitIBC()
 	// Commit all cached state changes into underlying memory database async.
 	if err = state.AsyncCommit(bc.chainConfig.IsEIP158(block.Number()), afterCommit); err != nil {
 		return NonStatTy, err
@@ -1434,6 +1440,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
+	// TODO notify crosschain new header event
+	log.Debug("make new crosschain header", block.Header().Number.Uint64())
+	bc.Cosmosapp.MakeHeader(block.Header(), crosschain_app_hash)
 	return status, nil
 }
 

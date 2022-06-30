@@ -122,6 +122,9 @@ type EVM struct {
 	// available gas is calculated in gasCall* according to the 63/64 rule and later
 	// applied in opCall*.
 	callGasTemp uint64
+
+	// TODO run crosschain tx
+	Crosschain CrossChainContract
 }
 
 // NewEVM returns a new EVM. The returned EVM is not thread safe and should
@@ -182,8 +185,13 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	snapshot := evm.StateDB.Snapshot()
 	p, isPrecompile := evm.precompile(addr)
 
+	isCrossChain := false
+	if evm.Crosschain != nil {
+		isCrossChain = IsCrossChainContract(addr)
+	}
+
 	if !evm.StateDB.Exist(addr) {
-		if !isPrecompile && evm.chainRules.IsEIP158 && value.Sign() == 0 {
+		if !isPrecompile && !isCrossChain && evm.chainRules.IsEIP158 && value.Sign() == 0 {
 			// Calling a non existing account, don't do anything, but ping the tracer
 			if evm.Config.Debug {
 				if evm.depth == 0 {
@@ -218,6 +226,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 
 	if isPrecompile {
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
+	} else if isCrossChain {
+		ret, gas, err = RunCrossChainContract(evm.Crosschain, evm.Context, evm.StateDB, input, gas)
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.

@@ -18,19 +18,20 @@
 package web3ext
 
 var Modules = map[string]string{
-	"admin":    AdminJs,
-	"clique":   CliqueJs,
-	"chaos":    ChaosJs,
-	"ethash":   EthashJs,
-	"debug":    DebugJs,
-	"eth":      EthJs,
-	"miner":    MinerJs,
-	"net":      NetJs,
-	"personal": PersonalJs,
-	"rpc":      RpcJs,
-	"txpool":   TxpoolJs,
-	"les":      LESJs,
-	"vflux":    VfluxJs,
+	"admin":      AdminJs,
+	"clique":     CliqueJs,
+	"chaos":      ChaosJs,
+	"ethash":     EthashJs,
+	"debug":      DebugJs,
+	"eth":        EthJs,
+	"miner":      MinerJs,
+	"net":        NetJs,
+	"personal":   PersonalJs,
+	"rpc":        RpcJs,
+	"txpool":     TxpoolJs,
+	"les":        LESJs,
+	"vflux":      VfluxJs,
+	"crosschain": CrossChainJs,
 }
 
 const CliqueJs = `
@@ -928,6 +929,25 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'requestStats',
 			getter: 'vflux_requestStats'
+		}),
+	]
+});
+`
+
+const CrossChainJs = `
+web3._extend({
+	property: 'crosschain',
+	methods:
+	[
+		new web3._extend.Method({
+			name: 'aBCIInfo',
+			call: 'crosschain_aBCIInfo',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'aBCIQuery',
+			call: 'crosschain_aBCIQuery',
+			params: 1
 		}),
 	]
 });

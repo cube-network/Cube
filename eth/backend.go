@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
@@ -199,6 +200,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Debug("make cosmos app")
+	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp( /*TODO required args, ie. db*/ )
+
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
@@ -300,6 +305,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				"age", common.PrettyAge(t))
 		}
 	}
+
 	return eth, nil
 }
 
@@ -367,6 +373,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
+	apis = append(apis, crosschain.APIs(s.BlockChain().Cosmosapp)...)
 
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{

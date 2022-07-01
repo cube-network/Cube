@@ -91,19 +91,19 @@ var (
 	// DefaultNodeHome default home directories for the application daemon
 	DefaultNodeHome string
 
-	// module account permissions
-	maccPerms = map[string][]string{
-		authtypes.FeeCollectorName:     nil,
-		distrtypes.ModuleName:          nil,
-		minttypes.ModuleName:           {authtypes.Minter},
-		stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
-		stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
-		govtypes.ModuleName:            {authtypes.Burner},
-		ibctransfertypes.ModuleName:    {authtypes.Minter, authtypes.Burner},
-		ibcfeetypes.ModuleName:         nil,
-		icatypes.ModuleName:            nil,
-		ibcmock.ModuleName:             nil,
-	}
+	//// module account permissions
+	//maccPerms = map[string][]string{
+	//	authtypes.FeeCollectorName:     nil,
+	//	distrtypes.ModuleName:          nil,
+	//	minttypes.ModuleName:           {authtypes.Minter},
+	//	stakingtypes.BondedPoolName:    {authtypes.Burner, authtypes.Staking},
+	//	stakingtypes.NotBondedPoolName: {authtypes.Burner, authtypes.Staking},
+	//	govtypes.ModuleName:            {authtypes.Burner},
+	//	ibctransfertypes.ModuleName:    {authtypes.Minter, authtypes.Burner},
+	//	ibcfeetypes.ModuleName:         nil,
+	//	icatypes.ModuleName:            nil,
+	//	ibcmock.ModuleName:             nil,
+	//}
 )
 
 type CubeApp struct {
@@ -520,22 +520,22 @@ func (app *CubeApp) AppCodec() codec.Codec {
 	return app.appCodec
 }
 
-// initParamsKeeper init params keeper and its subspaces
-func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino, key, tkey sdk.StoreKey) paramskeeper.Keeper {
-	paramsKeeper := paramskeeper.NewKeeper(appCodec, legacyAmino, key, tkey)
-
-	paramsKeeper.Subspace(authtypes.ModuleName)
-	paramsKeeper.Subspace(banktypes.ModuleName)
-	paramsKeeper.Subspace(stakingtypes.ModuleName)
-	paramsKeeper.Subspace(minttypes.ModuleName)
-	paramsKeeper.Subspace(distrtypes.ModuleName)
-	paramsKeeper.Subspace(slashingtypes.ModuleName)
-	paramsKeeper.Subspace(govtypes.ModuleName).WithKeyTable(govtypes.ParamKeyTable())
-	paramsKeeper.Subspace(crisistypes.ModuleName)
-	paramsKeeper.Subspace(ibctransfertypes.ModuleName)
-	paramsKeeper.Subspace(ibchost.ModuleName)
-	paramsKeeper.Subspace(icacontrollertypes.SubModuleName)
-	paramsKeeper.Subspace(icahosttypes.SubModuleName)
-
-	return paramsKeeper
-}
+//// initParamsKeeper init params keeper and its subspaces
+//func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino, key, tkey sdk.StoreKey) paramskeeper.Keeper {
+//	paramsKeeper := paramskeeper.NewKeeper(appCodec, legacyAmino, key, tkey)
+//
+//	paramsKeeper.Subspace(authtypes.ModuleName)
+//	//paramsKeeper.Subspace(banktypes.ModuleName)
+//	//paramsKeeper.Subspace(stakingtypes.ModuleName)
+//	//paramsKeeper.Subspace(minttypes.ModuleName)
+//	//paramsKeeper.Subspace(distrtypes.ModuleName)
+//	//paramsKeeper.Subspace(slashingtypes.ModuleName)
+//	//paramsKeeper.Subspace(govtypes.ModuleName).WithKeyTable(govtypes.ParamKeyTable())
+//	//paramsKeeper.Subspace(crisistypes.ModuleName)
+//	paramsKeeper.Subspace(ibctransfertypes.ModuleName)
+//	paramsKeeper.Subspace(ibchost.ModuleName)
+//	paramsKeeper.Subspace(icacontrollertypes.SubModuleName)
+//	paramsKeeper.Subspace(icahosttypes.SubModuleName)
+//
+//	return paramsKeeper
+//}

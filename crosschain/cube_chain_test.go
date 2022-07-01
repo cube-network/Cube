@@ -6,7 +6,7 @@ import (
 	"math/big"
 	"testing"
 
-	ibctesting "github.com/cosmos/ibc-go/v3/testing"
+	ibctesting "github.com/cosmos/ibc-go/v4/testing"
 )
 
 type TestCubeChain struct {

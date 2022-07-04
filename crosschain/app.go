@@ -24,6 +24,8 @@ import (
 	icahosttypes "github.com/cosmos/ibc-go/v4/modules/apps/27-interchain-accounts/host/types"
 	icatypes "github.com/cosmos/ibc-go/v4/modules/apps/27-interchain-accounts/types"
 	ibcfee "github.com/cosmos/ibc-go/v4/modules/apps/29-fee"
+	ibcfeekeeper "github.com/cosmos/ibc-go/v4/modules/apps/29-fee/keeper"
+	ibcfeetypes "github.com/cosmos/ibc-go/v4/modules/apps/29-fee/types"
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
@@ -41,6 +43,11 @@ import (
 	ct "github.com/tendermint/tendermint/rpc/core/types"
 	tt "github.com/tendermint/tendermint/types"
 	dbm "github.com/tendermint/tm-db"
+)
+
+// IBC application testing ports
+const (
+	MockFeePort string = ibcmock.ModuleName + ibcfeetypes.ModuleName
 )
 
 var (
@@ -72,8 +79,10 @@ type CosmosApp struct {
 	// keepers
 	ParamsKeeper     paramskeeper.Keeper
 	AccountKeeper    icatypes.AccountKeeper //authkeeper.AccountKeeper
+	BankKeeper       ibcfeetypes.BankKeeper
 	CapabilityKeeper *capabilitykeeper.Keeper
 	IBCKeeper        *ibckeeper.Keeper // IBC Keeper must be a pointer in the app, so we can SetRouter on it correctly
+	IBCFeeKeeper     ibcfeekeeper.Keeper
 
 	// todo: to be replaced
 	StakingKeeper clienttypes.StakingKeeper
@@ -104,11 +113,14 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	path := "./data/"
 	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
 	app := &CosmosApp{BaseApp: bApp, codec: codec, cc: cc}
-
-	app.setupBasicKeepers(skipUpgradeHeights, path)
-
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
+
+	app.setupSDKModule(skipUpgradeHeights, path)
+	app.setupMockModule(ibcRouter)
+
+	app.setupFeeModule(ibcRouter)
+
 	// setup for the interchain account module
 	app.setupICAKeepers(ibcRouter)
 
@@ -116,7 +128,9 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	app.IBCKeeper.SetRouter(ibcRouter)
 
 	app.mm = module.NewManager( /* TODO add ibc module here*/
+		ibcfee.NewAppModule(app.IBCFeeKeeper),
 		ica.NewAppModule(&app.ICAControllerKeeper, &app.ICAHostKeeper), // Create Interchain Accounts AppModule
+		app.mockModule,
 	)
 	app.configurator = module.NewConfigurator(app.codec.Marshaler, app.MsgServiceRouter(), app.GRPCQueryRouter())
 	app.mm.RegisterServices(app.configurator)
@@ -124,7 +138,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	return app
 }
 
-func (app *CosmosApp) setupBasicKeepers(skipUpgradeHeights map[int64]bool, homePath string) {
+func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath string) {
 	app.keys = sdk.NewKVStoreKeys(
 		icacontrollertypes.StoreKey, // Create store keys for each submodule Keeper and the authentication module
 		icahosttypes.StoreKey,
@@ -143,7 +157,19 @@ func (app *CosmosApp) setupBasicKeepers(skipUpgradeHeights map[int64]bool, homeP
 	app.BaseApp.SetParamStore(app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramskeeper.ConsensusParamsKeyTable()))
 
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
-	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{}
+
+	// SDK module keepers
+	app.StakingKeeper = &expectedkeepers.CubeStakingKeeper{}
+
+	app.AccountKeeper = &expectedkeepers.CubeAccountKeeper{}
+	// authkeeper.NewAccountKeeper(
+	//	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
+	//)
+
+	app.BankKeeper = &expectedkeepers.CubeBankKeeper{}
+	//	bankkeeper.NewBaseKeeper(
+	//	appCodec, keys[banktypes.StoreKey], app.AccountKeeper, app.GetSubspace(banktypes.ModuleName), app.ModuleAccountAddrs(),
+	//)
 }
 
 func (app *CosmosApp) setupMockModule(ibcRouter *porttypes.Router) {
@@ -155,6 +181,25 @@ func (app *CosmosApp) setupMockModule(ibcRouter *porttypes.Router) {
 
 	mockIBCModule := ibcmock.NewIBCModule(&app.mockModule, ibcmock.NewMockIBCApp(ibcmock.ModuleName, scopedIBCMockKeeper))
 	ibcRouter.AddRoute(ibcmock.ModuleName, mockIBCModule)
+}
+
+func (app *CosmosApp) setupFeeModule(ibcRouter *porttypes.Router) {
+
+	// IBC Fee Module keeper
+	app.IBCFeeKeeper = ibcfeekeeper.NewKeeper(
+		app.codec.Marshaler, app.keys[ibcfeetypes.StoreKey], app.GetSubspace(ibcfeetypes.ModuleName),
+		app.IBCKeeper.ChannelKeeper, // may be replaced with IBC middleware
+		app.IBCKeeper.ChannelKeeper,
+		&app.IBCKeeper.PortKeeper, app.AccountKeeper, app.BankKeeper,
+	)
+
+	scopedFeeMockKeeper := app.CapabilityKeeper.ScopeToModule(MockFeePort)
+
+	// create fee wrapped mock module
+	feeMockModule := ibcmock.NewIBCModule(&app.mockModule, ibcmock.NewMockIBCApp(MockFeePort, scopedFeeMockKeeper))
+	//app.FeeMockModule = feeMockModule
+	feeWithMockModule := ibcfee.NewIBCMiddleware(feeMockModule, app.IBCFeeKeeper)
+	ibcRouter.AddRoute(MockFeePort, feeWithMockModule)
 }
 
 func (app *CosmosApp) setupICAKeepers(ibcRouter *porttypes.Router) {
@@ -170,12 +215,6 @@ func (app *CosmosApp) setupICAKeepers(ibcRouter *porttypes.Router) {
 	scopedICAMockKeeper := app.CapabilityKeeper.ScopeToModule(ibcmock.ModuleName + icacontrollertypes.SubModuleName)
 	//scopedICAAuthKeeper := app.CapabilityKeeper.ScopeToModule(icaauthtypes.ModuleName)
 
-	// SDK module keepers
-	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
-	// authkeeper.NewAccountKeeper(
-	//	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
-	//)
-
 	// IBC Keepers
 	app.IBCKeeper = ibckeeper.NewKeeper(
 		appCodec, app.keys[ibchost.StoreKey], app.GetSubspace(ibchost.ModuleName), app.StakingKeeper, app.UpgradeKeeper, scopedIBCKeeper,
@@ -185,7 +224,7 @@ func (app *CosmosApp) setupICAKeepers(ibcRouter *porttypes.Router) {
 	// ICA Controller keeper
 	app.ICAControllerKeeper = icacontrollerkeeper.NewKeeper(
 		appCodec, app.keys[icacontrollertypes.StoreKey], app.GetSubspace(icacontrollertypes.SubModuleName),
-		app.IBCKeeper.ChannelKeeper, // todo: may be replaced with middleware such as ics29 fee
+		app.IBCFeeKeeper, // todo: may be replaced with middleware such as ics29 fee
 		app.IBCKeeper.ChannelKeeper, &app.IBCKeeper.PortKeeper,
 		scopedICAControllerKeeper, app.MsgServiceRouter(),
 	)

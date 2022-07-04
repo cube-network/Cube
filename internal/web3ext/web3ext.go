@@ -940,14 +940,39 @@ web3._extend({
 	methods:
 	[
 		new web3._extend.Method({
-			name: 'aBCIInfo',
-			call: 'crosschain_aBCIInfo',
+			name: 'cosmosABCIInfo',
+			call: 'crosschain_cosmosABCIInfo',
 			params: 0
 		}),
 		new web3._extend.Method({
-			name: 'aBCIQuery',
-			call: 'crosschain_aBCIQuery',
+			name: 'cosmosABCIQuery',
+			call: 'crosschain_cosmosABCIQuery',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'cosmosCommit',
+			call: 'crosschain_cosmosCommit',
 			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'cosmosValidators',
+			call: 'crosschain_cosmosValidators',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'cosmosLightBlock',
+			call: 'crosschain_cosmosLightBlock',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'cosmosBalances',
+			call: 'crosschain_cosmosBalances',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'cosmosTxsSearch',
+			call: 'crosschain_cosmosTxsSearch',
+			params: 3
 		}),
 	]
 });

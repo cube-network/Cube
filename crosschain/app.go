@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
 	"github.com/ethereum/go-ethereum/log"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tl "github.com/tendermint/tendermint/libs/log"
 	tc "github.com/tendermint/tendermint/rpc/client"
@@ -291,9 +292,23 @@ func (app *CosmosApp) Vote(block_height uint64, Address tt.Address) {
 
 }
 
+// type ResponseQuery struct {
+// 	Code uint32 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+// 	// bytes data = 2; // use "value" instead.
+// 	Log       string           `protobuf:"bytes,3,opt,name=log,proto3" json:"log,omitempty"`
+// 	Info      string           `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
+// 	Index     int64            `protobuf:"varint,5,opt,name=index,proto3" json:"index,omitempty"`
+// 	Key       []byte           `protobuf:"bytes,6,opt,name=key,proto3" json:"key,omitempty"`
+// 	Value     []byte           `protobuf:"bytes,7,opt,name=value,proto3" json:"value,omitempty"`
+// 	ProofOps  *crypto.ProofOps `protobuf:"bytes,8,opt,name=proof_ops,json=proofOps,proto3" json:"proof_ops,omitempty"`
+// 	Height    int64            `protobuf:"varint,9,opt,name=height,proto3" json:"height,omitempty"`
+// 	Codespace string           `protobuf:"bytes,10,opt,name=codespace,proto3" json:"codespace,omitempty"`
+// }
+
 // ABCI Query
 func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryOptions) (*ct.ResultABCIQuery, error) {
-	return nil, nil
+	resp := &ct.ResultABCIQuery{Response: abci.ResponseQuery{Height: opts.Height}}
+	return resp, nil
 }
 
 func (app *CosmosApp) RequiredGas(input []byte) uint64 {
@@ -335,6 +350,7 @@ func (app *CosmosApp) GetMsgs(arg string) ([]sdk.Msg, error) {
 
 	var body tx.TxBody
 	err = app.codec.Marshaler.Unmarshal(argbin, &body)
+	body.UnpackInterfaces(app.codec.InterfaceRegistry)
 	if err != nil {
 		return nil, vm.ErrExecutionReverted
 	}

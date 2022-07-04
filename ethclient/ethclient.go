@@ -24,11 +24,16 @@ import (
 	"fmt"
 	"math/big"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/tendermint/tendermint/libs/bytes"
+	tc "github.com/tendermint/tendermint/rpc/client"
+	tt "github.com/tendermint/tendermint/rpc/core/types"
+	ttt "github.com/tendermint/tendermint/types"
 )
 
 // Client defines typed wrappers for the Ethereum RPC API.
@@ -555,4 +560,76 @@ func toCallArg(msg ethereum.CallMsg) interface{} {
 		arg["gasPrice"] = (*hexutil.Big)(msg.GasPrice)
 	}
 	return arg
+}
+
+// for cosmos
+func (ec *Client) GetLastFinalizedBlockInfo(ctx context.Context) (types.StatusBlockInfo, error) {
+	var bi types.StatusBlockInfo
+	err := ec.c.CallContext(ctx, &bi, "eth_getLastFinalizedBlockInfo")
+	if err != nil {
+		return bi, err
+	}
+	return bi, nil
+}
+
+func (ec *Client) CosmosABCIInfo(ctx context.Context) (*tt.ResultABCIInfo, error) {
+	q := &tt.ResultABCIInfo{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosABCIInfo")
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+func (ec *Client) CosmosABCIQuery(ctx context.Context, path string, data bytes.HexBytes, opts tc.ABCIQueryOptions) (*tt.ResultABCIQuery, error) {
+	q := &tt.ResultABCIQuery{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosABCIQuery", path, data, opts)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosCommit(ctx context.Context, height *int64) (*tt.ResultCommit, error) {
+	q := &tt.ResultCommit{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosCommit", height)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosValidators(ctx context.Context, height *int64, page, perPage *int) (*tt.ResultValidators, error) {
+	q := &tt.ResultValidators{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosValidators", height, page, perPage)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) (*ttt.LightBlock, error) {
+	q := &ttt.LightBlock{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosLightBlock", height)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosBalances(ctx context.Context, account common.Address) (*sdk.Coins, error) {
+	q := &sdk.Coins{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosBalances", account)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosTxsSearch(ctx context.Context, page, limit int, events []string) (*tt.ResultTxSearch, error) {
+	q := &tt.ResultTxSearch{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosTxsSearch", page, limit, events)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
 }

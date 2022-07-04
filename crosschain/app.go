@@ -9,10 +9,12 @@ import (
 	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/version"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
 	capabilitykeeper "github.com/cosmos/cosmos-sdk/x/capability/keeper"
 	capabilitytypes "github.com/cosmos/cosmos-sdk/x/capability/types"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
+	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
 	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 	ica "github.com/cosmos/ibc-go/v4/modules/apps/27-interchain-accounts"
@@ -26,6 +28,8 @@ import (
 	ibcfee "github.com/cosmos/ibc-go/v4/modules/apps/29-fee"
 	ibcfeekeeper "github.com/cosmos/ibc-go/v4/modules/apps/29-fee/keeper"
 	ibcfeetypes "github.com/cosmos/ibc-go/v4/modules/apps/29-fee/types"
+	"github.com/cosmos/ibc-go/v4/modules/apps/transfer"
+	ibctransferkeeper "github.com/cosmos/ibc-go/v4/modules/apps/transfer/keeper"
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
@@ -78,11 +82,12 @@ type CosmosApp struct {
 
 	// keepers
 	ParamsKeeper     paramskeeper.Keeper
-	AccountKeeper    icatypes.AccountKeeper //authkeeper.AccountKeeper
-	BankKeeper       ibcfeetypes.BankKeeper
+	AccountKeeper    icatypes.AccountKeeper         //authkeeper.AccountKeeper
+	BankKeeper       expectedkeepers.CubeBankKeeper //ibcfeetypes.BankKeeper
 	CapabilityKeeper *capabilitykeeper.Keeper
 	IBCKeeper        *ibckeeper.Keeper // IBC Keeper must be a pointer in the app, so we can SetRouter on it correctly
 	IBCFeeKeeper     ibcfeekeeper.Keeper
+	TransferKeeper   ibctransferkeeper.Keeper
 
 	// todo: to be replaced
 	StakingKeeper clienttypes.StakingKeeper
@@ -124,10 +129,13 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	// setup for the interchain account module
 	app.setupICAKeepers(ibcRouter)
 
+	app.setupTransferModule(ibcRouter)
+
 	// Seal the IBC Router
 	app.IBCKeeper.SetRouter(ibcRouter)
 
 	app.mm = module.NewManager( /* TODO add ibc module here*/
+		transfer.NewAppModule(app.TransferKeeper),
 		ibcfee.NewAppModule(app.IBCFeeKeeper),
 		ica.NewAppModule(&app.ICAControllerKeeper, &app.ICAHostKeeper), // Create Interchain Accounts AppModule
 		app.mockModule,
@@ -159,14 +167,14 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
 	// SDK module keepers
-	app.StakingKeeper = &expectedkeepers.CubeStakingKeeper{}
+	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{}
 
-	app.AccountKeeper = &expectedkeepers.CubeAccountKeeper{}
+	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
 	// authkeeper.NewAccountKeeper(
 	//	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
 	//)
 
-	app.BankKeeper = &expectedkeepers.CubeBankKeeper{}
+	app.BankKeeper = expectedkeepers.CubeBankKeeper{}
 	//	bankkeeper.NewBaseKeeper(
 	//	appCodec, keys[banktypes.StoreKey], app.AccountKeeper, app.GetSubspace(banktypes.ModuleName), app.ModuleAccountAddrs(),
 	//)
@@ -274,6 +282,38 @@ func (app *CosmosApp) setupICAKeepers(ibcRouter *porttypes.Router) {
 		AddRoute(ibcmock.ModuleName+icacontrollertypes.SubModuleName, icaControllerStack) // ica with mock auth module stack route to ica (top level of middleware stack)
 }
 
+func (app *CosmosApp) setupTransferModule(ibcRouter *porttypes.Router) {
+	scopedTransferKeeper := app.CapabilityKeeper.ScopeToModule(ibctransfertypes.ModuleName)
+
+	// Create Transfer Keeper and pass IBCFeeKeeper as expected Channel and PortKeeper
+	// since fee middleware will wrap the IBCKeeper for underlying application.
+	app.TransferKeeper = ibctransferkeeper.NewKeeper(
+		app.codec.Marshaler, app.keys[ibctransfertypes.StoreKey], app.GetSubspace(ibctransfertypes.ModuleName),
+		app.IBCFeeKeeper, // ISC4 Wrapper: fee IBC middleware
+		app.IBCKeeper.ChannelKeeper, &app.IBCKeeper.PortKeeper,
+		app.AccountKeeper, app.BankKeeper, scopedTransferKeeper,
+	)
+
+	// Create Transfer Stack
+	// SendPacket, since it is originating from the application to core IBC:
+	// transferKeeper.SendPacket -> fee.SendPacket -> channel.SendPacket
+
+	// RecvPacket, message that originates from core IBC and goes down to app, the flow is the other way
+	// channel.RecvPacket -> fee.OnRecvPacket -> transfer.OnRecvPacket
+
+	// transfer stack contains (from top to bottom):
+	// - IBC Fee Middleware
+	// - Transfer
+
+	// create IBC module from bottom to top of stack
+	var transferStack porttypes.IBCModule
+	transferStack = transfer.NewIBCModule(app.TransferKeeper)
+	transferStack = ibcfee.NewIBCMiddleware(transferStack, app.IBCFeeKeeper)
+
+	// Add transfer stack to IBC Router
+	ibcRouter.AddRoute(ibctransfertypes.ModuleName, transferStack)
+}
+
 //called before mpt.commit
 func (app *CosmosApp) CommitIBC() common.Hash {
 	// app.cc.map[height] = app_hash;
@@ -364,8 +404,8 @@ func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino
 	paramsKeeper := paramskeeper.NewKeeper(appCodec, legacyAmino, key, tkey)
 
 	paramsKeeper.Subspace(authtypes.ModuleName)
-	//paramsKeeper.Subspace(banktypes.ModuleName)
-	//paramsKeeper.Subspace(stakingtypes.ModuleName)
+	paramsKeeper.Subspace(banktypes.ModuleName)
+	paramsKeeper.Subspace(stakingtypes.ModuleName)
 	//paramsKeeper.Subspace(minttypes.ModuleName)
 	//paramsKeeper.Subspace(distrtypes.ModuleName)
 	//paramsKeeper.Subspace(slashingtypes.ModuleName)

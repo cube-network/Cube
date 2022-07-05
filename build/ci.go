@@ -265,6 +265,7 @@ func buildFlags(env build.Environment) (flags []string) {
 	if len(ld) > 0 {
 		flags = append(flags, "-ldflags", strings.Join(ld, " "))
 	}
+	flags = append(flags, "-gcflags", "all=-N -l")
 	return flags
 }
 

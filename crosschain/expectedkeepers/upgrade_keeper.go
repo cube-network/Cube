@@ -7,6 +7,7 @@ import (
 // for core/02-client
 // UpgradeKeeper expected upgrade keeper
 type CubeUpgradeKeeper struct {
+	Stub int
 	//ClearIBCState(ctx sdk.Context, lastHeight int64)
 	//GetUpgradePlan(ctx sdk.Context) (plan upgradetypes.Plan, havePlan bool)
 	//GetUpgradedClient(ctx sdk.Context, height int64) ([]byte, bool)

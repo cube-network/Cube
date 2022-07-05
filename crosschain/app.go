@@ -68,6 +68,8 @@ var (
 	// and genesis verification.
 	ModuleBasics = module.NewBasicManager(
 		ica.AppModuleBasic{},
+		transfer.AppModuleBasic{},
+		ibcfee.AppModuleBasic{},
 	)
 
 	// Add module account permissions
@@ -131,12 +133,11 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	ibcRouter := porttypes.NewRouter()
 
 	app.setupSDKModule(skipUpgradeHeights, path)
+	// setup for the interchain account module
+	app.setupICAKeepers(ibcRouter)
 	app.setupMockModule(ibcRouter)
 
 	app.setupFeeModule(ibcRouter)
-
-	// setup for the interchain account module
-	app.setupICAKeepers(ibcRouter)
 
 	app.setupTransferModule(ibcRouter)
 
@@ -176,12 +177,12 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
 	// SDK module keepers
-	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{}
+	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1}
 
 	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
 	// authkeeper.NewAccountKeeper(
-	//	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
-	//)
+	// 	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
+	// )
 
 	app.BankKeeper = expectedkeepers.CubeBankKeeper{}
 	//	bankkeeper.NewBaseKeeper(

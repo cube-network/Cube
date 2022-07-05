@@ -10,6 +10,7 @@ import (
 // for core/02-client
 // keeper of the staking store
 type CubeStakingKeeper struct {
+	Stub int
 }
 
 // todo: to be implemented

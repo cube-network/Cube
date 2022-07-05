@@ -3,6 +3,7 @@ package expectedkeepers
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	icatypes "github.com/cosmos/ibc-go/v4/modules/apps/27-interchain-accounts/types"
 )
 
 // for apps/27-interchain-accounts
@@ -26,5 +27,5 @@ func (ack CubeAccountKeeper) GetModuleAccount(ctx sdk.Context, name string) auth
 }
 
 func (ack CubeAccountKeeper) GetModuleAddress(name string) sdk.AccAddress {
-	return nil
+	return authtypes.NewModuleAddress(icatypes.ModuleName)
 }

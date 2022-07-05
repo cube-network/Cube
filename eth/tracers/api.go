@@ -81,7 +81,7 @@ type Backend interface {
 	StateAtTransaction(ctx context.Context, block *types.Block, txIndex int, reexec uint64) (core.Message, vm.BlockContext, *state.StateDB, error)
 	ChainHeaderReader() consensus.ChainHeaderReader
 
-	// CrossChain() vm.CrossChainContract
+	CrossChain() vm.CrossChainContract
 }
 
 // API is the collection of tracing APIs exposed over the private debugging endpoint.
@@ -554,6 +554,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 			txContext = core.NewEVMTxContext(msg)
 			vmenv     = vm.NewEVM(vmctx, txContext, statedb, chainConfig, vm.Config{})
 		)
+		vmenv.Crosschain = api.backend.CrossChain()
 		// vmenv.Crosschain = api.backend.Crosschain()
 		statedb.Prepare(tx.Hash(), i)
 		if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
@@ -665,6 +666,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		// Generate the next state snapshot fast without tracing
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		vmenv := vm.NewEVM(blockCtx, core.NewEVMTxContext(msg), statedb, api.backend.ChainConfig(), vm.Config{})
+		vmenv.Crosschain = api.backend.CrossChain()
 		statedb.Prepare(tx.Hash(), i)
 		if isDoubleSignPunishTx {
 			if _, _, err := api.chaosEngine.ApplyDoubleSignPunishTx(vmenv, msg.From(), tx); err != nil {
@@ -790,6 +792,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		}
 		// Execute the transaction and flush any traces to disk
 		vmenv := vm.NewEVM(vmctx, txContext, statedb, chainConfig, vmConf)
+		vmenv.Crosschain = api.backend.CrossChain()
 		statedb.Prepare(tx.Hash(), i)
 		var isDoubleSignPunishTx bool
 		if api.isChaosEngine {
@@ -962,7 +965,8 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 	}
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
-
+	vmenv.Crosschain = api.backend.CrossChain()
+	// TODO cross chain
 	// Call Prepare to clear out the statedb access list
 	statedb.Prepare(txctx.TxHash, txctx.TxIndex)
 

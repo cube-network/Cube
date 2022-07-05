@@ -24,7 +24,7 @@ func APIs(app *CosmosApp) []rpc.API {
 	}}
 }
 
-// Query interface //
+// Query interface
 
 // for test only
 func (api *API) CosmosABCIInfo() (*tt.ResultABCIInfo, error) {
@@ -37,43 +37,27 @@ func (api *API) CosmosABCIQuery(path string, data bytes.HexBytes, opts tc.ABCIQu
 	return api.app.Query(path, data, opts)
 }
 
-// func (api *API) CosmosBlock(height *int64) (*tt.ResultBlock, error) {
-// 	// resultBlock.Block.Time.UnixNano()
-// 	return nil, nil
-// }
-
-// func (api *API) CosmosCommit(height *int64) (*tt.ResultCommit, error) {
-// 	// time
-// 	// apphash
-// 	return nil, nil
-// }
-
 func (api *API) CosmosValidators(height *int64, page, perPage *int) (*tt.ResultValidators, error) {
-	// validator set
-	return nil, nil
-}
+	lb := api.app.cc.GetLightBlock(*height)
+	if lb == nil {
+		return nil, nil
+	}
 
-// // cmd
-// func (api *API) CosmosTx(hash []byte, prove bool) (*tt.ResultTx, error) {
-// 	// proof
-// 	// TODO tendermint
-// 	return nil, nil
-// }
+	val := &tt.ResultValidators{BlockHeight: *height, Count: 1, Total: 1}
+	copy(val.Validators, lb.ValidatorSet.Validators)
+	return val, nil
+}
 
 func (api *API) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTxSearch, error) {
-	return nil, nil
+	return api.app.TxsSearch(page, limit, events)
 }
 
-// func (api *API) CosmosStatus() (*tt.ResultStatus, error) {
-// 	//h.SyncInfo.CatchingUp
-// 	//h.SyncInfo.LatestBlockHeight
-// 	return nil, nil
-// }
-
 func (api *API) CosmosLightBlock(height *int64) (*ttt.LightBlock, error) {
-	return nil, nil
+	lb := api.app.cc.GetLightBlock(*height)
+	return lb, nil
 }
 
 func (api *API) CosmosBalances(account common.Address) (*sdk.Coins, error) {
+	// TODO
 	return nil, nil
 }

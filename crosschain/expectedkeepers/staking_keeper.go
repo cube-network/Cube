@@ -13,11 +13,11 @@ type CubeStakingKeeper struct {
 }
 
 // todo: to be implemented
-func (c *CubeStakingKeeper) GetHistoricalInfo(ctx sdk.Context, height int64) (stakingtypes.HistoricalInfo, bool) {
+func (c CubeStakingKeeper) GetHistoricalInfo(ctx sdk.Context, height int64) (stakingtypes.HistoricalInfo, bool) {
 	return stakingtypes.HistoricalInfo{}, true
 }
 
 // todo: to be implemented
-func (c *CubeStakingKeeper) UnbondingTime(ctx sdk.Context) time.Duration {
+func (c CubeStakingKeeper) UnbondingTime(ctx sdk.Context) time.Duration {
 	return 0
 }

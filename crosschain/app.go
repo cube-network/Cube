@@ -74,6 +74,12 @@ var (
 	// non-dependant module elements, such as codec registration
 	// and genesis verification.
 	ModuleBasics = module.NewBasicManager(
+		capability.AppModuleBasic{},
+		params.AppModuleBasic{},
+		crisis.AppModuleBasic{},
+		ibc.AppModuleBasic{},
+		upgrade.AppModuleBasic{},
+		ibcmock.AppModuleBasic{},
 		ica.AppModuleBasic{},
 		transfer.AppModuleBasic{},
 		ibcfee.AppModuleBasic{},

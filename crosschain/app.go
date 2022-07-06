@@ -1,8 +1,11 @@
 package crosschain
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
+	"strconv"
+
 	"github.com/cosmos/cosmos-sdk/x/capability"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
 	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
@@ -10,7 +13,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/upgrade"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
-	"strconv"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -190,6 +192,9 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	app.mm.RegisterRoutes(app.Router(), app.QueryRouter(), codec.Amino)
 	app.configurator = module.NewConfigurator(app.codec.Marshaler, app.MsgServiceRouter(), app.GRPCQueryRouter())
 	app.mm.RegisterServices(app.configurator)
+
+	// TODO ??
+	app.LoadLatestVersion()
 
 	return app
 }
@@ -434,6 +439,7 @@ func ackPacketQuery(channelID string, seq int) []string {
 		fmt.Sprintf("%s.packet_sequence='%d'", waTag, seq)}
 }
 
+
 func (app *CosmosApp) Run(block_ctx vm.BlockContext, stdb vm.StateDB, input []byte) ([]byte, error) {
 	_, arg, err := UnpackInput(input)
 	if err != nil {
@@ -447,7 +453,8 @@ func (app *CosmosApp) Run(block_ctx vm.BlockContext, stdb vm.StateDB, input []by
 
 	for _, msg := range msgs {
 		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
-			msgResult, err := handler(sdk.Context{}, msg) /*TODO statedb stateobject wrapper */
+			// TODO new cosmos context like query
+			msgResult, err := handler(sdk.Context{}.WithContext(context.Background()), msg) /*TODO statedb stateobject wrapper */
 			if err != nil {
 				return nil, vm.ErrExecutionReverted
 			}

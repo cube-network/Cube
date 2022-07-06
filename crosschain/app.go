@@ -4,6 +4,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/cosmos/cosmos-sdk/x/capability"
+	"github.com/cosmos/cosmos-sdk/x/crisis"
+	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
+	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
 	"github.com/cosmos/cosmos-sdk/x/params"
 	"github.com/cosmos/cosmos-sdk/x/upgrade"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
@@ -95,6 +98,7 @@ type CosmosApp struct {
 	memKeys map[string]*sdk.MemoryStoreKey
 
 	// keepers
+	CrisisKeeper     crisiskeeper.Keeper
 	ParamsKeeper     paramskeeper.Keeper
 	AccountKeeper    icatypes.AccountKeeper         //authkeeper.AccountKeeper
 	BankKeeper       expectedkeepers.CubeBankKeeper //ibcfeetypes.BankKeeper
@@ -156,10 +160,15 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	// Seal the IBC Router
 	app.IBCKeeper.SetRouter(ibcRouter)
 
+	// NOTE: we may consider parsing `appOpts` inside module constructors. For the moment
+	// we prefer to be more strict in what arguments the modules expect.
+	//skipGenesisInvariants := cast.ToBool(app.EmptyAppOptions{}.Get(crisis.FlagSkipGenesisInvariants))
+
 	app.mm = module.NewManager( /* TODO add ibc module here*/
 		upgrade.NewAppModule(app.UpgradeKeeper),
 		ibc.NewAppModule(app.IBCKeeper),
 		params.NewAppModule(app.ParamsKeeper),
+		crisis.NewAppModule(&app.CrisisKeeper, false), // todo: skipGenesisInvariants
 
 		capability.NewAppModule(codec.Marshaler, *app.CapabilityKeeper),
 		transfer.NewAppModule(app.TransferKeeper),
@@ -167,6 +176,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 		ica.NewAppModule(&app.ICAControllerKeeper, &app.ICAHostKeeper), // Create Interchain Accounts AppModule
 		app.mockModule,
 	)
+	app.mm.RegisterInvariants(&app.CrisisKeeper)
 	app.mm.RegisterRoutes(app.Router(), app.QueryRouter(), codec.Amino)
 	app.configurator = module.NewConfigurator(app.codec.Marshaler, app.MsgServiceRouter(), app.GRPCQueryRouter())
 	app.mm.RegisterServices(app.configurator)
@@ -198,6 +208,11 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.ParamsKeeper = initParamsKeeper(appCodec, legacyAmino, app.keys[paramstypes.StoreKey], app.tkeys[paramstypes.TStoreKey])
 	// set the BaseApp's parameter store
 	app.BaseApp.SetParamStore(app.ParamsKeeper.Subspace(baseapp.Paramspace).WithKeyTable(paramskeeper.ConsensusParamsKeyTable()))
+
+	// todo: invCheckPeriod could be written dynamically
+	app.CrisisKeeper = crisiskeeper.NewKeeper(
+		app.GetSubspace(crisistypes.ModuleName), 5, app.BankKeeper, authtypes.FeeCollectorName,
+	)
 
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
@@ -539,7 +554,7 @@ func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino
 	//paramsKeeper.Subspace(distrtypes.ModuleName)
 	//paramsKeeper.Subspace(slashingtypes.ModuleName)
 	//paramsKeeper.Subspace(govtypes.ModuleName).WithKeyTable(govtypes.ParamKeyTable())
-	//paramsKeeper.Subspace(crisistypes.ModuleName)
+	paramsKeeper.Subspace(crisistypes.ModuleName)
 	paramsKeeper.Subspace(ibctransfertypes.ModuleName)
 	paramsKeeper.Subspace(ibchost.ModuleName)
 	paramsKeeper.Subspace(icacontrollertypes.SubModuleName)

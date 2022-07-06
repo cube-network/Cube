@@ -87,7 +87,11 @@ var (
 
 	// Add module account permissions
 	maccPerms = map[string][]string{
-		icatypes.ModuleName: nil,
+		authtypes.FeeCollectorName:  nil,
+		ibctransfertypes.ModuleName: {authtypes.Minter, authtypes.Burner},
+		ibcfeetypes.ModuleName:      nil,
+		icatypes.ModuleName:         nil,
+		ibcmock.ModuleName:          nil,
 	}
 )
 

@@ -3,6 +3,10 @@ package crosschain
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/cosmos/cosmos-sdk/x/capability"
+	"github.com/cosmos/cosmos-sdk/x/params"
+	"github.com/cosmos/cosmos-sdk/x/upgrade"
+	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	"strconv"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
@@ -133,23 +137,37 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	ibcRouter := porttypes.NewRouter()
 
 	app.setupSDKModule(skipUpgradeHeights, path)
+
+	// IBC Keepers
+	app.setupIBCKeeper()
+
+	app.setupMockModule(ibcRouter)
+
 	// setup for the interchain account module
 	app.setupICAKeepers(ibcRouter)
-	app.setupMockModule(ibcRouter)
 
 	app.setupFeeModule(ibcRouter)
 
 	app.setupTransferModule(ibcRouter)
 
+	// seal capability keeper after scoping modules
+	app.CapabilityKeeper.Seal()
+
 	// Seal the IBC Router
 	app.IBCKeeper.SetRouter(ibcRouter)
 
 	app.mm = module.NewManager( /* TODO add ibc module here*/
+		upgrade.NewAppModule(app.UpgradeKeeper),
+		ibc.NewAppModule(app.IBCKeeper),
+		params.NewAppModule(app.ParamsKeeper),
+
+		capability.NewAppModule(codec.Marshaler, *app.CapabilityKeeper),
 		transfer.NewAppModule(app.TransferKeeper),
 		ibcfee.NewAppModule(app.IBCFeeKeeper),
 		ica.NewAppModule(&app.ICAControllerKeeper, &app.ICAHostKeeper), // Create Interchain Accounts AppModule
 		app.mockModule,
 	)
+	app.mm.RegisterRoutes(app.Router(), app.QueryRouter(), codec.Amino)
 	app.configurator = module.NewConfigurator(app.codec.Marshaler, app.MsgServiceRouter(), app.GRPCQueryRouter())
 	app.mm.RegisterServices(app.configurator)
 
@@ -158,9 +176,16 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 
 func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath string) {
 	app.keys = sdk.NewKVStoreKeys(
+		banktypes.StoreKey, stakingtypes.StoreKey,
+		paramstypes.StoreKey,
+		ibchost.StoreKey,
+		upgradetypes.StoreKey,
+		ibctransfertypes.StoreKey,
 		icacontrollertypes.StoreKey, // Create store keys for each submodule Keeper and the authentication module
 		icahosttypes.StoreKey,
 		//icaauthtypes.StoreKey,	// todo: we need to create our own authentication module
+		capabilitytypes.StoreKey,
+		ibcfeetypes.StoreKey,
 	)
 	app.memKeys = sdk.NewMemoryStoreKeys(capabilitytypes.MemStoreKey)
 	app.tkeys = sdk.NewTransientStoreKeys(paramstypes.TStoreKey)
@@ -188,6 +213,17 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	//	bankkeeper.NewBaseKeeper(
 	//	appCodec, keys[banktypes.StoreKey], app.AccountKeeper, app.GetSubspace(banktypes.ModuleName), app.ModuleAccountAddrs(),
 	//)
+}
+
+func (app *CosmosApp) setupIBCKeeper() {
+	// add capability keeper and ScopeToModule for ibc module
+	app.CapabilityKeeper = capabilitykeeper.NewKeeper(app.codec.Marshaler, app.keys[capabilitytypes.StoreKey], app.memKeys[capabilitytypes.MemStoreKey])
+	scopedIBCKeeper := app.CapabilityKeeper.ScopeToModule(ibchost.ModuleName)
+
+	// IBC Keepers
+	app.IBCKeeper = ibckeeper.NewKeeper(
+		app.codec.Marshaler, app.keys[ibchost.StoreKey], app.GetSubspace(ibchost.ModuleName), app.StakingKeeper, app.UpgradeKeeper, scopedIBCKeeper,
+	)
 }
 
 func (app *CosmosApp) setupMockModule(ibcRouter *porttypes.Router) {
@@ -223,20 +259,11 @@ func (app *CosmosApp) setupFeeModule(ibcRouter *porttypes.Router) {
 func (app *CosmosApp) setupICAKeepers(ibcRouter *porttypes.Router) {
 	appCodec := app.codec.Marshaler
 
-	// add capability keeper and ScopeToModule for ibc module
-	app.CapabilityKeeper = capabilitykeeper.NewKeeper(appCodec, app.keys[capabilitytypes.StoreKey], app.memKeys[capabilitytypes.MemStoreKey])
-
 	// Create the scoped keepers for each submodule keeper and authentication keeper
-	scopedIBCKeeper := app.CapabilityKeeper.ScopeToModule(ibchost.ModuleName)
 	scopedICAControllerKeeper := app.CapabilityKeeper.ScopeToModule(icacontrollertypes.SubModuleName)
 	scopedICAHostKeeper := app.CapabilityKeeper.ScopeToModule(icahosttypes.SubModuleName)
 	scopedICAMockKeeper := app.CapabilityKeeper.ScopeToModule(ibcmock.ModuleName + icacontrollertypes.SubModuleName)
 	//scopedICAAuthKeeper := app.CapabilityKeeper.ScopeToModule(icaauthtypes.ModuleName)
-
-	// IBC Keepers
-	app.IBCKeeper = ibckeeper.NewKeeper(
-		appCodec, app.keys[ibchost.StoreKey], app.GetSubspace(ibchost.ModuleName), app.StakingKeeper, app.UpgradeKeeper, scopedIBCKeeper,
-	)
 
 	// Create the Keeper for each submodule
 	// ICA Controller keeper

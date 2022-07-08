@@ -33,7 +33,6 @@ import (
 	"github.com/tendermint/tendermint/libs/bytes"
 	tc "github.com/tendermint/tendermint/rpc/client"
 	tt "github.com/tendermint/tendermint/rpc/core/types"
-	ttt "github.com/tendermint/tendermint/types"
 )
 
 // Client defines typed wrappers for the Ethereum RPC API.
@@ -607,11 +606,11 @@ func (ec *Client) CosmosValidators(ctx context.Context, height *int64, page, per
 	return q, nil
 }
 
-func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) (*ttt.LightBlock, error) {
-	q := &ttt.LightBlock{}
+func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) ([]byte, error) {
+	var q []byte
 	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosLightBlock", height)
 	if err != nil {
-		return q, err
+		return nil, err
 	}
 	return q, nil
 }

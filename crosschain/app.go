@@ -1,10 +1,7 @@
 package crosschain
 
 import (
-	"context"
-	"encoding/hex"
-	"fmt"
-	"strconv"
+	"time"
 
 	"github.com/cosmos/cosmos-sdk/x/capability"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
@@ -18,7 +15,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/types/module"
-	"github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/version"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -44,25 +40,17 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v4/modules/apps/transfer/keeper"
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	chant "github.com/cosmos/ibc-go/v4/modules/core/04-channel/types"
+	abci "github.com/tendermint/tendermint/abci/types"
+
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	et "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/bytes"
+
 	tl "github.com/tendermint/tendermint/libs/log"
-	tc "github.com/tendermint/tendermint/rpc/client"
-	ct "github.com/tendermint/tendermint/rpc/core/types"
-	ttt "github.com/tendermint/tendermint/rpc/core/types"
-	tt "github.com/tendermint/tendermint/types"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -134,7 +122,7 @@ type CosmosApp struct {
 }
 
 // TODO level db/mpt wrapper
-func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
+func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *CosmosApp {
 	log.Debug("new cosmos app...")
 
 	// TODO read path from cmdline/conf
@@ -142,13 +130,15 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	// TODO make db
 	db, _ := sdk.NewLevelDB("application", path)
 	codec := MakeEncodingConfig()
+	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
+	bApp.CC = cc
 	// bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetVersion(version.Version)
 	bApp.SetInterfaceRegistry(codec.InterfaceRegistry)
 
-	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
 	app := &CosmosApp{BaseApp: bApp, codec: codec, cc: cc}
+	app.db = db
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
 
@@ -193,8 +183,13 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool) *CosmosApp {
 	app.configurator = module.NewConfigurator(app.codec.Marshaler, app.MsgServiceRouter(), app.GRPCQueryRouter())
 	app.mm.RegisterServices(app.configurator)
 
-	// TODO ??
-	app.LoadLatestVersion()
+	// initialize stores
+	app.MountKVStores(app.keys)
+	app.MountTransientStores(app.tkeys)
+	app.MountMemoryStores(app.memKeys)
+
+	//
+	app.InitChain(abci.RequestInitChain{InitialHeight: initheader.Number.Int64(), Time: time.Unix(int64(initheader.Time), 0)})
 
 	return app
 }
@@ -379,177 +374,6 @@ func (app *CosmosApp) setupTransferModule(ibcRouter *porttypes.Router) {
 
 	// Add transfer stack to IBC Router
 	ibcRouter.AddRoute(ibctransfertypes.ModuleName, transferStack)
-}
-
-//called before mpt.commit
-func (app *CosmosApp) CommitIBC() common.Hash {
-	// app.cc.map[height] = app_hash;
-	return common.Hash{}
-}
-
-func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) {
-	log.Debug("log make header test")
-	app.cc.MakeLightBlockAndSign(h, app_hash)
-
-}
-
-func (app *CosmosApp) Vote(block_height uint64, Address tt.Address) {
-	// app.cc.MakeCosmosSignedHeader(h, nil)
-
-}
-
-// ABCI Query
-func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryOptions) (*ct.ResultABCIQuery, error) {
-	// TODO check base app query
-	q := abci.RequestQuery{
-		Data: data, Path: path, Height: opts.Height, Prove: opts.Prove,
-	}
-	r := app.BaseApp.Query(q)
-
-	resp := &ct.ResultABCIQuery{Response: r}
-	return resp, nil
-}
-
-func (app *CosmosApp) RequiredGas(input []byte) uint64 {
-	// TODO fixed gas cost for demo test
-	return 20000
-}
-
-var (
-	spTag       = "send_packet"
-	waTag       = "write_acknowledgement"
-	srcChanTag  = "packet_src_channel"
-	dstChanTag  = "packet_dst_channel"
-	srcPortTag  = "packet_src_port"
-	dstPortTag  = "packet_dst_port"
-	dataTag     = "packet_data"
-	ackTag      = "packet_ack"
-	toHeightTag = "packet_timeout_height"
-	toTSTag     = "packet_timeout_timestamp"
-	seqTag      = "packet_sequence"
-)
-
-func rcvPacketQuery(channelID string, seq int) []string {
-	return []string{fmt.Sprintf("%s.packet_src_channel='%s'", spTag, channelID),
-		fmt.Sprintf("%s.packet_sequence='%d'", spTag, seq)}
-}
-
-func ackPacketQuery(channelID string, seq int) []string {
-	return []string{fmt.Sprintf("%s.packet_dst_channel='%s'", waTag, channelID),
-		fmt.Sprintf("%s.packet_sequence='%d'", waTag, seq)}
-}
-
-
-func (app *CosmosApp) Run(block_ctx vm.BlockContext, stdb vm.StateDB, input []byte) ([]byte, error) {
-	_, arg, err := UnpackInput(input)
-	if err != nil {
-		return nil, vm.ErrExecutionReverted
-	}
-
-	msgs, err := app.GetMsgs(arg)
-	if err != nil {
-		return nil, vm.ErrExecutionReverted
-	}
-
-	for _, msg := range msgs {
-		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
-			// TODO new cosmos context like query
-			msgResult, err := handler(sdk.Context{}.WithContext(context.Background()), msg) /*TODO statedb stateobject wrapper */
-			if err != nil {
-				return nil, vm.ErrExecutionReverted
-			}
-
-			rdtx := abci.ResponseDeliverTx{
-				GasWanted: 0,
-				GasUsed:   0,
-				Log:       msgResult.Log,
-				Data:      msgResult.Data,
-				Events:    sdk.MarkEventsToIndex(msgResult.Events, map[string]struct{}{}),
-			}
-			rdtxd, _ := rdtx.Marshal()
-
-			// log
-			topics := make([]common.Hash, 1)
-			crypto.Keccak256Hash([]byte("submit(string,string)"))
-			evLog := &types.Log{
-				Address:     vm.CrossChainContractAddr,
-				Topics:      topics,
-				Data:        rdtxd,
-				BlockNumber: block_ctx.BlockNumber.Uint64(),
-			}
-			stdb.AddLog(evLog)
-
-			// index
-			for _, event := range msgResult.Events {
-				attributes := make(map[string]string)
-				for _, attribute := range event.Attributes {
-					attributes[string(attribute.Key)] = string(attribute.Value)
-				}
-				seq, ok := attributes[chant.AttributeKeySequence]
-				if ok {
-					srcchan, oksrcchan := attributes[chant.AttributeKeySrcChannel]
-					if oksrcchan && event.Type == spTag {
-						s, _ := strconv.Atoi(seq)
-						keys := rcvPacketQuery(srcchan, s)
-						key := keys[0] + "/" + keys[1]
-						app.db.Set([]byte(key)[:], rdtxd[:])
-					}
-					dstchan, okdstchan := attributes[chant.AttributeKeyDstChannel]
-					if okdstchan && event.Type == waTag {
-						s, _ := strconv.Atoi(seq)
-						keys := ackPacketQuery(dstchan, s)
-						key := keys[0] + "/" + keys[1]
-						app.db.Set([]byte(key)[:], rdtxd[:])
-					}
-
-				}
-			}
-
-			return msgResult.Data[:], nil
-		} else {
-			return nil, vm.ErrExecutionReverted
-		}
-	}
-
-	return nil, nil
-}
-
-func (app *CosmosApp) GetMsgs(arg string) ([]sdk.Msg, error) {
-	argbin, err := hex.DecodeString(arg)
-	if err != nil {
-		return nil, vm.ErrExecutionReverted
-	}
-
-	var body tx.TxBody
-	err = app.codec.Marshaler.Unmarshal(argbin, &body)
-	body.UnpackInterfaces(app.codec.InterfaceRegistry)
-	if err != nil {
-		return nil, vm.ErrExecutionReverted
-	}
-
-	anys := body.Messages
-	res := make([]sdk.Msg, len(anys))
-	for i, any := range anys {
-		cached := any.GetCachedValue()
-		if cached == nil {
-			panic("Any cached value is nil. Transaction messages must be correctly packed Any values.")
-		}
-		res[i] = cached.(sdk.Msg)
-	}
-	return res, nil
-}
-
-func (app *CosmosApp) TxsSearch(page, limit int, events []string) (*ttt.ResultTxSearch, error) {
-	key := events[0] + "/" + events[1]
-	data, err := app.db.Get([]byte(key)[:])
-	var rdt abci.ResponseDeliverTx
-	rdt.Unmarshal(data)
-	rts := &ttt.ResultTxSearch{
-		TotalCount: 1,
-	}
-	rts.Txs = make([]*ttt.ResultTx, 1)
-	rts.Txs[0].TxResult = rdt
-	return rts, err
 }
 
 // GetSubspace returns a param subspace for a given module name.

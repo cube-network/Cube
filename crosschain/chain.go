@@ -11,7 +11,25 @@ import (
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
 	ct "github.com/tendermint/tendermint/types"
+	tt "github.com/tendermint/tendermint/types"
 )
+
+//called before mpt.commit
+func (app *CosmosApp) CommitIBC() common.Hash {
+	// app.cc.map[height] = app_hash;
+	return common.Hash{}
+}
+
+func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) {
+	log.Debug("log make header test")
+	app.cc.MakeLightBlockAndSign(h, app_hash)
+
+}
+
+func (app *CosmosApp) Vote(block_height uint64, Address tt.Address) {
+	// app.cc.MakeCosmosSignedHeader(h, nil)
+
+}
 
 // TODO validator set pubkey, config for demo, register in contract later
 // only one validator now, read more validator addr2pubkey mapping from conf/contract later
@@ -33,7 +51,7 @@ type CosmosChain struct {
 func MakeCosmosChain(priv_validator_key_file, priv_validator_state_file string) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
-	c.ChainID = "Cube"
+	c.ChainID = "ibc-1"
 	c.light_block = make(map[int64]*ct.LightBlock)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
@@ -190,4 +208,8 @@ func (c *CosmosChain) IsLightBlockValid(light_block *ct.LightBlock) bool {
 	}
 
 	return talliedVotingPower > votingPowerNeeded
+}
+
+func (c *CosmosChain) LastBlockHeight() int64 {
+	return int64(c.best_block_height)
 }

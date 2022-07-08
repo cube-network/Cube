@@ -8,7 +8,6 @@ import (
 	"github.com/tendermint/tendermint/libs/bytes"
 	tc "github.com/tendermint/tendermint/rpc/client"
 	tt "github.com/tendermint/tendermint/rpc/core/types"
-	ttt "github.com/tendermint/tendermint/types"
 )
 
 type API struct {
@@ -52,9 +51,14 @@ func (api *API) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTxS
 	return api.app.TxsSearch(page, limit, events)
 }
 
-func (api *API) CosmosLightBlock(height *int64) (*ttt.LightBlock, error) {
+func (api *API) CosmosLightBlock(height *int64) ([]byte, error) {
 	lb := api.app.cc.GetLightBlock(*height)
-	return lb, nil
+	if lb != nil {
+		tlb, _ := lb.ToProto()
+		return tlb.Marshal()
+	} else {
+		return nil, nil
+	}
 }
 
 func (api *API) CosmosBalances(account common.Address) (*sdk.Coins, error) {

@@ -56,6 +56,9 @@ func (app *CosmosApp) Run(block_ctx vm.BlockContext, stdb vm.StateDB, input []by
 		return nil, vm.ErrExecutionReverted
 	}
 
+	// TODO call from external with real req
+	app.BeginBlock(abci.RequestBeginBlock{})
+
 	for _, msg := range msgs {
 		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
 			// TODO new cosmos context like query

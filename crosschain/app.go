@@ -1,8 +1,6 @@
 package crosschain
 
 import (
-	"time"
-
 	"github.com/cosmos/cosmos-sdk/x/capability"
 	"github.com/cosmos/cosmos-sdk/x/crisis"
 	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
@@ -40,7 +38,6 @@ import (
 	ibctransferkeeper "github.com/cosmos/ibc-go/v4/modules/apps/transfer/keeper"
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	abci "github.com/tendermint/tendermint/abci/types"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
@@ -188,8 +185,8 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	app.MountTransientStores(app.tkeys)
 	app.MountMemoryStores(app.memKeys)
 
-	//
-	app.InitChain(abci.RequestInitChain{InitialHeight: initheader.Number.Int64(), Time: time.Unix(int64(initheader.Time), 0)})
+	app.LoadLatestVersion()
+	// app.InitChain(abci.RequestInitChain{InitialHeight: initheader.Number.Int64(), Time: time.Unix(int64(initheader.Time), 0)})
 
 	return app
 }

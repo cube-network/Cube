@@ -116,6 +116,8 @@ type CosmosApp struct {
 	//ICAAuthKeeper       icaauthkeeper.Keeper
 
 	cc *CosmosChain
+
+	anteHandler *CubeAnteHandler
 }
 
 // TODO level db/mpt wrapper
@@ -136,6 +138,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 
 	app := &CosmosApp{BaseApp: bApp, codec: codec, cc: cc}
 	app.db = db
+
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
 
@@ -143,6 +146,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 
 	// IBC Keepers
 	app.setupIBCKeeper()
+	app.anteHandler = NewCubeAnteHandler(app.IBCKeeper)
 
 	app.setupMockModule(ibcRouter)
 

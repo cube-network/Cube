@@ -14,9 +14,9 @@ func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryO
 	q := abci.RequestQuery{
 		Data: data, Path: path, Height: opts.Height, Prove: opts.Prove,
 	}
-	if q.Height == 0 {
-		q.Height = app.cc.LastBlockHeight()
-	}
+	// if q.Height == 0 {
+	// 	q.Height = app.cc.LastBlockHeight()
+	// }
 	r := app.BaseApp.Query(q)
 
 	resp := &ct.ResultABCIQuery{Response: r}

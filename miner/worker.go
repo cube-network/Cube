@@ -597,7 +597,6 @@ func (w *worker) taskLoop() {
 			w.pendingMu.Lock()
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
-
 			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 				w.pendingMu.Lock()
@@ -998,6 +997,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			}
 		}
 	}
+
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(header, false)
+
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
@@ -1049,6 +1051,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	txs := make([]*types.Transaction, len(w.current.txs))
 	copy(txs, w.current.txs)
 	s := w.current.state.Copy()
+
 	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, txs, uncles, cpyReceipts)
 	if err != nil {
 		return err

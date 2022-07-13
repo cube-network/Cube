@@ -73,7 +73,6 @@ func GetConsensusState(store sdk.KVStore, cdc codec.BinaryCodec, height exported
 			"invalid consensus type %T, expected %T", consensusState, &ConsensusState{},
 		)
 	}
-
 	return consensusState, nil
 }
 

@@ -974,6 +974,11 @@ web3._extend({
 			call: 'crosschain_cosmosTxsSearch',
 			params: 3
 		}),
+		new web3._extend.Method({
+			name: 'cosmosLastBlockHeight',
+			call: 'crosschain_cosmosLastBlockHeight',
+			params: 3
+		}),
 	]
 });
 `

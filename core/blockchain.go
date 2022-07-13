@@ -1723,6 +1723,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
+		// TODO crosschain cosmosapp
+		bc.Cosmosapp.OnBlockBegin(block.Header(), false)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)

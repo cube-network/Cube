@@ -9,21 +9,21 @@ var (
 )
 
 type CrossChainContract interface {
-	RequiredGas(input []byte) uint64                                        // RequiredPrice calculates the contract gas use
-	Run(block_ctx BlockContext, stdb StateDB, input []byte) ([]byte, error) // Run runs the precompiled contract
+	RequiredGas(input []byte) uint64                                                           // RequiredPrice calculates the contract gas use
+	Run(simulateMode bool, block_ctx BlockContext, stdb StateDB, input []byte) ([]byte, error) // Run runs the precompiled contract
 }
 
 func IsCrossChainContract(addr common.Address) bool {
 	return addr.String() == CrossChainContractAddr.String()
 }
 
-func RunCrossChainContract(cc CrossChainContract, block_ctx BlockContext, stdb StateDB, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
+func RunCrossChainContract(cc CrossChainContract, simulateMode bool, block_ctx BlockContext, stdb StateDB, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
 	gasCost := cc.RequiredGas(input)
 	if suppliedGas < gasCost {
 		return nil, 0, ErrOutOfGas
 	}
 	suppliedGas -= gasCost
-	output, err := cc.Run(block_ctx, stdb, input)
+	output, err := cc.Run(simulateMode, block_ctx, stdb, input)
 	return output, suppliedGas, err
 }
 

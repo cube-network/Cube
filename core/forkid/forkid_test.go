@@ -40,11 +40,13 @@ func TestCreation(t *testing.T) {
 	}{
 		// Mainnet test cases
 		{
-			params.TestnetChainConfig,
-			params.TestnetGenesisHash,
+			params.MainnetChainConfig,
+			params.MainnetGenesisHash,
 			[]testcase{
-				{0, ID{Hash: checksumToBytes(0x02715256), Next: 10000000}},       // Unsynced
-				{8576999, ID{Hash: checksumToBytes(0x02715256), Next: 10000000}}, // BerlinBlock LondonBlock SophonBlock
+				{0, ID{Hash: checksumToBytes(0x08e4e845), Next: 829915}},      // Unsynced
+				{829914, ID{Hash: checksumToBytes(0x08e4e845), Next: 829915}}, // Last unsynced block
+				{829915, ID{Hash: checksumToBytes(0xee6b1c5d), Next: 0}},      // First Gravitation block
+				{900000, ID{Hash: checksumToBytes(0xee6b1c5d), Next: 0}},      // Future Gravitation block
 			},
 		},
 	}
@@ -65,11 +67,22 @@ func TestValidation(t *testing.T) {
 		id   ID
 		err  error
 	}{
-		{6618799, ID{Hash: checksumToBytes(0xc13c1746), Next: 0}, nil},
-		{8576999, ID{Hash: checksumToBytes(0xc13c1746), Next: 0}, nil},
+		// local is Gravitation, remote is the same, and no future fork is announced
+		{900000, ID{Hash: checksumToBytes(0xee6b1c5d), Next: 0}, nil},
+		// local is before Gravitation, and with Gravitation fork, remote is the same, but it's not yet aware of Gravitation fork
+		{829914, ID{Hash: checksumToBytes(0x08e4e845), Next: 0}, nil},
+		// local is before Gravitation, and with Gravitation fork, remote is the same, and with the same Gravitation fork
+		{829914, ID{Hash: checksumToBytes(0x08e4e845), Next: 829915}, nil},
+		// local is Gravitation, remote is before Gravitation + known of Gravitation fork, so remote is not sync, accept it
+		{900000, ID{Hash: checksumToBytes(0x08e4e845), Next: 829915}, nil},
+		// Local is mainnet Gravitation. remote announces before any hard-fork, and is not aware of further forks.
+		// Remote needs software update.
+		{829915, ID{Hash: checksumToBytes(0x08e4e845), Next: 0}, ErrRemoteStale},
+		// Local is before any hard-fork, and remote is Gravitation, Local needs to sync.
+		{829914, ID{Hash: checksumToBytes(0xee6b1c5d), Next: 0}, nil},
 	}
 	for i, tt := range tests {
-		filter := newFilter(params.TestnetChainConfig, params.TestnetGenesisHash, func() uint64 { return tt.head })
+		filter := newFilter(params.MainnetChainConfig, params.MainnetGenesisHash, func() uint64 { return tt.head })
 		if err := filter(tt.id); err != tt.err {
 			t.Errorf("test %d: validation error mismatch: have %v, want %v", i, err, tt.err)
 		}

@@ -37,6 +37,7 @@ func (cbk CubeBankKeeper) BlockedAddr(addr sdk.AccAddress) bool {
 
 func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
 	println("MintCoins ", moduleName, " ", amt.String())
+	// TODO call evm contract with ctx.EVM()
 	return nil
 }
 

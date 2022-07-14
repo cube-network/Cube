@@ -47,7 +47,7 @@ func ackPacketQuery(channelID string, seq int) []string {
 		fmt.Sprintf("%s.packet_sequence='%d'", waTag, seq)}
 }
 
-func (app *CosmosApp) Run(simulateMode bool, block_ctx vm.BlockContext, stdb vm.StateDB, input []byte) ([]byte, error) {
+func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte, error) {
 	if simulateMode {
 		return nil, nil
 	} else {
@@ -70,7 +70,7 @@ func (app *CosmosApp) Run(simulateMode bool, block_ctx vm.BlockContext, stdb vm.
 	}
 	for i, msg := range msgs {
 		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
-			msgResult, err := handler(app.GetContextForTx(simulateMode), msg) /*TODO statedb stateobject wrapper */
+			msgResult, err := handler(app.GetContextForTx(simulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
 			if err != nil {
 				return nil, vm.ErrExecutionReverted
@@ -109,9 +109,9 @@ func (app *CosmosApp) Run(simulateMode bool, block_ctx vm.BlockContext, stdb vm.
 		Address:     vm.CrossChainContractAddr,
 		Topics:      topics,
 		Data:        rdtxd,
-		BlockNumber: block_ctx.BlockNumber.Uint64(),
+		BlockNumber: evm.Context.BlockNumber.Uint64(),
 	}
-	stdb.AddLog(evLog)
+	evm.StateDB.AddLog(evLog)
 
 	// index
 	for _, event := range events {

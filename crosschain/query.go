@@ -32,6 +32,6 @@ func (app *CosmosApp) TxsSearch(page, limit int, events []string) (*ttt.ResultTx
 		TotalCount: 1,
 	}
 	rts.Txs = make([]*ttt.ResultTx, 1)
-	rts.Txs[0].TxResult = rdt
+	rts.Txs[0] = &ttt.ResultTx{TxResult: rdt}
 	return rts, err
 }

@@ -127,6 +127,7 @@ func (app *CosmosApp) Run(simulateMode bool, block_ctx vm.BlockContext, stdb vm.
 				keys := rcvPacketQuery(srcchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
+				println("pktkey write ", key)
 			}
 			dstchan, okdstchan := attributes[chant.AttributeKeyDstChannel]
 			if okdstchan && event.Type == waTag {
@@ -134,6 +135,7 @@ func (app *CosmosApp) Run(simulateMode bool, block_ctx vm.BlockContext, stdb vm.
 				keys := ackPacketQuery(dstchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
+				println("pktkey write ", key)
 			}
 
 		}

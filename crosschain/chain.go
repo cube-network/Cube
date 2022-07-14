@@ -194,7 +194,7 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 // }
 
 func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
-	if len(c.light_block) > 100 {
+	if len(c.light_block) > 1200*24 {
 		delete(c.light_block, light_block.Header.Height-100)
 	}
 	c.light_block[light_block.Height] = light_block

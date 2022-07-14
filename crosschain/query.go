@@ -25,6 +25,7 @@ func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryO
 
 func (app *CosmosApp) TxsSearch(page, limit int, events []string) (*ttt.ResultTxSearch, error) {
 	key := events[0] + "/" + events[1]
+	println("pktkey search ", key)
 	data, err := app.db.Get([]byte(key)[:])
 	var rdt abci.ResponseDeliverTx
 	rdt.Unmarshal(data)

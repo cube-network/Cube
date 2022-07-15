@@ -1,6 +1,8 @@
 package crosschain
 
 import (
+	"errors"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -39,7 +41,7 @@ func (api *API) CosmosABCIQuery(path string, data bytes.HexBytes, opts tc.ABCIQu
 func (api *API) CosmosValidators(height *int64, page, perPage *int) (*tt.ResultValidators, error) {
 	lb := api.app.cc.GetLightBlock(*height)
 	if lb == nil {
-		return nil, nil
+		return nil, errors.New("invalid validators")
 	}
 
 	val := &tt.ResultValidators{BlockHeight: *height, Count: 1, Total: 1}
@@ -57,7 +59,7 @@ func (api *API) CosmosLightBlock(height *int64) ([]byte, error) {
 		tlb, _ := lb.ToProto()
 		return tlb.Marshal()
 	} else {
-		return nil, nil
+		return nil, errors.New("invalid height")
 	}
 }
 

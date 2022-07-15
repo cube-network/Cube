@@ -255,10 +255,10 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	// )
 
 	// todo:
-	feecollectorAcc, _ := sdk.AccAddressFromHex("0x39A21562232Fd6184947a62ce707F5a56F19Fa55")
-	feeibcAcc, _ := sdk.AccAddressFromHex("0x39A21562232Fd6184947a62ce707F5a56F19Fa55")
-	transferAcc, _ := sdk.AccAddressFromHex("0x39A21562232Fd6184947a62ce707F5a56F19Fa55")
-	mintAcc, _ := sdk.AccAddressFromHex("0x39A21562232Fd6184947a62ce707F5a56F19Fa55")
+	feecollectorAcc, _ := sdk.AccAddressFromHex("0x5c8d603127e242a10ee0779a1a768c80468b7648")
+	feeibcAcc, _ := sdk.AccAddressFromHex("0x5c8d603127e242a10ee0779a1a768c80468b7648")
+	transferAcc, _ := sdk.AccAddressFromHex("0x5c8d603127e242a10ee0779a1a768c80468b7648")
+	mintAcc, _ := sdk.AccAddressFromHex("0x5c8d603127e242a10ee0779a1a768c80468b7648")
 	moduleAccs := map[string]sdk.AccAddress{
 		"fee_collector": feecollectorAcc,
 		"feeibc":        feeibcAcc,

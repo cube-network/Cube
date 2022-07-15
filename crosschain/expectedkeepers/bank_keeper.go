@@ -27,6 +27,8 @@ func (cbk CubeBankKeeper) BlockedAddr(sdk.AccAddress) bool {
 }
 
 func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
+	// todo:
+
 	return nil
 }
 

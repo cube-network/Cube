@@ -188,6 +188,7 @@ func (im IBCModule) OnRecvPacket(
 	// was successfully decoded
 	if ack.Success() {
 		err := im.keeper.OnRecvPacket(ctx, packet, data)
+		// todo: add a kind of error for minting new token
 		if err != nil {
 			ack = channeltypes.NewErrorAcknowledgement(err)
 			ackErr = err

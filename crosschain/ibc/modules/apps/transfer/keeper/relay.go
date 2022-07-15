@@ -299,6 +299,7 @@ func (k Keeper) OnRecvPacket(ctx sdk.Context, packet channeltypes.Packet, data t
 	voucher := sdk.NewCoin(voucherDenom, transferAmount)
 
 	// mint new tokens if the source of the transfer is the same chain
+	// todo: need to deploy an ERC20 contract
 	if err := k.bankKeeper.MintCoins(
 		ctx, types.ModuleName, sdk.NewCoins(voucher),
 	); err != nil {

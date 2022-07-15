@@ -1,14 +1,6 @@
 package crosschain
 
 import (
-	"github.com/cosmos/cosmos-sdk/x/capability"
-	"github.com/cosmos/cosmos-sdk/x/crisis"
-	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
-	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
-	"github.com/cosmos/cosmos-sdk/x/params"
-	"github.com/cosmos/cosmos-sdk/x/upgrade"
-	ibc "github.com/cosmos/ibc-go/v4/modules/core"
-
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -16,11 +8,17 @@ import (
 	"github.com/cosmos/cosmos-sdk/version"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	banktypes "github.com/cosmos/cosmos-sdk/x/bank/types"
+	"github.com/cosmos/cosmos-sdk/x/capability"
 	capabilitykeeper "github.com/cosmos/cosmos-sdk/x/capability/keeper"
 	capabilitytypes "github.com/cosmos/cosmos-sdk/x/capability/types"
+	"github.com/cosmos/cosmos-sdk/x/crisis"
+	crisiskeeper "github.com/cosmos/cosmos-sdk/x/crisis/keeper"
+	crisistypes "github.com/cosmos/cosmos-sdk/x/crisis/types"
+	"github.com/cosmos/cosmos-sdk/x/params"
 	paramskeeper "github.com/cosmos/cosmos-sdk/x/params/keeper"
 	paramstypes "github.com/cosmos/cosmos-sdk/x/params/types"
 	stakingtypes "github.com/cosmos/cosmos-sdk/x/staking/types"
+	"github.com/cosmos/cosmos-sdk/x/upgrade"
 	upgradekeeper "github.com/cosmos/cosmos-sdk/x/upgrade/keeper"
 	upgradetypes "github.com/cosmos/cosmos-sdk/x/upgrade/types"
 	ica "github.com/cosmos/ibc-go/v4/modules/apps/27-interchain-accounts"
@@ -37,12 +35,16 @@ import (
 	"github.com/cosmos/ibc-go/v4/modules/apps/transfer"
 	ibctransferkeeper "github.com/cosmos/ibc-go/v4/modules/apps/transfer/keeper"
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
+	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
+	abci "github.com/tendermint/tendermint/abci/types"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
+	"github.com/ethereum/go-ethereum/common"
 	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
 	"github.com/ethereum/go-ethereum/log"
@@ -88,7 +90,7 @@ type CosmosApp struct {
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
-
+	IsIBCInit    bool
 	// keys to access the substores
 	keys    map[string]*sdk.KVStoreKey
 	tkeys   map[string]*sdk.TransientStoreKey
@@ -190,7 +192,24 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	app.MountMemoryStores(app.memKeys)
 
 	app.LoadLatestVersion()
-	// app.InitChain(abci.RequestInitChain{InitialHeight: initheader.Number.Int64(), Time: time.Unix(int64(initheader.Time), 0)})
+
+	th := app.cc.MakeCosmosSignedHeader(initheader, common.Hash{}).ToProto().Header
+	app.InitChain(abci.RequestInitChain{Time: th.Time, ChainId: th.ChainID, InitialHeight: th.Height})
+
+	// TODO call from external with real req, now for test only
+	// TODO get cube block header instead
+	app.MakeHeader(initheader, common.Hash{})
+
+	// TODO lastblockheight for test only, relace later
+	if !app.IsIBCInit {
+		var genesisState GenesisState
+		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
+			panic(err)
+		}
+		app.OnBlockBegin(initheader, true)
+		app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
+		app.IsIBCInit = true
+	}
 
 	return app
 }
@@ -228,7 +247,7 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
 	// SDK module keepers
-	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1}
+	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1, Hisorical: app.cc}
 
 	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
 	// authkeeper.NewAccountKeeper(

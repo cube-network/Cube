@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
@@ -14,16 +15,29 @@ import (
 	tt "github.com/tendermint/tendermint/types"
 )
 
-//called before mpt.commit
-func (app *CosmosApp) CommitIBC() common.Hash {
-	// app.cc.map[height] = app_hash;
-	return common.Hash{}
+func (app *CosmosApp) OnBlockBegin(h *et.Header, netxBlock bool) {
+	hdr := app.cc.MakeCosmosSignedHeader(h, common.Hash{}).ToProto().Header
+	if netxBlock {
+		hdr.Height += 1
+	}
+	println("begin block height", hdr.Height, " ts ", time.Now().UTC().String())
+	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr})
 }
 
-func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) {
+//called before mpt.commit
+func (app *CosmosApp) CommitIBC() common.Hash {
+	c := app.BaseApp.Commit()
+	var h common.Hash
+	copy(h[:], c.Data[:])
+	println("commit ibc hash", h.Hex(), " version ", " ts ", time.Now().UTC().String())
+	return h
+	// return common.Hash{}
+}
+
+func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header {
 	log.Debug("log make header test")
 	app.cc.MakeLightBlockAndSign(h, app_hash)
-
+	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }
 
 func (app *CosmosApp) Vote(block_height uint64, Address tt.Address) {
@@ -123,8 +137,8 @@ func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 	// Tendermint light.Verify()
 }
 
-func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig) {
-	light_block := c.GetLightBlockInternal(block_height)
+func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig, light_block *ct.LightBlock) {
+	// light_block := c.GetLightBlockInternal(block_height)
 	val_idx := 0
 	// TODO get val idx from c.valaditors (cs.ValidatorAddress)
 	light_block.Commit.Signatures[val_idx] = cs
@@ -137,11 +151,14 @@ func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig) {
 func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.LightBlock {
 	// TODO load validator set from h.Extra, fixed for demo
 	light_block := &ct.LightBlock{SignedHeader: c.MakeCosmosSignedHeader(h, app_hash), ValidatorSet: c.MakeValidatorSet()}
-	c.SetLightBlock(light_block)
+	// c.SetLightBlock(light_block)
 	return light_block
 }
 
 func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) *ct.LightBlock {
+
+	println("new crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
+
 	light_block := c.MakeLightBlock(h, app_hash)
 	vote := &ct.Vote{
 		Type:             tmproto.PrecommitType,
@@ -162,25 +179,24 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 	cc.Timestamp = v.Timestamp
 	cc.Signature = v.Signature
 
-	c.Vote(light_block.Height, cc)
+	c.Vote(light_block.Height, cc, light_block)
 
 	return light_block
 }
 
-func (c *CosmosChain) GetLightBlockInternal(block_height int64) *ct.LightBlock {
-	light_block, ok := c.light_block[block_height]
-	if ok {
-		return light_block
-	} else {
-		return nil
-	}
-}
+// func (c *CosmosChain) GetLightBlockInternal(block_height int64) *ct.LightBlock {
+// 	light_block, ok := c.light_block[block_height]
+// 	if ok {
+// 		return light_block
+// 	} else {
+// 		return nil
+// 	}
+// }
 
 func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
-	if len(c.light_block) > 100 {
+	if len(c.light_block) > 1200*24 {
 		delete(c.light_block, light_block.Header.Height-100)
 	}
-	log.Debug("new crosschain block, height ", light_block.Height)
 	c.light_block[light_block.Height] = light_block
 }
 

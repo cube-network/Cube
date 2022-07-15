@@ -65,3 +65,7 @@ func (api *API) CosmosBalances(account common.Address) (*sdk.Coins, error) {
 	// TODO
 	return nil, nil
 }
+
+func (api *API) CosmosLastBlockHeight() int64 {
+	return api.app.cc.LastBlockHeight()
+}

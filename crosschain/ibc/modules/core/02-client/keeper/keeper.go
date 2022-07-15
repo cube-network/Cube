@@ -89,6 +89,7 @@ func (k Keeper) GetClientConsensusState(ctx sdk.Context, clientID string, height
 	}
 
 	consensusState := k.MustUnmarshalConsensusState(bz)
+
 	return consensusState, true
 }
 

@@ -14,9 +14,9 @@ func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryO
 	q := abci.RequestQuery{
 		Data: data, Path: path, Height: opts.Height, Prove: opts.Prove,
 	}
-	if q.Height == 0 {
-		q.Height = app.cc.LastBlockHeight()
-	}
+	// if q.Height == 0 {
+	// 	q.Height = app.cc.LastBlockHeight()
+	// }
 	r := app.BaseApp.Query(q)
 
 	resp := &ct.ResultABCIQuery{Response: r}
@@ -25,6 +25,7 @@ func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryO
 
 func (app *CosmosApp) TxsSearch(page, limit int, events []string) (*ttt.ResultTxSearch, error) {
 	key := events[0] + "/" + events[1]
+	println("pktkey search ", key)
 	data, err := app.db.Get([]byte(key)[:])
 	var rdt abci.ResponseDeliverTx
 	rdt.Unmarshal(data)
@@ -32,6 +33,6 @@ func (app *CosmosApp) TxsSearch(page, limit int, events []string) (*ttt.ResultTx
 		TotalCount: 1,
 	}
 	rts.Txs = make([]*ttt.ResultTx, 1)
-	rts.Txs[0].TxResult = rdt
+	rts.Txs[0] = &ttt.ResultTx{TxResult: rdt}
 	return rts, err
 }

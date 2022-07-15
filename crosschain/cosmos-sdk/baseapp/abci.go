@@ -150,9 +150,10 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 		))
 	}
 
-	if err := app.validateHeight(req); err != nil {
-		panic(err)
-	}
+	// TODO for test only
+	// if err := app.validateHeight(req); err != nil {
+	// 	panic(err)
+	// }
 
 	// Initialize the DeliverTx state. If this is the first block, it should
 	// already be initialized in InitChain. Otherwise app.deliverState will be
@@ -314,8 +315,9 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	// Commit. Use the header from this latest block.
 	app.setCheckState(header)
 
+	// TODO for demo test,
 	// empty/reset the deliver state
-	app.deliverState = nil
+	// app.deliverState = nil
 
 	var halt bool
 

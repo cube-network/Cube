@@ -1,6 +1,7 @@
 package keeper
 
 import (
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -195,11 +196,13 @@ func (k Keeper) OnRecvPacket(ctx sdk.Context, packet channeltypes.Packet, data t
 		return types.ErrReceiveDisabled
 	}
 
-	// decode the receiver address
-	receiver, err := sdk.AccAddressFromBech32(data.Receiver)
-	if err != nil {
-		return err
-	}
+	// // decode the receiver address
+	// receiver, err := sdk.AccAddressFromBech32(data.Receiver)
+	// if err != nil {
+	// 	return err
+	// }
+	recv, _ := hex.DecodeString(data.Receiver[2:])
+	receiver := sdk.AccAddress(recv)
 
 	// parse the transfer amount
 	transferAmount, ok := sdk.NewIntFromString(data.Amount)

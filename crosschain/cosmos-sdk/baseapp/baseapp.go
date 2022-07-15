@@ -309,8 +309,7 @@ func (app *BaseApp) LastCommitID() sdk.CommitID {
 
 // LastBlockHeight returns the last committed block height.
 func (app *BaseApp) LastBlockHeight() int64 {
-	// return app.cms.LastCommitID().Version
-	return app.CC.LastBlockHeight()
+	return app.cms.LastCommitID().Version
 }
 
 func (app *BaseApp) init() error {
@@ -544,6 +543,14 @@ func (app *BaseApp) getState(mode runTxMode) *state {
 	}
 
 	return app.checkState
+}
+
+func (app *BaseApp) GetContextForTx(sim bool) sdk.Context {
+	if sim {
+		return app.getContextForTx(runTxModeSimulate, []byte{})
+	} else {
+		return app.getContextForTx(runTxModeDeliver, []byte{})
+	}
 }
 
 // retrieve the context for the tx w/ txBytes and other memoized values.

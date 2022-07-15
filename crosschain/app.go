@@ -254,10 +254,18 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	// 	appCodec, app.keys[authtypes.StoreKey], app.GetSubspace(authtypes.ModuleName), authtypes.ProtoBaseAccount, maccPerms,
 	// )
 
-	app.BankKeeper = expectedkeepers.CubeBankKeeper{}
-	//	bankkeeper.NewBaseKeeper(
-	//	appCodec, keys[banktypes.StoreKey], app.AccountKeeper, app.GetSubspace(banktypes.ModuleName), app.ModuleAccountAddrs(),
-	//)
+	// todo:
+	feecollectorAcc, _ := sdk.AccAddressFromHex("0x1223456")
+	feeibcAcc, _ := sdk.AccAddressFromHex("0x1223456")
+	transferAcc, _ := sdk.AccAddressFromHex("0x1223456")
+	mintAcc, _ := sdk.AccAddressFromHex("0x1223456")
+	moduleAccs := map[string]sdk.AccAddress{
+		"fee_collector": feecollectorAcc,
+		"feeibc":        feeibcAcc,
+		"transfer":      transferAcc,
+	}
+	blockedAddrs := map[string]bool{}
+	app.BankKeeper = expectedkeepers.NewBankKeeper(moduleAccs, mintAcc, blockedAddrs)
 }
 
 func (app *CosmosApp) setupIBCKeeper() {

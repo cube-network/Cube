@@ -12,7 +12,7 @@ contract ERC20Factory {
     }
 
     // todo: add some restriction according to usage's environment
-    function mintCoins(string memory name, address account, uint256 amount, string memory symbol) public returns (bool) {
+    function mintCoin(string memory name, address account, uint256 amount, string memory symbol) public returns (bool) {
         // do create a new token when it does not exist
         if(address(_created[name]) == address(0)) {
             createERC20(name, symbol);
@@ -34,7 +34,7 @@ contract ERC20Factory {
         return _created[name].allowance(owner, spender);
     }
 
-    function burnCoins(string memory name, address account, uint256 amount) public returns (bool) {
+    function burnCoin(string memory name, address account, uint256 amount) public returns (bool) {
         require(address(_created[name]) != address(0), "ERC20: token does not exist");
 
         _created[name].burn(account, amount);
@@ -62,7 +62,7 @@ contract ERC20Factory {
         return true;
     }
 
-    function destroyCoins(string memory name) public returns (bool) {
+    function destroyCoin(string memory name) public returns (bool) {
         if(address(_created[name]) == address(0)) {
             return true;
         }

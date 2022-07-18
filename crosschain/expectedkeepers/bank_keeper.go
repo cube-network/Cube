@@ -4,8 +4,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
 )
+
+// StateFn gets state by the state root hash.
+type StateFn func(hash common.Hash) (*state.StateDB, error)
 
 // BankKeeper defines the expected bank keeper
 type CubeBankKeeper struct {
@@ -14,6 +19,8 @@ type CubeBankKeeper struct {
 
 	// list of addresses that are restricted from receiving transactions
 	blockedAddrs map[string]bool
+
+	stateFn StateFn // Function to get state by state root
 }
 
 func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress, blockedAddrs map[string]bool) CubeBankKeeper {
@@ -25,8 +32,13 @@ func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress,
 	return c
 }
 
+func (cbk CubeBankKeeper) SetStateFn(fn StateFn) {
+	cbk.stateFn = fn
+}
+
 func (cbk CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) bool {
 	println("HasBalance addr ", addr.String(), " ", amt.String())
+	//statedb := cbk.stateFn()
 	balance, err := systemcontract.GetBalance(ctx, addr, amt)
 	if err != nil {
 		println("Failed to perform HasBalance", "coin", amt.String(), "err", err)

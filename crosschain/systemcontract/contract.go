@@ -38,15 +38,15 @@ func GetBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) (*big.Int, e
 }
 
 func SendCoin(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "transferFrom", amt.Denom, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt.Amount)
+	return callContract(ctx, system.ERC20FactoryContract, "transferFrom", amt.Denom, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt.Amount.BigInt())
 }
 
 func MintCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "mintCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount, amt.Denom)
+	return callContract(ctx, system.ERC20FactoryContract, "mintCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt(), amt.Denom)
 }
 
 func BurnCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "burnCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount)
+	return callContract(ctx, system.ERC20FactoryContract, "burnCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt())
 }
 
 // callContract executes contract in EVM

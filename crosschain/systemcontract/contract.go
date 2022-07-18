@@ -42,11 +42,11 @@ func SendCoin(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, a
 }
 
 func MintCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "mintCoin", amt.Denom, moduleAcc, amt.Amount, amt.Denom)
+	return callContract(ctx, system.ERC20FactoryContract, "mintCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount, amt.Denom)
 }
 
 func BurnCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "burnCoin", amt.Denom, moduleAcc, amt.Amount)
+	return callContract(ctx, system.ERC20FactoryContract, "burnCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount)
 }
 
 // callContract executes contract in EVM
@@ -81,7 +81,7 @@ func callContract(ctx sdk.Context, contract common.Address, method string, args 
 		log.Error("ExecuteMsg failed", "err", err, "ret", string(ret))
 	}
 
-	// todo: Finalise the statedb so any changes can take effect,
+	// todo: should be finished in transfer keeper. Finalise the statedb so any changes can take effect
 	// and especially if the `from` account is empty, it can be finally deleted.
 	//ctx.Statedb.Finalise(true)
 

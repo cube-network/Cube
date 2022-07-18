@@ -3,6 +3,7 @@ package expectedkeepers
 import (
 	"encoding/hex"
 	"fmt"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
 )

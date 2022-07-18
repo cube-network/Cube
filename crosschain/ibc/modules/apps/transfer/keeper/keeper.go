@@ -110,6 +110,7 @@ func (k Keeper) SetDenomTrace(ctx sdk.Context, denomTrace types.DenomTrace) {
 	store := prefix.NewStore(ctx.KVStore(k.storeKey), types.DenomTraceKey)
 	bz := k.MustMarshalDenomTrace(denomTrace)
 	store.Set(denomTrace.Hash(), bz)
+	println("SetDenomTrace ", denomTrace.String(), " Hash ", denomTrace.Hash().String())
 }
 
 // GetAllDenomTraces returns the trace information for all the denominations.

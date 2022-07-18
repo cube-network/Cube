@@ -14,13 +14,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/gogo/protobuf/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 )
 
 func (app *CosmosApp) RequiredGas(input []byte) uint64 {
 	// TODO fixed gas cost for demo test
-	return 20000
+	return 1000000
 }
 
 var (
@@ -52,6 +53,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		return nil, nil
 	} else {
 	}
+	println("onn run tx evm ", evm.Context.BlockNumber.Int64())
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
@@ -73,6 +75,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 			msgResult, err := handler(app.GetContextForTx(simulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
 			if err != nil {
+				log.Info("eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted
 			}
 

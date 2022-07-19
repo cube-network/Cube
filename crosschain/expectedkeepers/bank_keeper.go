@@ -52,7 +52,7 @@ func (cbk CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt s
 	if err := cbk.updateContext(ctx.EVM()); err != nil {
 		return false
 	}
-	balance, err := systemcontract.GetBalance(cbk.ctx, addr, amt)
+	balance, err := systemcontract.GetBalance(cbk.ctx, addr, amt.String())
 	if err != nil {
 		println("Failed to perform HasBalance", "coin", amt.String(), "err", err)
 		return false

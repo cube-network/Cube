@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
+	"math/big"
 )
 
 // StateFn gets state by the state root hash.
@@ -167,4 +168,28 @@ func (cbk CubeBankKeeper) BurnCoins(ctx sdk.Context, moduleName string, amt sdk.
 	}
 
 	return nil
+}
+
+func (cbk CubeBankKeeper) GetBalanceOfModuleAccount(ctx sdk.Context, moduleName string, denom string) *big.Int {
+	senderAcc := cbk.moduleAccs[moduleName]
+	if senderAcc.Empty() {
+		println("Failed to perform SendCoin", "coin", denom, "module account not exist", senderAcc)
+		return big.NewInt(0)
+	}
+	return cbk.GetBalance(ctx, senderAcc, denom)
+}
+
+func (cbk CubeBankKeeper) GetBalance(ctx sdk.Context, addr sdk.AccAddress, denom string) *big.Int {
+	println("GetBalance ", denom, " ", addr.String())
+
+	if err := cbk.updateContext(ctx.EVM()); err != nil {
+		return big.NewInt(0)
+	}
+
+	balance, err := systemcontract.GetBalance(cbk.ctx, addr, denom)
+	if err != nil {
+		println("Failed to perform BurnCoins", "coin", denom, "err", err)
+		return big.NewInt(0)
+	}
+	return balance
 }

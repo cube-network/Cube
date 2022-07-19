@@ -23,11 +23,11 @@ type BankContext struct {
 	Evm     *vm.EVM
 }
 
-func GetBalance(ctx *BankContext, addr sdk.AccAddress, amt sdk.Coin) (*big.Int, error) {
+func GetBalance(ctx *BankContext, addr sdk.AccAddress, denom string) (*big.Int, error) {
 	contract := system.ERC20FactoryContract
 	method := "getBalance"
 	owner := common.BytesToAddress(addr)
-	result, err := callContract(ctx, contract, method, amt.Denom, owner)
+	result, err := callContract(ctx, contract, method, denom, owner)
 
 	// unpack data
 	ret, err := system.ABIUnpack(contract, method, result)

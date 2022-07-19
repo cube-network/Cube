@@ -21,7 +21,7 @@ import (
 
 func (app *CosmosApp) RequiredGas(input []byte) uint64 {
 	// TODO fixed gas cost for demo test
-	return 1000000
+	return 100000
 }
 
 var (
@@ -53,7 +53,6 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		return nil, nil
 	} else {
 	}
-	println("onn run tx evm ", evm.Context.BlockNumber.Int64())
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
@@ -130,7 +129,6 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				keys := rcvPacketQuery(srcchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
-				println("pktkey write ", key)
 			}
 			dstchan, okdstchan := attributes[chant.AttributeKeyDstChannel]
 			if okdstchan && event.Type == waTag {
@@ -138,7 +136,6 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				keys := ackPacketQuery(dstchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
-				println("pktkey write ", key)
 			}
 
 		}

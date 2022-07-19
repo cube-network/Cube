@@ -909,6 +909,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
+			println("finalise addr ", obj.address.Hex())
 			obj.finalise(true) // Prefetch slots in the background
 		}
 		s.stateObjectsPending[addr] = struct{}{}
@@ -919,6 +920,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		// the commit-phase will be a lot faster
 		addressesToPrefetch = append(addressesToPrefetch, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
+
 	if s.prefetcher != nil && len(addressesToPrefetch) > 0 {
 		s.prefetcher.prefetch(s.originalRoot, addressesToPrefetch)
 	}
@@ -1237,7 +1239,7 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		var storageCommitted int
 		for addr := range s.stateObjectsDirty {
 			if obj := s.stateObjects[addr]; !obj.deleted {
-
+				println("commit addr ", obj.address.Hex())
 				// Write any storage changes in the state object to its storage trie
 				committed, err := obj.CommitTrie(s.db)
 				if err != nil {

@@ -3,15 +3,16 @@ package expectedkeepers
 import (
 	"encoding/hex"
 	"fmt"
-
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
 )
 
 // StateFn gets state by the state root hash.
 type StateFn func(hash common.Hash) (*state.StateDB, error)
+type CurrentHeaderFn func() *types.Header
 
 // BankKeeper defines the expected bank keeper
 type CubeBankKeeper struct {
@@ -21,7 +22,9 @@ type CubeBankKeeper struct {
 	// list of addresses that are restricted from receiving transactions
 	blockedAddrs map[string]bool
 
-	stateFn StateFn // Function to get state by state root
+	stateFn         StateFn         // Function to get state by state root
+	currentHeaderFn CurrentHeaderFn // Function to get current header
+	ctx             *systemcontract.BankContext
 }
 
 func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress, blockedAddrs map[string]bool) CubeBankKeeper {
@@ -29,23 +32,47 @@ func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress,
 		moduleAccs:   moduleAccs,
 		mintAcc:      mintAcc,
 		blockedAddrs: blockedAddrs,
+		ctx:          &systemcontract.BankContext{},
 	}
 	return c
 }
 
+//func (cbk CubeBankKeeper) SetChainReader(reader csContract.ChainReader) {
+//	cbk.chainReader = reader
+//	cbk.ctx.ChainContext = systemcontract.NewChainContext(reader, nil)
+//}
 func (cbk CubeBankKeeper) SetStateFn(fn StateFn) {
 	cbk.stateFn = fn
 }
 
+func (cbk CubeBankKeeper) SetCurrentHeaderFn(fn CurrentHeaderFn) {
+	cbk.currentHeaderFn = fn
+}
+
 func (cbk CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) bool {
 	println("HasBalance addr ", addr.String(), " ", amt.String())
-	//statedb := cbk.stateFn()
-	balance, err := systemcontract.GetBalance(ctx, addr, amt)
+	if err := cbk.updateContext(); err != nil {
+		return false
+	}
+	balance, err := systemcontract.GetBalance(cbk.ctx, addr, amt)
 	if err != nil {
 		println("Failed to perform HasBalance", "coin", amt.String(), "err", err)
 		return false
 	}
 	return balance.Int64() > 0
+}
+
+func (cbk CubeBankKeeper) updateContext() error {
+	header := cbk.currentHeaderFn()
+	statedb, err := cbk.stateFn(header.Root)
+	if err != nil {
+		println("updateContext failed ", "height", header.Number, " ", err)
+		return err
+	}
+	cbk.ctx.Header = header
+	cbk.ctx.Statedb = statedb
+
+	return nil
 }
 
 func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAddr sdk.AccAddress, recipientModule string, amt sdk.Coins) error {
@@ -55,7 +82,10 @@ func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAd
 		println("Failed to perform SendCoin", "coin", amt.String(), "module account not exist", recipientModule)
 		return fmt.Errorf("SendCoinsFromAccountToModule failed as module account %s does not exist", recipientModule)
 	}
-	if _, err := systemcontract.SendCoin(ctx, senderAddr, recipientAcc, amt[0]); err != nil {
+	if err := cbk.updateContext(); err != nil {
+		return err
+	}
+	if _, err := systemcontract.SendCoin(cbk.ctx, senderAddr, recipientAcc, amt[0]); err != nil {
 		println("Failed to perform SendCoin", "coin", amt.String(), "err", err)
 		return err
 	}
@@ -70,7 +100,11 @@ func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderMo
 		println("Failed to perform SendCoin", "coin", amt.String(), "module account not exist", senderAcc)
 		return fmt.Errorf("SendCoinsFromModuleToAccount failed as module account %s does not exist", senderAcc)
 	}
-	if _, err := systemcontract.SendCoin(ctx, senderAcc, recipientAddr, amt[0]); err != nil {
+
+	if err := cbk.updateContext(); err != nil {
+		return err
+	}
+	if _, err := systemcontract.SendCoin(cbk.ctx, senderAcc, recipientAddr, amt[0]); err != nil {
 		println("Failed to perform SendCoin", "coin", amt.String(), "err", err)
 		return err
 	}
@@ -82,7 +116,11 @@ func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, to
 	if amt.Empty() {
 		return fmt.Errorf("send coins failed as no coin's info provided")
 	}
-	if _, err := systemcontract.SendCoin(ctx, fromAddr, toAddr, amt[0]); err != nil {
+
+	if err := cbk.updateContext(); err != nil {
+		return err
+	}
+	if _, err := systemcontract.SendCoin(cbk.ctx, fromAddr, toAddr, amt[0]); err != nil {
 		println("Failed to perform SendCoin", "coin", amt.String(), "err", err)
 		return err
 	}
@@ -100,11 +138,23 @@ func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.
 	if amt.Empty() {
 		return fmt.Errorf("mint coins failed as no coin's info provided")
 	}
-	// call evm contract with ctx.EVM()
-	if _, err := systemcontract.MintCoin(ctx, cbk.mintAcc, amt[0]); err != nil {
+
+	//if _, err := systemcontract.GetTokenInfo(ctx, amt[0].Denom); err != nil {
+	//	println("Failed to perform GetTokenInfo", "coin", amt.String(), "err", err)
+	//	return err
+	//}
+
+	if err := cbk.updateContext(); err != nil {
+		return err
+	}
+	if _, err := systemcontract.MintCoin(cbk.ctx, cbk.mintAcc, amt[0]); err != nil {
 		println("Failed to perform MintCoins", "coin", amt.String(), "err", err)
 		return err
 	}
+	//if _, err := systemcontract.GetTokenInfo(ctx, amt[0].Denom); err != nil {
+	//	println("Failed to perform GetTokenInfo", "coin", amt.String(), "err", err)
+	//	return err
+	//}
 
 	return nil
 }
@@ -114,7 +164,11 @@ func (cbk CubeBankKeeper) BurnCoins(ctx sdk.Context, moduleName string, amt sdk.
 	if amt.Empty() {
 		return fmt.Errorf("burn coins failed as no coin's info provided")
 	}
-	if _, err := systemcontract.BurnCoin(ctx, cbk.mintAcc, amt[0]); err != nil {
+
+	if err := cbk.updateContext(); err != nil {
+		return err
+	}
+	if _, err := systemcontract.BurnCoin(cbk.ctx, cbk.mintAcc, amt[0]); err != nil {
 		println("Failed to perform BurnCoins", "coin", amt.String(), "err", err)
 		return err
 	}

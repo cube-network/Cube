@@ -214,9 +214,15 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	return app
 }
 
-// SetStateFn sets the function to get state.
+//func (app *CosmosApp) SetChainReader(chain expectedkeepers.ChainReader) {
+//	app.BankKeeper.SetChainReader(chain)
+//}
 func (app *CosmosApp) SetStateFn(fn expectedkeepers.StateFn) {
 	app.BankKeeper.SetStateFn(fn)
+}
+
+func (app *CosmosApp) SetCurrentHeaderFn(fn expectedkeepers.CurrentHeaderFn) {
+	app.BankKeeper.SetCurrentHeaderFn(fn)
 }
 
 func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath string) {

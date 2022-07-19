@@ -3,13 +3,13 @@ package systemcontract
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/state"
 	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/system"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
@@ -17,50 +17,10 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 )
 
-//// ChainReader defines a small collection of methods needed to access the local
-//// blockchain during header and/or uncle verification.
-//type ChainReader interface {
-//	// Config retrieves the blockchain's chain configuration.
-//	Config() *params.ChainConfig
-//
-//	// CurrentHeader retrieves the current header from the local chain.
-//	CurrentHeader() *types.Header
-//
-//	// GetHeader retrieves a block header from the database by hash and number.
-//	GetHeader(hash common.Hash, number uint64) *types.Header
-//
-//	// State returns a new mutable state based on the current HEAD block.
-//	State() (*state.StateDB, error)
-//}
-//
-//type chainContext struct {
-//	chainReader ChainReader
-//	engine      consensus.Engine
-//}
-//
-//func NewChainContext(chainReader ChainReader, engine consensus.Engine) *chainContext {
-//	return &chainContext{
-//		chainReader: chainReader,
-//		engine:      engine,
-//	}
-//}
-//
-//// Engine retrieves the chain's consensus engine.
-//func (cc *chainContext) Engine() consensus.Engine {
-//	return cc.engine
-//}
-//
-//// GetHeader returns the hash corresponding to their hash.
-//func (cc *chainContext) GetHeader(hash common.Hash, number uint64) *types.Header {
-//	return cc.chainReader.GetHeader(hash, number)
-//}
-
 type BankContext struct {
 	Statedb *state.StateDB
 	Header  *types.Header
 	Evm     *vm.EVM
-	//ChainContext core.ChainContext
-	//ChainConfig  *params.ChainConfig
 }
 
 func GetBalance(ctx *BankContext, addr sdk.AccAddress, amt sdk.Coin) (*big.Int, error) {

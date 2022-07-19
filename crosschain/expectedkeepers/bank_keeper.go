@@ -24,13 +24,15 @@ type CubeBankKeeper struct {
 	// list of addresses that are restricted from receiving transactions
 	blockedAddrs map[string]bool
 
-	stateFn         StateFn         // Function to get state by state root
-	currentHeaderFn CurrentHeaderFn // Function to get current header
-	ctx             *systemcontract.BankContext
+	stateFn           StateFn // Function to get state by state root
+	stateFnResult     bool
+	currentHeaderFn   CurrentHeaderFn // Function to get current header
+	curHeaderFnResult bool
+	ctx               *systemcontract.BankContext
 }
 
-func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress, blockedAddrs map[string]bool) CubeBankKeeper {
-	c := CubeBankKeeper{
+func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress, blockedAddrs map[string]bool) *CubeBankKeeper {
+	c := &CubeBankKeeper{
 		moduleAccs:   moduleAccs,
 		mintAcc:      mintAcc,
 		blockedAddrs: blockedAddrs,
@@ -39,15 +41,17 @@ func NewBankKeeper(moduleAccs map[string]sdk.AccAddress, mintAcc sdk.AccAddress,
 	return c
 }
 
-func (cbk CubeBankKeeper) SetStateFn(fn StateFn) {
+func (cbk *CubeBankKeeper) SetStateFn(fn StateFn) {
 	cbk.stateFn = fn
+	cbk.stateFnResult = true
 }
 
-func (cbk CubeBankKeeper) SetCurrentHeaderFn(fn CurrentHeaderFn) {
+func (cbk *CubeBankKeeper) SetCurrentHeaderFn(fn CurrentHeaderFn) {
 	cbk.currentHeaderFn = fn
+	cbk.curHeaderFnResult = true
 }
 
-func (cbk CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) bool {
+func (cbk *CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) bool {
 	println("HasBalance addr ", addr.String(), " ", amt.String())
 	if err := cbk.updateContext(ctx.EVM()); err != nil {
 		return false
@@ -60,7 +64,7 @@ func (cbk CubeBankKeeper) HasBalance(ctx sdk.Context, addr sdk.AccAddress, amt s
 	return balance.Int64() > 0
 }
 
-func (cbk CubeBankKeeper) updateContext(evm *vm.EVM) error {
+func (cbk *CubeBankKeeper) updateContext(evm *vm.EVM) error {
 	header := cbk.currentHeaderFn()
 	statedb, err := cbk.stateFn(header.Root)
 	if err != nil {
@@ -74,7 +78,7 @@ func (cbk CubeBankKeeper) updateContext(evm *vm.EVM) error {
 	return nil
 }
 
-func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAddr sdk.AccAddress, recipientModule string, amt sdk.Coins) error {
+func (cbk *CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAddr sdk.AccAddress, recipientModule string, amt sdk.Coins) error {
 	println("SendCoinsFromModuleToAccount ", " ", senderAddr.String(), " ", amt.String())
 	recipientAcc := cbk.moduleAccs[recipientModule]
 	if recipientAcc.Empty() {
@@ -92,7 +96,7 @@ func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAd
 	return nil
 }
 
-func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderModule string, recipientAddr sdk.AccAddress, amt sdk.Coins) error {
+func (cbk *CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderModule string, recipientAddr sdk.AccAddress, amt sdk.Coins) error {
 	println("SendCoinsFromModuleToAccount ", senderModule, " ", hex.EncodeToString(recipientAddr[2:]), " ", amt.String())
 	senderAcc := cbk.moduleAccs[senderModule]
 	if senderAcc.Empty() {
@@ -110,7 +114,7 @@ func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderMo
 	return nil
 }
 
-func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
+func (cbk *CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
 	println("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
 	if amt.Empty() {
 		return fmt.Errorf("send coins failed as no coin's info provided")
@@ -124,15 +128,20 @@ func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, to
 		return err
 	}
 
+	balance := cbk.GetBalance(ctx, fromAddr, amt[0].Denom)
+	println("Balance after SendCoins ", balance.Int64(), " fromAddr ", fromAddr.String())
+	balance = cbk.GetBalance(ctx, toAddr, amt[0].Denom)
+	println("Balance after SendCoins ", balance.Int64(), " toAddr ", toAddr.String())
+
 	return nil
 }
 
-func (cbk CubeBankKeeper) BlockedAddr(addr sdk.AccAddress) bool {
+func (cbk *CubeBankKeeper) BlockedAddr(addr sdk.AccAddress) bool {
 	println("BlockedAddr ", addr.String())
 	return cbk.blockedAddrs[addr.String()]
 }
 
-func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
+func (cbk *CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
 	println("MintCoins ", moduleName, " ", amt.String())
 	if amt.Empty() {
 		return fmt.Errorf("mint coins failed as no coin's info provided")
@@ -150,10 +159,13 @@ func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.
 	//	return err
 	//}
 
+	balance := cbk.GetBalanceOfModuleAccount(ctx, moduleName, amt[0].Denom)
+	println("Balance after MintCoins ", balance.Int64(), " account ", cbk.mintAcc.String())
+
 	return nil
 }
 
-func (cbk CubeBankKeeper) BurnCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
+func (cbk *CubeBankKeeper) BurnCoins(ctx sdk.Context, moduleName string, amt sdk.Coins) error {
 	println("BurnCoins ", moduleName, " ", amt.String())
 	if amt.Empty() {
 		return fmt.Errorf("burn coins failed as no coin's info provided")
@@ -170,7 +182,7 @@ func (cbk CubeBankKeeper) BurnCoins(ctx sdk.Context, moduleName string, amt sdk.
 	return nil
 }
 
-func (cbk CubeBankKeeper) GetBalanceOfModuleAccount(ctx sdk.Context, moduleName string, denom string) *big.Int {
+func (cbk *CubeBankKeeper) GetBalanceOfModuleAccount(ctx sdk.Context, moduleName string, denom string) *big.Int {
 	senderAcc := cbk.moduleAccs[moduleName]
 	if senderAcc.Empty() {
 		println("Failed to perform SendCoin", "coin", denom, "module account not exist", senderAcc)
@@ -179,7 +191,7 @@ func (cbk CubeBankKeeper) GetBalanceOfModuleAccount(ctx sdk.Context, moduleName 
 	return cbk.GetBalance(ctx, senderAcc, denom)
 }
 
-func (cbk CubeBankKeeper) GetBalance(ctx sdk.Context, addr sdk.AccAddress, denom string) *big.Int {
+func (cbk *CubeBankKeeper) GetBalance(ctx sdk.Context, addr sdk.AccAddress, denom string) *big.Int {
 	println("GetBalance ", denom, " ", addr.String())
 
 	if err := cbk.updateContext(ctx.EVM()); err != nil {

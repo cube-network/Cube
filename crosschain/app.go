@@ -99,8 +99,8 @@ type CosmosApp struct {
 	// keepers
 	CrisisKeeper     crisiskeeper.Keeper
 	ParamsKeeper     paramskeeper.Keeper
-	AccountKeeper    icatypes.AccountKeeper         //authkeeper.AccountKeeper
-	BankKeeper       expectedkeepers.CubeBankKeeper //ibcfeetypes.BankKeeper
+	AccountKeeper    icatypes.AccountKeeper          //authkeeper.AccountKeeper
+	BankKeeper       *expectedkeepers.CubeBankKeeper //ibcfeetypes.BankKeeper
 	CapabilityKeeper *capabilitykeeper.Keeper
 	IBCKeeper        *ibckeeper.Keeper // IBC Keeper must be a pointer in the app, so we can SetRouter on it correctly
 	IBCFeeKeeper     ibcfeekeeper.Keeper

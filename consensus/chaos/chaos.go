@@ -925,6 +925,7 @@ func (c *Chaos) Seal(chain consensus.ChainHeaderReader, block *types.Block, resu
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
+
 	println("chaos delay... ", common.PrettyDuration(delay), " ", time.Now().UTC().String())
 	go func() {
 		select {

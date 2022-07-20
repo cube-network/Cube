@@ -368,6 +368,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
 
+	// TODO for crosschain test
+	recommit += 1
+
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		if interrupt != nil {
@@ -412,11 +415,12 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
+				println("timer txs size ", atomic.LoadInt32(&w.newTxs))
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
 					continue
 				}
-				println("timer send newWorkCh....", time.Now().UTC().String())
+				println("\n\ntimer send newWorkCh....", time.Now().UTC().String())
 				commit(true, commitInterruptResubmit)
 			}
 
@@ -471,10 +475,11 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			println("timer recv newWorkCh....", time.Now().UTC().String())
+			println(" recv newWorkCh....", time.Now().UTC().String())
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
+			println(" recv chainSideCh....", time.Now().UTC().String())
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
@@ -514,6 +519,7 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
+			println(" recv txsCh.... ", len(ev.Txs), time.Now().UTC().String())
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -550,6 +556,7 @@ func (w *worker) mainLoop() {
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
+			println("txsch txs size ", atomic.LoadInt32(&w.newTxs))
 
 		// System stopped
 		case <-w.exitCh:
@@ -920,7 +927,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	println("worker commitNewWork recv netWorkCh...", time.Now().UTC().String())
+	println("worker commitNewWork...", time.Now().UTC().String())
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -1034,6 +1041,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
+	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {

@@ -1424,6 +1424,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
+	// TODO notify crosschain new header event
+	log.Debug("make new crosschain header", block.Header().Number.Uint64())
+	bc.Cosmosapp.MakeHeader(block.Header(), crosschain_app_hash)
+
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 		if len(logs) > 0 {
@@ -1435,15 +1439,14 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
+			println("ChainHeadEvent ", block.Header().Number.Uint64())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
+		println("ChainSideEvent ", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
-	// TODO notify crosschain new header event
-	log.Debug("make new crosschain header", block.Header().Number.Uint64())
-	bc.Cosmosapp.MakeHeader(block.Header(), crosschain_app_hash)
 	return status, nil
 }
 

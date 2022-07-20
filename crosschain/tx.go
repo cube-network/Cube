@@ -53,6 +53,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		return nil, nil
 	} else {
 	}
+
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
@@ -129,6 +130,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				keys := rcvPacketQuery(srcchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
+				println("write pkt ", key)
 			}
 			dstchan, okdstchan := attributes[chant.AttributeKeyDstChannel]
 			if okdstchan && event.Type == waTag {
@@ -136,6 +138,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				keys := ackPacketQuery(dstchan, s)
 				key := keys[0] + "/" + keys[1]
 				app.db.Set([]byte(key)[:], rdtxd[:])
+				println("write pkt ", key)
 			}
 
 		}

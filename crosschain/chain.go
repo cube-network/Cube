@@ -35,7 +35,7 @@ func (app *CosmosApp) CommitIBC() common.Hash {
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header {
-	log.Debug("log make header test")
+	println("log make header test ", h.Number.Int64(), " ", time.Now().UTC().String())
 	app.cc.MakeLightBlockAndSign(h, app_hash)
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }

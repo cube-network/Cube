@@ -25,7 +25,7 @@ interface IERC20 {
 }
 
 contract IBCERC20 is IERC20 {
-    //    using SafeMath for uint256;
+//    using SafeMath for uint256;
 
     mapping (address => uint256) private _balances;
 
@@ -34,7 +34,7 @@ contract IBCERC20 is IERC20 {
     uint256 private _totalSupply;
 
     string private _name;                   //fancy name: eg Simon Bucks
-    //    uint8 private _decimals;                //How many decimals to show.
+//    uint8 private _decimals;                //How many decimals to show.
     string private _symbol;                 //An identifier: eg SBX
 
     address private admin;
@@ -48,13 +48,13 @@ contract IBCERC20 is IERC20 {
     constructor(string memory name_, string memory symbol_) {
         admin = msg.sender;
 
-        //        _balances[admin] = amount_;
-        //        _totalSupply = amount_;
+//        _balances[admin] = amount_;
+//        _totalSupply = amount_;
         _name = name_;
         _symbol = symbol_;
     }
 
-    function totalSupply() public view virtual override returns (uint256) {
+   function totalSupply() public view virtual override returns (uint256) {
         return _totalSupply;
     }
 
@@ -131,10 +131,10 @@ contract IBCERC20 is IERC20 {
         require(to != address(0), "ERC20: transfer to the zero address");
 
         require(_balances[from] >= amount, "ERC20: transfer amount exceeds balance");
-    unchecked {
-        _balances[from] -= amount;
-        _balances[to] += amount;
-    }
+        unchecked {
+            _balances[from] -= amount;
+            _balances[to] += amount;
+        }
 
         emit Transfer(from, to, amount);
     }
@@ -146,4 +146,6 @@ contract IBCERC20 is IERC20 {
         _allowances[owner][spender] = amount;
         emit Approval(owner, spender, amount);
     }
+
 }
+

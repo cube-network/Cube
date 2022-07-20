@@ -5,10 +5,45 @@ import "./IBCERC20.sol";
 
 contract ERC20Factory {
     mapping(string => IBCERC20) private _created;
+    uint private _count;
+    string[] private _tokens;
 
     function createERC20(string memory _name, string memory _symbol) internal {
-        //        require(address(_created[name]) == address(0), "ERC20: token already exists");
+//        require(address(_created[name]) == address(0), "ERC20: token already exists");
         _created[_name] = new IBCERC20(_name, _symbol);
+        _tokens.push(_name);
+        _count++;
+    }
+
+    function allTokens() public view returns (string[] memory outArray_) {
+        outArray_ = new string[](_tokens.length);
+        for (uint i = 0; i < _tokens.length; i++) {
+            outArray_[i] = _tokens[i];
+        }
+    }
+
+    function allBalances(address owner) public view returns (string[] memory tokens_, uint256[] memory balances_) {
+        require(address(owner) != address(0), "ERC20: account does not exist");
+        tokens_ = new string[](_count);
+        balances_ = new uint256[](_count);
+        string memory name;
+        for (uint i = 0; i < _tokens.length; i++) {
+            name = _tokens[i];
+            if(address(_created[name]) != address(0)) {
+                tokens_[i] = name;
+                balances_[i] = _created[name].balanceOf(owner);
+            }
+        }
+    }
+
+    function getERC20Info(string memory _name) public view returns (bool exist_, uint256 totalsupply_) {
+        if(address(_created[_name]) == address(0)) {
+            exist_ = false;
+            totalsupply_ = 0;
+        } else {
+            exist_ = true;
+            totalsupply_ = _created[_name].totalSupply();
+        }
     }
 
     // todo: add some restriction according to usage's environment
@@ -61,13 +96,15 @@ contract ERC20Factory {
         _created[name].decreaseAllowance(spender, 1000);
         return true;
     }
-
+    
     function destroyCoin(string memory name) public returns (bool) {
         if(address(_created[name]) == address(0)) {
             return true;
         }
         require(_created[name].totalSupply() == 0, "ERC20: total supply is not zero");
         delete _created[name];
+        _count--;
+//        _tokens.pop(name);    // todo: delete element from _tokens
 
         return true;
     }

@@ -37,7 +37,7 @@ func GetBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) (*big.Int, e
 	return balance, nil
 }
 
-func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (map[string]int64, error) {
+func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (sdk.Coins, error) {
 	contract := system.ERC20FactoryContract
 	method := "allBalances"
 	owner := common.BytesToAddress(addr)
@@ -48,7 +48,7 @@ func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (map[string]int64, err
 	if err != nil {
 		return nil, err
 	}
-	if len(ret) != 1 {
+	if len(ret) != 2 {
 		return nil, errors.New("GetAllBalances: invalid result length")
 	}
 
@@ -56,15 +56,15 @@ func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (map[string]int64, err
 	if !ok {
 		return nil, errors.New("GetAllBalances: invalid result format")
 	}
-	balances, ok := ret[1].([]int64)
+	balances, ok := ret[1].([]*big.Int)
 	if !ok || len(tokens) != len(balances) {
 		return nil, errors.New("GetAllBalances: invalid result format")
 	}
-	balanceMap := make(map[string]int64)
+	coins := make(sdk.Coins, len(tokens))
 	for i := 0; i < len(tokens); i++ {
-		balanceMap[tokens[i]] = balances[i]
+		coins[i] = sdk.Coin{Denom: tokens[i], Amount: sdk.NewInt(balances[i].Int64())}
 	}
-	return balanceMap, nil
+	return coins, nil
 }
 
 func SendCoin(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coin) ([]byte, error) {

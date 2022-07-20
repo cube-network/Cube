@@ -536,7 +536,7 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	return nil
 }
 
-// preload accounts from Transactions
+// preload accounts from TransactionsX
 func (s *StateDB) PreloadAccounts(block *types.Block, signer types.Signer) {
 	if s.snap == nil {
 		return
@@ -909,7 +909,8 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
-			println("finalise addr ", obj.address.Hex())
+			// println()
+			fmt.Printf("finalise statedb %p addr %s\n", s, obj.address.Hex())
 			obj.finalise(true) // Prefetch slots in the background
 		}
 		s.stateObjectsPending[addr] = struct{}{}
@@ -1239,7 +1240,8 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		var storageCommitted int
 		for addr := range s.stateObjectsDirty {
 			if obj := s.stateObjects[addr]; !obj.deleted {
-				println("commit addr ", obj.address.Hex())
+				// println
+				fmt.Printf("statedb commit %p addr %s\n", s, obj.address.Hex())
 				// Write any storage changes in the state object to its storage trie
 				committed, err := obj.CommitTrie(s.db)
 				if err != nil {

@@ -396,13 +396,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	for {
 		select {
 		case <-w.startCh:
-			println("start ch....", time.Now().UTC().String())
+			println("start  send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			println("chainHeadCh ch....", time.Now().UTC().String())
+			println("chainHeadCh send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
@@ -416,7 +416,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 					timer.Reset(recommit)
 					continue
 				}
-				println("timer ch....", time.Now().UTC().String())
+				println("timer send newWorkCh....", time.Now().UTC().String())
 				commit(true, commitInterruptResubmit)
 			}
 
@@ -471,6 +471,7 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			println("timer recv newWorkCh....", time.Now().UTC().String())
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
@@ -582,6 +583,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
+			println("worker commit recv taskCh... ", time.Now().UTC().String())
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -620,6 +622,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
+			println("worker resultLoop resultCh... ", time.Now().UTC().String())
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -917,6 +920,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
+	println("worker commitNewWork recv netWorkCh...", time.Now().UTC().String())
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -1065,6 +1069,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+			println("worker commit send taskCh... ", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,

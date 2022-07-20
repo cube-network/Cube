@@ -910,7 +910,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			}
 		} else {
 			// println()
-			fmt.Printf("finalise statedb %p addr %s\n", s, obj.address.Hex())
+			// fmt.Printf("finalise statedb %p addr %s\n", s, obj.address.Hex())
 			obj.finalise(true) // Prefetch slots in the background
 		}
 		s.stateObjectsPending[addr] = struct{}{}
@@ -1241,7 +1241,7 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		for addr := range s.stateObjectsDirty {
 			if obj := s.stateObjects[addr]; !obj.deleted {
 				// println
-				fmt.Printf("statedb commit %p addr %s\n", s, obj.address.Hex())
+				// fmt.Printf("statedb commit %p addr %s\n", s, obj.address.Hex())
 				// Write any storage changes in the state object to its storage trie
 				committed, err := obj.CommitTrie(s.db)
 				if err != nil {

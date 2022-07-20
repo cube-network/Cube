@@ -369,7 +369,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	<-timer.C // discard the initial tick
 
 	// TODO for crosschain test
-	recommit += 1
+	recommit *= 2
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {

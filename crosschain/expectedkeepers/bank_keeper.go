@@ -193,6 +193,15 @@ func (cbk CubeBankKeeper) MintCoins(ctx sdk.Context, moduleName string, amt sdk.
 		println("sb ", sb.Int64(), " addr ", hex.EncodeToString(cbk.mintAcc.Bytes()))
 	}
 
+	allbalances, err := systemcontract.GetAllBalances(ctx, cbk.mintAcc)
+	if err != nil {
+		println("err ", err.Error())
+	} else {
+		for token, balance := range allbalances {
+			println("token ", token, " balance ", balance)
+		}
+	}
+
 	return nil
 }
 

@@ -439,6 +439,16 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 	status, hash := rawdb.ReadBlockStatusByNum(bc.db, new(big.Int).SetUint64(number))
 	// Cache the found status for next time and return
 	// Only deterministic data is saved, and data tracking is required only at the beginning of startup
+
+	if status != types.BasFinalized {
+		lastFinalizedBlockNumber := bc.GetLastFinalizedBlockNumber()
+		if number < lastFinalizedBlockNumber {
+			currentBlock := bc.GetBlockByNumber(number)
+			status = types.BasFinalized
+			hash = currentBlock.Hash()
+		}
+	}
+
 	if status == types.BasFinalized {
 		bc.BlockStatusCache.Add(number, &types.BlockStatus{
 			BlockNumber: new(big.Int).SetUint64(number),

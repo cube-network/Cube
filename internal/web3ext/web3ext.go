@@ -965,11 +965,6 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'cosmosBalances',
-			call: 'crosschain_cosmosBalances',
-			params: 1
-		}),
-		new web3._extend.Method({
 			name: 'cosmosTxsSearch',
 			call: 'crosschain_cosmosTxsSearch',
 			params: 3

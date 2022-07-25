@@ -69,6 +69,7 @@ func (mdb *MockDB) Stats() map[string]string {
 }
 
 func (mdb *MockDB) Clean() error {
+	println("\n\ntotal counter... ", mdb.counter)
 	mdb.counter = 0
 	return nil
 }

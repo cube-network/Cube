@@ -30,13 +30,15 @@ func (app *CosmosApp) CommitIBC() common.Hash {
 	var h common.Hash
 	copy(h[:], c.Data[:])
 	println("commit ibc hash", h.Hex(), " version ", " ts ", time.Now().UTC().String())
+	// TODO
+	app.db.Clean()
 	return h
 	// return common.Hash{}
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header {
-	println("log make header test ", h.Number.Int64(), " ", time.Now().UTC().String())
 	app.cc.MakeLightBlockAndSign(h, app_hash)
+	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash, " ", time.Now().UTC().String())
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }
 
@@ -157,7 +159,7 @@ func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.Lig
 
 func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) *ct.LightBlock {
 
-	println("new crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
+	println("make crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
 
 	light_block := c.MakeLightBlock(h, app_hash)
 	vote := &ct.Vote{

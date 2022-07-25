@@ -50,7 +50,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	tl "github.com/tendermint/tendermint/libs/log"
-	dbm "github.com/tendermint/tm-db"
 )
 
 // IBC application testing ports
@@ -86,7 +85,8 @@ var (
 
 type CosmosApp struct {
 	*baseapp.BaseApp
-	db           dbm.DB
+	// db           dbm.DB
+	db           *MockDB
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
@@ -129,7 +129,8 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	// TODO read path from cmdline/conf
 	path := "./data/"
 	// TODO make db
-	db, _ := sdk.NewLevelDB("application", path)
+	// db, _ := sdk.NewLevelDB("application", path)
+	db := NewMockDB("application", path)
 	codec := MakeEncodingConfig()
 	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())

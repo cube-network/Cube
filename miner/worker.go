@@ -370,6 +370,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 
 	// TODO for crosschain test
 	recommit *= 2
+	fixed_recommit := recommit
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
@@ -382,7 +383,8 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.exitCh:
 			return
 		}
-		timer.Reset(recommit)
+		println("recommit... ", recommit)
+		timer.Reset(fixed_recommit)
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
 	// clearPending cleans the stale pending tasks.
@@ -415,9 +417,9 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
-				println("timer txs size ", atomic.LoadInt32(&w.newTxs))
+				println("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					timer.Reset(recommit)
+					timer.Reset(fixed_recommit)
 					continue
 				}
 				println("\n\ntimer send newWorkCh....", time.Now().UTC().String())
@@ -444,10 +446,12 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				target := float64(recommit.Nanoseconds()) / adjust.ratio
 				recommit = recalcRecommit(minRecommit, recommit, target, true)
 				log.Trace("Increase miner recommit interval", "from", before, "to", recommit)
+				println("\n\n adjust increase ", recommit)
 			} else {
 				before := recommit
 				recommit = recalcRecommit(minRecommit, recommit, float64(minRecommit.Nanoseconds()), false)
 				log.Trace("Decrease miner recommit interval", "from", before, "to", recommit)
+				println("\n\n adjust decrease ", recommit)
 			}
 
 			if w.resubmitHook != nil {

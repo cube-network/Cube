@@ -1,6 +1,7 @@
 package iavl
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -111,6 +112,7 @@ func (st *Store) Commit() types.CommitID {
 	if err != nil {
 		panic(err)
 	}
+	println("store save version ", version, " hash ", hex.EncodeToString(hash))
 
 	return types.CommitID{
 		Version: version,
@@ -173,6 +175,7 @@ func (st *Store) Set(key, value []byte) {
 	types.AssertValidKey(key)
 	types.AssertValidValue(value)
 	st.tree.Set(key, value)
+	// println("--------- store set key (", len(key), ") ", string(key), " val( ", len(value))
 }
 
 // Implements types.KVStore.
@@ -289,6 +292,7 @@ func (st *Store) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 
 	// store the height we chose in the response, with 0 being changed to the
 	// latest height
+	height := req.Height
 	res.Height = getHeight(tree, req)
 
 	switch req.Path {
@@ -317,6 +321,7 @@ func (st *Store) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 			ImmutableTree: iTree,
 		}
 
+		println("get version ", height, " version ", tree.Version(), " height(version) ", res.Height, " hash ", hex.EncodeToString(st.tree.Hash()))
 		// get proof from tree and convert to merkle.Proof before adding to result
 		res.ProofOps = getProofFromTree(mtree, req.Data, res.Value != nil)
 

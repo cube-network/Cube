@@ -70,7 +70,7 @@ func CreatingBloomParallel(wg *sync.WaitGroup) ModifyProcessOptionFunc {
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, crosschain vm.CrossChainContract) (types.Receipts, []*types.Log, uint64, error) {
 	var (
 		receipts    = make([]*types.Receipt, 0)
 		usedGas     = new(uint64)
@@ -83,6 +83,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, p.config, cfg)
+	vmenv.Crosschain = crosschain
 	// Iterate over and process the individual transactions
 	chaosEngine, isChaosEngine := p.engine.(consensus.ChaosEngine)
 	if isChaosEngine {

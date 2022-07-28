@@ -41,8 +41,14 @@ type Database interface {
 	// OpenTrie opens the main account trie.
 	OpenTrie(root common.Hash) (Trie, error)
 
+	// OpenTrieWithCache opens the main account trie with hash cache.
+	OpenTrieWithCache(root common.Hash, dirtyTrieNodes *trie.HashCache) (Trie, error)
+
 	// OpenStorageTrie opens the storage trie of an account.
 	OpenStorageTrie(addrHash, root common.Hash) (Trie, error)
+
+	// OpenStorageTrieWithCache opens the storage trie of an account with hash cache.
+	OpenStorageTrieWithCache(addrHash, root common.Hash, dirtyTrieNodes *trie.HashCache) (Trie, error)
 
 	// CopyTrie returns an independent copy of the given trie.
 	CopyTrie(Trie) Trie
@@ -140,9 +146,27 @@ func (db *cachingDB) OpenTrie(root common.Hash) (Trie, error) {
 	return tr, nil
 }
 
+// OpenTrie opens the main account trie at a specific root hash.
+func (db *cachingDB) OpenTrieWithCache(root common.Hash, dirtyTrieNodes *trie.HashCache) (Trie, error) {
+	tr, err := trie.NewSecureWithCache(root, db.db, dirtyTrieNodes)
+	if err != nil {
+		return nil, err
+	}
+	return tr, nil
+}
+
 // OpenStorageTrie opens the storage trie of an account.
 func (db *cachingDB) OpenStorageTrie(addrHash, root common.Hash) (Trie, error) {
 	tr, err := trie.NewSecure(root, db.db)
+	if err != nil {
+		return nil, err
+	}
+	return tr, nil
+}
+
+// OpenStorageTrie opens the storage trie of an account.
+func (db *cachingDB) OpenStorageTrieWithCache(addrHash, root common.Hash, dirtyTrieNodes *trie.HashCache) (Trie, error) {
+	tr, err := trie.NewSecureWithCache(root, db.db, dirtyTrieNodes)
 	if err != nil {
 		return nil, err
 	}

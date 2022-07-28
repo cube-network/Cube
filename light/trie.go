@@ -54,7 +54,15 @@ func (db *odrDatabase) OpenTrie(root common.Hash) (state.Trie, error) {
 	return &odrTrie{db: db, id: db.id}, nil
 }
 
+func (db *odrDatabase) OpenTrieWithCache(root common.Hash, dirtyTrieNodes *trie.HashCache) (state.Trie, error) {
+	return &odrTrie{db: db, id: db.id}, nil
+}
+
 func (db *odrDatabase) OpenStorageTrie(addrHash, root common.Hash) (state.Trie, error) {
+	return &odrTrie{db: db, id: StorageTrieID(db.id, addrHash, root)}, nil
+}
+
+func (db *odrDatabase) OpenStorageTrieWithCache(addrHash, root common.Hash, dirtyTrieNodes *trie.HashCache) (state.Trie, error) {
 	return &odrTrie{db: db, id: StorageTrieID(db.id, addrHash, root)}, nil
 }
 

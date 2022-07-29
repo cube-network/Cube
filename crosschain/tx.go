@@ -140,7 +140,6 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				app.db.Set([]byte(key)[:], rdtxd[:])
 				println("write pkt ", key)
 			}
-
 		}
 	}
 

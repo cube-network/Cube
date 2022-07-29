@@ -5,16 +5,41 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	et "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	abci "github.com/tendermint/tendermint/abci/types"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
 	ct "github.com/tendermint/tendermint/types"
-	tt "github.com/tendermint/tendermint/types"
 )
 
+// TODO call from external with real req, now for test only
+// TODO get cube block header instead
+func (app *CosmosApp) Load(initheader *ct.SignedHeader) {
+	// TODO load without genesis
+	if !app.IsIBCInit {
+		app.LoadLatestVersion()
+		// app.InitChain(abci.RequestInitChain{Time: initheader.Time, ChainId: initheader.ChainID, InitialHeight: initheader.Height})
+
+		var genesisState GenesisState
+		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
+			panic(err)
+		}
+		app.BeginBlock(abci.RequestBeginBlock{Header: *initheader.ToProto().Header})
+		app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
+
+		app.IsIBCInit = true
+	}
+
+}
+
+// TODO remove later
 func (app *CosmosApp) OnBlockBegin(h *et.Header, netxBlock bool) {
 	hdr := app.cc.MakeCosmosSignedHeader(h, common.Hash{}).ToProto().Header
 	if netxBlock {
@@ -24,6 +49,16 @@ func (app *CosmosApp) OnBlockBegin(h *et.Header, netxBlock bool) {
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr})
 }
 
+func (app *CosmosApp) OnBlockBegin2(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
+	println("begin block height", header.Number.Int64(), " ts ", time.Now().UTC().String())
+
+	app.db.SetEVM(config, blockContext, statedb, header, cfg)
+
+	hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
+	app.Load(hdr)
+	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+}
+
 //called before mpt.commit
 func (app *CosmosApp) CommitIBC() common.Hash {
 	c := app.BaseApp.Commit()
@@ -31,7 +66,8 @@ func (app *CosmosApp) CommitIBC() common.Hash {
 	copy(h[:], c.Data[:])
 	println("commit ibc hash", h.Hex(), " version ", " ts ", time.Now().UTC().String())
 	// TODO
-	app.db.Clean()
+	// TODO put app.db.Commit() to block header
+	app.db.Commit()
 	return h
 	// return common.Hash{}
 }
@@ -42,7 +78,7 @@ func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header 
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }
 
-func (app *CosmosApp) Vote(block_height uint64, Address tt.Address) {
+func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
 	// app.cc.MakeCosmosSignedHeader(h, nil)
 
 }
@@ -64,9 +100,10 @@ type CosmosChain struct {
 }
 
 // priv_validator_addr: chaos.validator
-func MakeCosmosChain(priv_validator_key_file, priv_validator_state_file string) *CosmosChain {
+func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_state_file string) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
+	// TODO chainID
 	c.ChainID = "ibc-1"
 	c.light_block = make(map[int64]*ct.LightBlock)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)

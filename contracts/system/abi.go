@@ -612,6 +612,96 @@ const (
       "type": "function"
     }
   ]`
+
+	IBCStateABI = `[
+		{
+			"inputs": [
+			  {
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
+			  },
+			  {
+				"internalType": "bytes",
+				"name": "val",
+				"type": "bytes"
+			  },
+			  {
+				"internalType": "uint64",
+				"name": "block_number",
+				"type": "uint64"
+			  },
+			  {
+				"internalType": "string",
+				"name": "prefix",
+				"type": "string"
+			  }
+			],
+			"name": "set",
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
+			  }
+			],
+			"name": "get",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				  },
+			  {
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			  }
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "string",
+				"name": "prefix",
+				"type": "string"
+			  }
+			],
+			"name": "getroot",
+			"outputs": [
+				{
+					"internalType": "bytes[]",
+					"name": "",
+					"type": "bytes[]"
+				  },
+			  {
+				"internalType": "bytes[]",
+				"name": "",
+				"type": "bytes[]"
+			  }
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "uint64",
+				"name": "block_number",
+				"type": "uint64"
+			  }
+			],
+			"name": "clear",
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  }
+	]`
 )
 
 var (
@@ -620,6 +710,7 @@ var (
 	BonusPoolContract     = common.HexToAddress("0x000000000000000000000000000000000000F002")
 	GenesisLockContract   = common.HexToAddress("0x000000000000000000000000000000000000F003")
 	ERC20FactoryContract  = common.HexToAddress("0x000000000000000000000000000000000000F008")
+	IBCStateContract      = common.HexToAddress("0x000000000000000000000000000000000000F009")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -629,7 +720,7 @@ func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
 
 	rawAbiMap := map[common.Address]string{StakingContract: StakingABI, CommunityPoolContract: CommunityPoolABI,
-		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI, ERC20FactoryContract: ERC20FactoryABI}
+		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI, ERC20FactoryContract: ERC20FactoryABI, IBCStateContract: IBCStateABI}
 
 	for addr, rawAbi := range rawAbiMap {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {

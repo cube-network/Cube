@@ -310,7 +310,8 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetState(s.db, hash)
+		t := stateObject.GetState(s.db, hash)
+		return t // stateObject.GetState(s.db, hash)
 	}
 	return common.Hash{}
 }

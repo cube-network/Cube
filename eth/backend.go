@@ -202,7 +202,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	log.Debug("make cosmos app")
-	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(map[int64]bool{}, eth.blockchain.CurrentBlock().Header())
+	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(stack.DataDir(), chainConfig.ChainID, chainDb, map[int64]bool{})
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {

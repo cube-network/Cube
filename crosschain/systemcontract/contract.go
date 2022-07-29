@@ -88,9 +88,9 @@ func callContract(ctx sdk.Context, contract common.Address, method string, args 
 	}
 
 	// Create EVM calling message
-	header := ctx.BlockHeader()
+	// header := ctx.BlockHeader()
 	nonce := uint64(1) // todo: get proposer's sequence from account module
-	msg := types.NewMessage(common.BytesToAddress(header.GetProposerAddress()), &contract, nonce, big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
+	msg := types.NewMessage(vm.CrossChainContractAddr, &contract, nonce, big.NewInt(0), math.MaxUint64, big.NewInt(0), big.NewInt(0), big.NewInt(0), data, nil, false)
 
 	//// Create EVM
 	//blockContext := core.NewEVMBlockContext(header, ctx.ChainContext, nil)
@@ -116,4 +116,90 @@ func callContract(ctx sdk.Context, contract common.Address, method string, args 
 	//ctx.Statedb.Finalise(true)
 
 	return ret, err
+}
+
+func SetState(ctx sdk.Context, key []byte, val []byte, prefix string) ([]byte, error) {
+	if val == nil {
+		return nil, nil
+	}
+
+	method := "set"
+	_, err := callContract(ctx, system.IBCStateContract, method, key, val, ctx.EVM().Context.BlockNumber.Uint64(), prefix)
+	if err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
+func GetRoot(ctx sdk.Context, prefix string) ([][]byte, [][]byte, error) {
+	method := "getroot"
+	result, err := callContract(ctx, system.IBCStateContract, method, prefix)
+	if err != nil {
+		return nil, nil, err
+	}
+	ret, err := system.ABIUnpack(system.IBCStateContract, method, result)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(ret) != 2 {
+		return nil, nil, errors.New("length")
+	}
+	k, ok := ret[0].([][]byte)
+	if !ok {
+		return nil, nil, errors.New("GetRoot result format, length")
+	}
+
+	v, ok := ret[1].([][]byte)
+	if !ok {
+		return nil, nil, errors.New("GetRoot result format, val")
+	}
+	return k, v, nil
+}
+
+func GetState(ctx sdk.Context, key []byte) (bool, []byte, error) {
+	method := "get"
+	result, err := callContract(ctx, system.IBCStateContract, method, key)
+	if err != nil {
+		return false, nil, err
+	}
+	ret, err := system.ABIUnpack(system.IBCStateContract, method, result)
+	if err != nil {
+		return false, nil, err
+	}
+	if len(ret) != 2 {
+		return false, nil, errors.New("length")
+	}
+	is_exist, ok := ret[0].(bool)
+	if !ok {
+		return false, nil, errors.New("GetState result format, length")
+	}
+	if !is_exist {
+		return false, nil, nil
+	}
+
+	val, ok := ret[1].([]byte)
+	if !ok {
+		return false, nil, errors.New("GetState result format, val")
+	}
+	return true, val, nil
+}
+
+func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
+	method := "del"
+	_, err := callContract(ctx, system.IBCStateContract, method, key)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func ClearState(ctx sdk.Context, block_number uint64) ([]byte, error) {
+	method := "clear"
+	_, err := callContract(ctx, system.IBCStateContract, method, block_number)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, nil
 }

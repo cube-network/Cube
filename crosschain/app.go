@@ -1,6 +1,8 @@
 package crosschain
 
 import (
+	"math/big"
+
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,15 +39,12 @@ import (
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	abci "github.com/tendermint/tendermint/abci/types"
-	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/ethereum/go-ethereum/ethdb"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
-	"github.com/ethereum/go-ethereum/common"
-	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -86,7 +85,7 @@ var (
 type CosmosApp struct {
 	*baseapp.BaseApp
 	// db           dbm.DB
-	db           *MockDB
+	db           *IBCStateDB
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
@@ -123,16 +122,15 @@ type CosmosApp struct {
 }
 
 // TODO level db/mpt wrapper
-func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *CosmosApp {
+func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, skipUpgradeHeights map[int64]bool) *CosmosApp {
 	log.Debug("new cosmos app...")
 
-	// TODO read path from cmdline/conf
-	path := "./data/"
 	// TODO make db
-	// db, _ := sdk.NewLevelDB("application", path)
-	db := NewMockDB("application", path)
+	// db, _ := sdk.NewLevelDB("application", datadir)
+	// db := NewIBCStateDB("application", datadir)
+	db := NewIBCStateDB(ethdb)
 	codec := MakeEncodingConfig()
-	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
+	cc := MakeCosmosChain(chainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
 	bApp.CC = cc
 	// bApp.SetCommitMultiStoreTracer(traceStore)
@@ -145,7 +143,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
 
-	app.setupSDKModule(skipUpgradeHeights, path)
+	app.setupSDKModule(skipUpgradeHeights, datadir)
 
 	// IBC Keepers
 	app.setupIBCKeeper()
@@ -191,26 +189,6 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	app.MountKVStores(app.keys)
 	app.MountTransientStores(app.tkeys)
 	app.MountMemoryStores(app.memKeys)
-
-	app.LoadLatestVersion()
-
-	th := app.cc.MakeCosmosSignedHeader(initheader, common.Hash{}).ToProto().Header
-	app.InitChain(abci.RequestInitChain{Time: th.Time, ChainId: th.ChainID, InitialHeight: th.Height})
-
-	// TODO call from external with real req, now for test only
-	// TODO get cube block header instead
-	app.MakeHeader(initheader, common.Hash{})
-
-	// TODO lastblockheight for test only, relace later
-	if !app.IsIBCInit {
-		var genesisState GenesisState
-		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
-			panic(err)
-		}
-		app.OnBlockBegin(initheader, true)
-		app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
-		app.IsIBCInit = true
-	}
 
 	return app
 }

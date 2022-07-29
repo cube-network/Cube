@@ -1016,7 +1016,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(header, false)
+	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin2(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
 
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)

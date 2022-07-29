@@ -1,6 +1,7 @@
 package crosschain
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -39,17 +40,7 @@ func (app *CosmosApp) Load(initheader *ct.SignedHeader) {
 
 }
 
-// TODO remove later
-func (app *CosmosApp) OnBlockBegin(h *et.Header, netxBlock bool) {
-	hdr := app.cc.MakeCosmosSignedHeader(h, common.Hash{}).ToProto().Header
-	if netxBlock {
-		hdr.Height += 1
-	}
-	println("begin block height", hdr.Height, " ts ", time.Now().UTC().String())
-	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr})
-}
-
-func (app *CosmosApp) OnBlockBegin2(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
+func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
 	println("begin block height", header.Number.Int64(), " ts ", time.Now().UTC().String())
 
 	app.db.SetEVM(config, blockContext, statedb, header, cfg)
@@ -59,22 +50,24 @@ func (app *CosmosApp) OnBlockBegin2(config *params.ChainConfig, blockContext vm.
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
-//called before mpt.commit
-func (app *CosmosApp) CommitIBC() common.Hash {
-	c := app.BaseApp.Commit()
-	var h common.Hash
-	copy(h[:], c.Data[:])
-	println("commit ibc hash", h.Hex(), " version ", " ts ", time.Now().UTC().String())
-	// TODO
-	// TODO put app.db.Commit() to block header
+func (app *CosmosApp) CommitIBC() {
 	app.db.Commit()
-	return h
-	// return common.Hash{}
 }
 
-func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header {
-	app.cc.MakeLightBlockAndSign(h, app_hash)
-	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash, " ", time.Now().UTC().String())
+func (app *CosmosApp) OnBlockEnd() {
+	c := app.BaseApp.Commit()
+	app.db.Set([]byte("cosmos_app_hash"), c.Data[:])
+	app.app_hash.SetBytes(c.Data[:])
+
+	state_root := app.db.statedb.IntermediateRoot(false)
+	app.state_root = state_root
+
+	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
+}
+
+func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
+	app.cc.MakeLightBlockAndSign(h, app.app_hash)
+	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }
 

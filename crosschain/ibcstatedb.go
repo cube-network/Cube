@@ -26,8 +26,6 @@ type IBCStateDB struct {
 	statedb *state.StateDB
 	evm     *vm.EVM
 	counter int
-
-	last_state_hash common.Hash
 }
 
 func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
@@ -36,7 +34,9 @@ func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
 }
 
 func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
-	// // TODO lock ??
+	mdb.mu.Lock()
+	defer mdb.mu.Unlock()
+
 	if mdb.statedb == nil {
 		mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 
@@ -68,8 +68,6 @@ func (mdb *IBCStateDB) Commit() common.Hash {
 
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
-	// mdb.statedb.Finalise(false)
-	// hash, _ := mdb.statedb.Commit(false)
 
 	var ws sync.WaitGroup
 	ws.Add(1)
@@ -104,10 +102,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val ( nil ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -125,7 +123,7 @@ func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
 		println("Failed to Get, err", err.Error())
 		return false, err
 	}
-	println("store. has ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
+	// println("store. has ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
 
 	return is_exist, nil
 }
@@ -135,7 +133,7 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 		return errors.New("IBCStateDB not init")
 	}
 
-	println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.counter++
 
 	mdb.mu.Lock()
@@ -301,105 +299,3 @@ func (it *IBCStateIterator) Error() error {
 func (it *IBCStateIterator) Close() error {
 	return nil
 }
-
-// //#####
-
-// package crosschain
-
-// import (
-// 	sdk "github.com/cosmos/cosmos-sdk/types"
-// 	dbm "github.com/tendermint/tm-db"
-// )
-
-// // call contract?
-
-// type IBCStateDB struct {
-// 	db      dbm.DB
-// 	counter int
-// }
-
-// func NewIBCStateDB(name string, path string) *IBCStateDB {
-// 	db, _ := sdk.NewLevelDB(name, path)
-// 	mdb := &IBCStateDB{db: db}
-// 	return mdb
-// }
-
-// func (mdb *IBCStateDB) Get(b []byte) ([]byte, error) {
-// 	return mdb.db.Get(b)
-// }
-
-// func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
-// 	return mdb.db.Has(key)
-// }
-
-// func (mdb *IBCStateDB) Set(s []byte, b []byte) error {
-// 	mdb.counter++
-// 	// println("set ", mdb.counter, " key ", string(s), " val ", b, hex.EncodeToString(b))
-// 	return mdb.db.Set(s, b)
-// }
-
-// func (mdb *IBCStateDB) SetSync(s []byte, b []byte) error {
-// 	mdb.counter++
-// 	// println("set sync ", mdb.counter, " key ", string(s), " val ", b, hex.EncodeToString(b))
-// 	return mdb.db.SetSync(s, b)
-// }
-
-// func (mdb *IBCStateDB) Delete(b []byte) error {
-// 	return mdb.db.Delete(b)
-// }
-
-// func (mdb *IBCStateDB) DeleteSync(b []byte) error {
-// 	return mdb.db.DeleteSync(b)
-// }
-
-// func (mdb *IBCStateDB) Iterator(start, end []byte) (dbm.Iterator, error) {
-// 	return mdb.db.Iterator(start, end)
-// }
-
-// func (mdb *IBCStateDB) ReverseIterator(start, end []byte) (dbm.Iterator, error) {
-// 	return mdb.db.ReverseIterator(start, end)
-// }
-
-// func (mdb *IBCStateDB) Close() error {
-// 	return mdb.db.Close()
-// }
-
-// func (mdb *IBCStateDB) NewBatch() dbm.Batch {
-// 	return &IBCStateBatch{batch: mdb.db.NewBatch(), db: mdb}
-// }
-
-// func (mdb *IBCStateDB) Print() error {
-// 	return mdb.db.Print()
-// }
-
-// func (mdb *IBCStateDB) Stats() map[string]string {
-// 	return mdb.db.Stats()
-// }
-
-// type IBCStateBatch struct {
-// 	batch   dbm.Batch
-// 	db      *IBCStateDB
-// 	counter int
-// }
-
-// func (mdb *IBCStateBatch) Set(key, value []byte) error {
-// 	mdb.db.counter++
-// 	mdb.counter++
-// 	// println("set ", mdb.db.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(value), ") ", hex.EncodeToString(value))
-// 	return mdb.batch.Set(key, value)
-// }
-
-// func (mdb *IBCStateBatch) Delete(key []byte) error {
-// 	return mdb.batch.Delete(key)
-// }
-
-// func (mdb *IBCStateBatch) Write() error {
-// 	return mdb.batch.Write()
-// }
-
-// func (mdb *IBCStateBatch) WriteSync() error {
-// 	return mdb.batch.WriteSync()
-// }
-// func (mdb *IBCStateBatch) Close() error {
-// 	return mdb.batch.Close()
-// }

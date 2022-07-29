@@ -39,6 +39,7 @@ import (
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
@@ -116,9 +117,11 @@ type CosmosApp struct {
 	ICAHostKeeper       icahostkeeper.Keeper
 	//ICAAuthKeeper       icaauthkeeper.Keeper
 
-	cc *CosmosChain
-
 	anteHandler *CubeAnteHandler
+
+	cc         *CosmosChain
+	app_hash   common.Hash
+	state_root common.Hash
 }
 
 // TODO level db/mpt wrapper

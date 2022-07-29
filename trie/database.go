@@ -104,6 +104,14 @@ type HashCache struct {
 	lock  sync.RWMutex
 }
 
+// Contains checks whether the key was cached
+func (c *HashCache) Contains(key []byte) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	_, exist := c.inner[common.BytesToHash(key)]
+	return exist
+}
+
 // Put writes <key, value> to cache with lock protection
 func (c *HashCache) Put(key []byte, value node) {
 	c.lock.Lock()

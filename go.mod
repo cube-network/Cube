@@ -15,7 +15,6 @@ require (
 	github.com/cloudflare/cloudflare-go v0.14.0
 	github.com/consensys/gnark-crypto v0.4.1-0.20210426202927-39ac3d4b3f1f
 	github.com/cosmos/cosmos-sdk v0.45.6
-	github.com/cosmos/iavl v0.0.0-00010101000000-000000000000 // indirect
 	github.com/cosmos/ibc-go/v4 v4.0.0-00010101000000-000000000000
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set v0.0.0-20180603214616-504e848d77ea
@@ -79,5 +78,3 @@ replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.2-alp
 replace github.com/cosmos/ibc-go/v4 => ./crosschain/ibc
 
 replace github.com/cosmos/cosmos-sdk => ./crosschain/cosmos-sdk
-
-replace github.com/cosmos/iavl => ./crosschain/iavl

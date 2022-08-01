@@ -1727,7 +1727,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		substart := time.Now()
 		// TODO crosschain cosmosapp
 		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.GetHeader(block.Header().ParentHash, block.Header().Number.Uint64()-1), bc.vmConfig)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)

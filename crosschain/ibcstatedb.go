@@ -1,7 +1,6 @@
 package crosschain
 
 import (
-	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -21,11 +20,12 @@ import (
 // call contract
 
 type IBCStateDB struct {
-	mu      sync.Mutex
-	ethdb   ethdb.Database
-	statedb *state.StateDB
-	evm     *vm.EVM
-	counter int
+	mu              sync.Mutex
+	ethdb           ethdb.Database
+	statedb         *state.StateDB
+	evm             *vm.EVM
+	counter         int
+	last_state_root common.Hash
 }
 
 func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
@@ -33,34 +33,38 @@ func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
 	return ibcstatedb
 }
 
-func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
+func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
 
-	if mdb.statedb == nil {
-		mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
-
-		// TODO read roothash from last block header
-		h := common.Hash{}
-		empty_state_db := true
-		if !empty_state_db {
-			last_state_hash, _ := hex.DecodeString("83b8d27e2b10bd891c3c019028b51e94717684024bbc1d54d7794b642d57004f")
-			h.SetBytes(last_state_hash)
-		}
-		db, err := state.New(h, state.NewDatabase(mdb.ethdb), nil)
-		if err != nil {
-			panic(err.Error())
-
-		}
-		if empty_state_db {
-			db.CreateAccount(system.IBCStateContract)
-			db.SetCode(system.IBCStateContract, statedb.GetCode(system.IBCStateContract))
-		}
-		mdb.statedb = db
-		mdb.evm.StateDB = mdb.statedb
+	var empty_state_root common.Hash
+	var state_root common.Hash
+	if mdb.last_state_root.Hex() == empty_state_root.Hex() && parent_header.Number.Uint64() > 0 {
+		state_root.SetBytes(parent_header.Extra[:32])
+	} else {
+		state_root.SetBytes(mdb.last_state_root[:])
 	}
 
-	mdb.evm.Context = blockContext
+	var block_state_root common.Hash
+	block_state_root.SetBytes(parent_header.Extra[:32])
+	// TODO more check ...
+	// if parent_header.Number.Uint64() > 1 && block_state_root.Hex() != state_root.Hex() {
+	// 	panic("root not correct")
+	// }
+	println("cosmos restore state root ", state_root.Hex())
+
+	db, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
+	if err != nil {
+		panic(err.Error())
+
+	}
+
+	if state_root.Hex() == empty_state_root.Hex() {
+		db.CreateAccount(system.IBCStateContract)
+		db.SetCode(system.IBCStateContract, statedb.GetCode(system.IBCStateContract))
+	}
+	mdb.statedb = db
+	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, db, config, cfg)
 }
 
 func (mdb *IBCStateDB) Commit() common.Hash {
@@ -81,8 +85,9 @@ func (mdb *IBCStateDB) Commit() common.Hash {
 		println("err ", err.Error())
 	}
 	ws.Wait()
-	println("ibc state hash ", hash.Hex())
 	mdb.statedb.Database().TrieDB().Commit(hash, false, nil)
+	mdb.last_state_root = hash
+	println("ibc state hash ", hash.Hex())
 
 	return hash
 }
@@ -102,10 +107,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val ( nil ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -133,7 +138,7 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 		return errors.New("IBCStateDB not init")
 	}
 
-	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.counter++
 
 	mdb.mu.Lock()

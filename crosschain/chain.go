@@ -25,8 +25,10 @@ import (
 func (app *CosmosApp) Load(initheader *ct.SignedHeader) {
 	// TODO load without genesis
 	if !app.IsIBCInit {
+		//TODO replace load latest
+		// app.LoadVersion(initheader.Height)
 		app.LoadLatestVersion()
-		// app.InitChain(abci.RequestInitChain{Time: initheader.Time, ChainId: initheader.ChainID, InitialHeight: initheader.Height})
+		// app.InitChain(abci.RequestInitChain{Time: initheader.Time, ChainId: initheader.ChainID, InitialHeight: initheader.Height - 1})
 
 		var genesisState GenesisState
 		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
@@ -40,29 +42,33 @@ func (app *CosmosApp) Load(initheader *ct.SignedHeader) {
 
 }
 
-func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
+func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
 	println("begin block height", header.Number.Int64(), " ts ", time.Now().UTC().String())
 
-	app.db.SetEVM(config, blockContext, statedb, header, cfg)
+	app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
 
-	hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
+	hdr := app.cc.MakeCosmosSignedHeader(parent_header, common.Hash{})
 	app.Load(hdr)
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
 func (app *CosmosApp) CommitIBC() {
-	app.db.Commit()
+	// app.db.Commit()
 }
 
-func (app *CosmosApp) OnBlockEnd() {
+func (app *CosmosApp) OnBlockEnd() common.Hash {
 	c := app.BaseApp.Commit()
 	app.db.Set([]byte("cosmos_app_hash"), c.Data[:])
 	app.app_hash.SetBytes(c.Data[:])
 
 	state_root := app.db.statedb.IntermediateRoot(false)
 	app.state_root = state_root
+	// TODO
+	app.db.Commit()
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
+
+	return state_root
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {

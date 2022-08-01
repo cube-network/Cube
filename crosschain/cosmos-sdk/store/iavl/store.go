@@ -1,6 +1,7 @@
 package iavl
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -111,7 +112,7 @@ func (st *Store) Commit() types.CommitID {
 	if err != nil {
 		panic(err)
 	}
-	// println("store save version ", version, " hash ", hex.EncodeToString(hash))
+	println("store save version ", version, " hash ", hex.EncodeToString(hash))
 
 	return types.CommitID{
 		Version: version,

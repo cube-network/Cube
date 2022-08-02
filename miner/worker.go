@@ -358,6 +358,8 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer w.wg.Done()
+	factor := time.Second
+	recommit += factor
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -367,10 +369,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
-
-	// TODO for crosschain test
-	recommit *= 2
-	fixed_recommit := recommit
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
@@ -384,7 +382,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			return
 		}
 		println("recommit... ", recommit)
-		timer.Reset(fixed_recommit)
+		timer.Reset(recommit)
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
 	// clearPending cleans the stale pending tasks.
@@ -419,7 +417,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				// Short circuit if no new transaction arrives.
 				println("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
 				if atomic.LoadInt32(&w.newTxs) == 0 {
-					timer.Reset(fixed_recommit)
+					timer.Reset(recommit)
 					continue
 				}
 				println("\n\ntimer send newWorkCh....", time.Now().UTC().String())

@@ -104,10 +104,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -135,7 +135,7 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 		return errors.New("IBCStateDB not init")
 	}
 
-	println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.counter++
 
 	mdb.mu.Lock()

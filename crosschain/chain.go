@@ -20,6 +20,10 @@ import (
 )
 
 func (app *CosmosApp) InitGenesis(init_block_height int64) {
+	if app.is_genesis_init {
+		return
+	}
+
 	app.LoadVersion2(0)
 	var genesisState GenesisState
 	if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {

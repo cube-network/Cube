@@ -302,6 +302,15 @@ func (app *BaseApp) LoadVersion(version int64) error {
 	return app.init()
 }
 
+func (app *BaseApp) LoadVersion2(version int64) error {
+	err := app.cms.LoadVersion(version)
+	if err != nil {
+		return fmt.Errorf("failed to load version %d: %w", version, err)
+	}
+	app.setCheckState(tmproto.Header{})
+	return nil
+}
+
 // LastCommitID returns the last CommitID of the multistore.
 func (app *BaseApp) LastCommitID() sdk.CommitID {
 	return app.cms.LastCommitID()

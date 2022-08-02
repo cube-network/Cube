@@ -1,9 +1,11 @@
 package crosschain
 
 import (
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
+	"time"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -20,12 +22,12 @@ import (
 // call contract
 
 type IBCStateDB struct {
-	mu              sync.Mutex
-	ethdb           ethdb.Database
-	statedb         *state.StateDB
-	evm             *vm.EVM
-	counter         int
-	last_state_root common.Hash
+	mu      sync.Mutex
+	ethdb   ethdb.Database
+	statedb *state.StateDB
+	evm     *vm.EVM
+	counter int
+	is_init bool
 }
 
 func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
@@ -39,18 +41,11 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 
 	var empty_state_root common.Hash
 	var state_root common.Hash
-	if mdb.last_state_root.Hex() == empty_state_root.Hex() && parent_header.Number.Uint64() > 0 {
+	// TODO replace 0 with initial version
+	if parent_header.Number.Uint64() != 0 {
 		state_root.SetBytes(parent_header.Extra[:32])
-	} else {
-		state_root.SetBytes(mdb.last_state_root[:])
 	}
 
-	var block_state_root common.Hash
-	block_state_root.SetBytes(parent_header.Extra[:32])
-	// TODO more check ...
-	// if parent_header.Number.Uint64() > 1 && block_state_root.Hex() != state_root.Hex() {
-	// 	panic("root not correct")
-	// }
 	println("cosmos restore state root ", state_root.Hex())
 
 	db, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
@@ -60,11 +55,14 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	}
 
 	if state_root.Hex() == empty_state_root.Hex() {
+		println("init statedb with code/account")
 		db.CreateAccount(system.IBCStateContract)
 		db.SetCode(system.IBCStateContract, statedb.GetCode(system.IBCStateContract))
 	}
 	mdb.statedb = db
 	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, db, config, cfg)
+
+	mdb.is_init = true
 }
 
 func (mdb *IBCStateDB) Commit() common.Hash {
@@ -86,8 +84,7 @@ func (mdb *IBCStateDB) Commit() common.Hash {
 	}
 	ws.Wait()
 	mdb.statedb.Database().TrieDB().Commit(hash, false, nil)
-	mdb.last_state_root = hash
-	println("ibc state hash ", hash.Hex())
+	println("ibc state hash ", hash.Hex(), time.Now().UTC().String())
 
 	return hash
 }
@@ -107,10 +104,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -138,7 +135,7 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 		return errors.New("IBCStateDB not init")
 	}
 
-	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.counter++
 
 	mdb.mu.Lock()

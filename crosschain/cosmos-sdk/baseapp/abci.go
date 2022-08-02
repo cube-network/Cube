@@ -193,10 +193,10 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 
 	if app.beginBlocker != nil {
 		res = app.beginBlocker(app.deliverState.ctx, req)
-		res.Events = sdk.MarkEventsToIndex(res.Events, app.indexEvents)
+		// res.Events = sdk.MarkEventsToIndex(res.Events, app.indexEvents)
 	}
 	// set the signed validators for addition to context in deliverTx
-	app.voteInfos = req.LastCommitInfo.GetVotes()
+	// app.voteInfos = req.LastCommitInfo.GetVotes()
 	return res
 }
 
@@ -306,6 +306,7 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	// The write to the DeliverTx state writes all state transitions to the root
 	// MultiStore (app.cms) so when Commit() is called is persists those values.
 	app.deliverState.ms.Write()
+	println("------write-------commit------")
 	commitID := app.cms.Commit()
 	app.logger.Info("commit synced", "commit", fmt.Sprintf("%X", commitID))
 
@@ -315,9 +316,7 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	// Commit. Use the header from this latest block.
 	app.setCheckState(header)
 
-	// TODO for demo test,
-	// empty/reset the deliver state
-	// app.deliverState = nil
+	app.deliverState = nil
 
 	var halt bool
 

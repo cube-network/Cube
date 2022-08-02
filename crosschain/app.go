@@ -2,6 +2,7 @@ package crosschain
 
 import (
 	"math/big"
+	"sync"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -41,6 +42,8 @@ import (
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	abci "github.com/tendermint/tendermint/abci/types"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
@@ -90,7 +93,6 @@ type CosmosApp struct {
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
-	IsIBCInit    bool
 	// keys to access the substores
 	keys    map[string]*sdk.KVStoreKey
 	tkeys   map[string]*sdk.TransientStoreKey
@@ -119,9 +121,11 @@ type CosmosApp struct {
 
 	anteHandler *CubeAnteHandler
 
-	cc         *CosmosChain
-	app_hash   common.Hash
-	state_root common.Hash
+	cc                      *CosmosChain
+	app_hash                common.Hash
+	state_root              common.Hash
+	bapp_mu                 sync.Mutex
+	last_begin_block_height uint64
 }
 
 // TODO level db/mpt wrapper
@@ -134,6 +138,7 @@ func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, skipUp
 	db := NewIBCStateDB(ethdb)
 	codec := MakeEncodingConfig()
 	cc := MakeCosmosChain(chainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
+
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
 	bApp.CC = cc
 	// bApp.SetCommitMultiStoreTracer(traceStore)
@@ -192,6 +197,10 @@ func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, skipUp
 	app.MountKVStores(app.keys)
 	app.MountTransientStores(app.tkeys)
 	app.MountMemoryStores(app.memKeys)
+
+	app.SetBeginBlocker(app.BeginBlocker)
+
+	app.SetEndBlocker(app.EndBlocker)
 
 	return app
 }
@@ -412,4 +421,23 @@ func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino
 	paramsKeeper.Subspace(icahosttypes.SubModuleName)
 
 	return paramsKeeper
+}
+
+// BeginBlocker application updates every begin block
+func (app *CosmosApp) BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+	return app.mm.BeginBlock(ctx, req)
+}
+
+// EndBlocker application updates every end block
+func (app *CosmosApp) EndBlocker(ctx sdk.Context, req abci.RequestEndBlock) abci.ResponseEndBlock {
+	return app.mm.EndBlock(ctx, req)
+}
+
+// InitChainer application update at chain initialization
+func (app *CosmosApp) InitChainer(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
+	var genesisState GenesisState
+	if err := tmjson.Unmarshal(req.AppStateBytes, &genesisState); err != nil {
+		panic(err)
+	}
+	return app.mm.InitGenesis(ctx, app.codec.Marshaler, genesisState)
 }

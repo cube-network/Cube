@@ -1,7 +1,6 @@
 package iavl
 
 import (
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -112,7 +111,6 @@ func (st *Store) Commit() types.CommitID {
 	if err != nil {
 		panic(err)
 	}
-	println("store save version ", version, " hash ", hex.EncodeToString(hash))
 
 	return types.CommitID{
 		Version: version,
@@ -175,7 +173,6 @@ func (st *Store) Set(key, value []byte) {
 	types.AssertValidKey(key)
 	types.AssertValidValue(value)
 	st.tree.Set(key, value)
-	// println("--------- store set key (", len(key), ") ", string(key), " val( ", len(value))
 }
 
 // Implements types.KVStore.

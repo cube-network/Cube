@@ -54,6 +54,9 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 	} else {
 	}
 
+	app.bapp_mu.Lock()
+	defer app.bapp_mu.Unlock()
+
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {

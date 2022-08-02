@@ -26,7 +26,9 @@ type IBCStateDB struct {
 	statedb *state.StateDB
 	evm     *vm.EVM
 	counter int
-	is_init bool
+
+	header        *types.Header
+	parent_header *types.Header
 }
 
 func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
@@ -34,39 +36,40 @@ func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
 	return ibcstatedb
 }
 
-func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
+func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, cube_statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) bool {
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
 
-	var empty_state_root common.Hash
-	var state_root common.Hash
-	// TODO replace 0 with initial version
-	if parent_header.Number.Uint64() != 0 {
-		state_root.SetBytes(parent_header.Extra[:32])
-	}
+	mdb.counter = 0
+	mdb.header = header
+	mdb.parent_header = parent_header
+
+	var state_root, empty_state_root common.Hash
+	state_root.SetBytes(parent_header.Extra[:32])
 
 	println("cosmos restore state root ", state_root.Hex())
-
-	db, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
+	var statedb *state.StateDB
+	statedb, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
 	if err != nil {
-		panic(err.Error())
-
+		state_root = empty_state_root
+		statedb, _ = state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
 	}
+
+	mdb.statedb = statedb
+	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 
 	if state_root.Hex() == empty_state_root.Hex() {
 		println("init statedb with code/account")
-		db.CreateAccount(system.IBCStateContract)
-		db.SetCode(system.IBCStateContract, statedb.GetCode(system.IBCStateContract))
-	}
-	mdb.statedb = db
-	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, db, config, cfg)
+		statedb.CreateAccount(system.IBCStateContract)
+		statedb.SetCode(system.IBCStateContract, cube_statedb.GetCode(system.IBCStateContract))
 
-	mdb.is_init = true
+		return false
+	}
+
+	return true
 }
 
 func (mdb *IBCStateDB) Commit(statedb *state.StateDB) common.Hash {
-	mdb.counter = 0
-
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
 
@@ -83,7 +86,7 @@ func (mdb *IBCStateDB) Commit(statedb *state.StateDB) common.Hash {
 	}
 	ws.Wait()
 	statedb.Database().TrieDB().Commit(hash, false, nil)
-	println("ibc state hash ", hash.Hex(), time.Now().UTC().String())
+	println("ibc state commit, hash ", hash.Hex(), " set counter ", mdb.counter, time.Now().UTC().String())
 
 	return hash
 }

@@ -143,7 +143,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 		return nil, err
 	}
 	// TODO
-	leth.blockchain.CrossChain = crosschain.NewCosmosApp(stack.DataDir(), leth.chainConfig.ChainID, chainDb, map[int64]bool{})
+	leth.blockchain.CrossChain = crosschain.NewCosmosApp(stack.DataDir(), leth.chainConfig.ChainID, chainDb, leth.blockchain.CurrentHeader(), map[int64]bool{})
 
 	leth.chainReader = leth.blockchain
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)

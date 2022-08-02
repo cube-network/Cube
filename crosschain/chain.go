@@ -2,7 +2,6 @@ package crosschain
 
 import (
 	"encoding/hex"
-	"fmt"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,55 +19,66 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
-// TODO call from external with real req, now for test only
-// TODO get cube block header instead
-func (app *CosmosApp) Load(initheader *ct.SignedHeader) {
-	// if !app.IsIBCInit {
-	// TODO replace with initial version
-	if initheader.Height == 0 {
-		// app.LoadVersion(initheader.Height)
-		// app.LoadLatestVersion()
-		app.LoadVersion2(0)
-		var genesisState GenesisState
-		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
-			panic(err)
-		}
-		app.BeginBlock(abci.RequestBeginBlock{Header: *initheader.ToProto().Header})
-		app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
+func (app *CosmosApp) InitGenesis(init_block_height int64) {
+	app.LoadVersion2(0)
+	var genesisState GenesisState
+	if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
+		panic(err)
 	}
 
-	if app.last_begin_block_height == 0 || initheader.Height == 0 {
-		app.last_begin_block_height = uint64(initheader.Height)
+	app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: app.cc.ChainID, InitialHeight: init_block_height})
+	app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
+
+	app.last_begin_block_height = init_block_height
+	app.is_genesis_init = true
+
+	hdr := app.cc.MakeCosmosSignedHeader(app.db.header, common.Hash{})
+	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+}
+
+// TODO get cube block header instead
+func (app *CosmosApp) Load(init_block_height int64) {
+	if app.last_begin_block_height == 0 {
+		app.last_begin_block_height = init_block_height
 	}
-	if app.last_begin_block_height != uint64(initheader.Height) {
-		println("load version... ", initheader.Height)
-		app.LoadVersion2(initheader.Height)
+
+	if app.last_begin_block_height != init_block_height {
+		println("load version... ", init_block_height)
+		app.LoadVersion2(init_block_height)
 	}
-	app.last_begin_block_height = uint64(initheader.Height) + 1
+	app.last_begin_block_height = init_block_height + 1
 }
 
 func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
 	app.bapp_mu.Lock()
 	defer app.bapp_mu.Unlock()
 
-	println("begin block height", header.Number.Int64(), " ts ", time.Now().UTC().String())
+	app.is_genesis_init = app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
 
-	app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
+	println("begin block height", header.Number.Int64(), " genesis init ", app.is_genesis_init, " ts ", time.Now().UTC().String())
 
-	phdr := app.cc.MakeCosmosSignedHeader(parent_header, common.Hash{})
-	app.Load(phdr)
-	// TODO InitChain set initialize version ...
-	// app.InitChain(abci.RequestInitChain{Time: phdr.Time, ChainId: phdr.ChainID, InitialHeight: phdr.Height})
-
-	hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
-	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+	if !app.is_genesis_init {
+		// app.InitGenesis(header.Number.Int64())
+		return
+	} else {
+		app.Load(parent_header.Number.Int64())
+		hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
+		app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+	}
 }
 
 func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
+	if !app.is_genesis_init {
+		return
+	}
 	app.db.Commit(statedb)
 }
 
 func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
+	if !app.is_genesis_init {
+		return common.Hash{}, nil
+	}
+
 	app.bapp_mu.Lock()
 	defer app.bapp_mu.Unlock()
 
@@ -78,8 +88,6 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 
 	state_root := app.db.statedb.IntermediateRoot(false)
 	app.state_root = state_root
-	// TODO  DONOT commit here, fix later
-	// app.db.Commit()
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
 
@@ -87,14 +95,20 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
+	if !app.is_genesis_init {
+		return nil
+	}
+
 	app.cc.MakeLightBlockAndSign(h, app.app_hash)
 	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }
 
 func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
+	if !app.is_genesis_init {
+		return
+	}
 	// app.cc.MakeCosmosSignedHeader(h, nil)
-
 }
 
 // TODO validator set pubkey, config for demo, register in contract later
@@ -134,18 +148,6 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	c.best_block_height = 0
 
 	return c
-}
-
-func (c *CosmosChain) String() string {
-	return fmt.Sprintf(
-		"Cosmos{\n ChainID:%v \n len(light_block):%v \n len(validators):%v \npriv_addr_idx:%v \n priv_validator:%v \n blockID:%v}",
-		c.ChainID,
-		len(c.light_block),
-		len(c.validators),
-		c.priv_addr_idx,
-		c.priv_validator,
-		c.blockID,
-	)
 }
 
 func (c *CosmosChain) MakeValidatorSet() *ct.ValidatorSet {

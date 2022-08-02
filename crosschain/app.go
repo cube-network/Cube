@@ -41,9 +41,9 @@ import (
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	abci "github.com/tendermint/tendermint/abci/types"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
@@ -121,15 +121,16 @@ type CosmosApp struct {
 
 	anteHandler *CubeAnteHandler
 
+	is_genesis_init         bool
 	cc                      *CosmosChain
 	app_hash                common.Hash
 	state_root              common.Hash
 	bapp_mu                 sync.Mutex
-	last_begin_block_height uint64
+	last_begin_block_height int64
 }
 
 // TODO level db/mpt wrapper
-func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, skipUpgradeHeights map[int64]bool) *CosmosApp {
+func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, header *types.Header, skipUpgradeHeights map[int64]bool) *CosmosApp {
 	log.Debug("new cosmos app...")
 
 	// TODO make db
@@ -431,13 +432,4 @@ func (app *CosmosApp) BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock) 
 // EndBlocker application updates every end block
 func (app *CosmosApp) EndBlocker(ctx sdk.Context, req abci.RequestEndBlock) abci.ResponseEndBlock {
 	return app.mm.EndBlock(ctx, req)
-}
-
-// InitChainer application update at chain initialization
-func (app *CosmosApp) InitChainer(ctx sdk.Context, req abci.RequestInitChain) abci.ResponseInitChain {
-	var genesisState GenesisState
-	if err := tmjson.Unmarshal(req.AppStateBytes, &genesisState); err != nil {
-		panic(err)
-	}
-	return app.mm.InitGenesis(ctx, app.codec.Marshaler, genesisState)
 }

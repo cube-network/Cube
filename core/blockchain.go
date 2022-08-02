@@ -1363,7 +1363,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			}
 		}
 	}
-	bc.Cosmosapp.CommitIBC()
+
 	// Commit all cached state changes into underlying memory database async.
 	if err = state.AsyncCommit(bc.chainConfig.IsEIP158(block.Number()), afterCommit); err != nil {
 		return NonStatTy, err
@@ -1420,12 +1420,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
+		// TODO notify crosschain new header event
+		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+		bc.Cosmosapp.MakeHeader(block.Header())
 	}
 	bc.futureBlocks.Remove(block.Hash())
-
-	// TODO notify crosschain new header event
-	log.Debug("make new crosschain header", block.Header().Number.Uint64())
-	bc.Cosmosapp.MakeHeader(block.Header())
 
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
@@ -1734,7 +1733,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-		bc.Cosmosapp.OnBlockEnd()
+		_, cosmos_state := bc.Cosmosapp.OnBlockEnd()
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them
@@ -1769,6 +1768,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		log.Info("metric", "method", "validateBlock", "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(),
 			"cost", time.Since(substart)-(statedb.AccountHashes+statedb.StorageHashes-triehash))
 
+		bc.Cosmosapp.CommitIBC(cosmos_state)
 		// Write the block to the chain and get the status.
 		substart = time.Now()
 		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)

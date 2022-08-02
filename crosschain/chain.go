@@ -64,11 +64,11 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
-func (app *CosmosApp) CommitIBC() {
-	// app.db.Commit()
+func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
+	app.db.Commit(statedb)
 }
 
-func (app *CosmosApp) OnBlockEnd() common.Hash {
+func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 	app.bapp_mu.Lock()
 	defer app.bapp_mu.Unlock()
 
@@ -79,11 +79,11 @@ func (app *CosmosApp) OnBlockEnd() common.Hash {
 	state_root := app.db.statedb.IntermediateRoot(false)
 	app.state_root = state_root
 	// TODO  DONOT commit here, fix later
-	app.db.Commit()
+	// app.db.Commit()
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
 
-	return state_root
+	return state_root, app.db.statedb
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {

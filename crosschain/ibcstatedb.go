@@ -1,7 +1,6 @@
 package crosschain
 
 import (
-	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -65,7 +64,7 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	mdb.is_init = true
 }
 
-func (mdb *IBCStateDB) Commit() common.Hash {
+func (mdb *IBCStateDB) Commit(statedb *state.StateDB) common.Hash {
 	mdb.counter = 0
 
 	mdb.mu.Lock()
@@ -78,12 +77,12 @@ func (mdb *IBCStateDB) Commit() common.Hash {
 		hash = root
 		ws.Done()
 	}
-	err := mdb.statedb.AsyncCommit(false, afterCommit)
+	err := statedb.AsyncCommit(false, afterCommit)
 	if err != nil {
 		println("err ", err.Error())
 	}
 	ws.Wait()
-	mdb.statedb.Database().TrieDB().Commit(hash, false, nil)
+	statedb.Database().TrieDB().Commit(hash, false, nil)
 	println("ibc state hash ", hash.Hex(), time.Now().UTC().String())
 
 	return hash

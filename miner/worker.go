@@ -96,10 +96,11 @@ type environment struct {
 
 // task contains all information for consensus engine sealing and result submitting.
 type task struct {
-	receipts  []*types.Receipt
-	state     *state.StateDB
-	block     *types.Block
-	createdAt time.Time
+	receipts     []*types.Receipt
+	state        *state.StateDB
+	block        *types.Block
+	createdAt    time.Time
+	cosmos_state *state.StateDB
 }
 
 const (
@@ -675,6 +676,7 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
+			w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
 			// Commit block and state to database.
 			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
 			if err != nil {
@@ -1063,7 +1065,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	cosmos_state_root := w.eth.BlockChain().Cosmosapp.OnBlockEnd()
+	cosmos_state_root, cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd()
 	copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
@@ -1081,7 +1083,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 			interval()
 		}
 		select {
-		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), cosmos_state: cosmos_state}:
 			println("worker commit send taskCh... ", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),

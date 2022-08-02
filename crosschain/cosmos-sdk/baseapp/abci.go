@@ -306,7 +306,6 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	// The write to the DeliverTx state writes all state transitions to the root
 	// MultiStore (app.cms) so when Commit() is called is persists those values.
 	app.deliverState.ms.Write()
-	println("------write-------commit------")
 	commitID := app.cms.Commit()
 	app.logger.Info("commit synced", "commit", fmt.Sprintf("%X", commitID))
 

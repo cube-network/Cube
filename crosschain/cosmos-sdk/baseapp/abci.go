@@ -195,10 +195,10 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 
 	if app.beginBlocker != nil {
 		res = app.beginBlocker(app.deliverState.ctx, req)
-		res.Events = sdk.MarkEventsToIndex(res.Events, app.indexEvents)
+		// res.Events = sdk.MarkEventsToIndex(res.Events, app.indexEvents)
 	}
 	// set the signed validators for addition to context in deliverTx
-	app.voteInfos = req.LastCommitInfo.GetVotes()
+	// app.voteInfos = req.LastCommitInfo.GetVotes()
 	return res
 }
 
@@ -325,9 +325,7 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	// Commit. Use the header from this latest block.
 	app.setCheckState(header)
 
-	// TODO for demo test,
-	// empty/reset the deliver state
-	// app.deliverState = nil
+	app.deliverState = nil
 
 	var halt bool
 
@@ -426,6 +424,8 @@ func (app *BaseApp) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 	if req.Height == 0 {
 		req.Height = app.LastBlockHeight()
 	}
+
+	println("query path ", req.Path, " height ", req.Height)
 
 	// handle gRPC routes first rather than calling splitPath because '/' characters
 	// are used as part of gRPC paths

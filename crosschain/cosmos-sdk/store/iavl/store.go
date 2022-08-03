@@ -317,6 +317,7 @@ func (st *Store) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 			ImmutableTree: iTree,
 		}
 
+		// println("get version ", height, " version ", tree.Version(), " height(version) ", res.Height, " hash ", hex.EncodeToString(st.tree.Hash()))
 		// get proof from tree and convert to merkle.Proof before adding to result
 		res.ProofOps = getProofFromTree(mtree, req.Data, res.Value != nil)
 

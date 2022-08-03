@@ -310,7 +310,8 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetState(s.db, hash)
+		t := stateObject.GetState(s.db, hash)
+		return t // stateObject.GetState(s.db, hash)
 	}
 	return common.Hash{}
 }
@@ -909,8 +910,6 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 				delete(s.snapStorage, obj.addrHash)        // Clear out any previously updated storage data (may be recreated via a ressurrect)
 			}
 		} else {
-			// println()
-			// fmt.Printf("finalise statedb %p addr %s\n", s, obj.address.Hex())
 			obj.finalise(true) // Prefetch slots in the background
 		}
 		s.stateObjectsPending[addr] = struct{}{}

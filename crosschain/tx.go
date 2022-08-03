@@ -55,13 +55,29 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 	} else {
 	}
 
+	app.bapp_mu.Lock()
+	defer app.bapp_mu.Unlock()
+
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
 		return nil, vm.ErrExecutionReverted
 	}
 
-	msgs, err := app.GetMsgs(arg)
+	argbin, err := hex.DecodeString(arg)
+	if err != nil {
+		return nil, vm.ErrExecutionReverted
+	}
+	if string(argbin) == "InitCosmosGenesis" {
+		app.InitGenesis(evm)
+		txMsgData := &sdk.TxMsgData{}
+		data, _ := proto.Marshal(txMsgData)
+		return data, nil
+	}
+
+	// TODO check
+
+	msgs, err := app.GetMsgs(argbin)
 	if err != nil {
 		return nil, vm.ErrExecutionReverted
 	}
@@ -150,21 +166,15 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 				app.db.Set([]byte(key)[:], rdtxd[:])
 				println("write pkt ", key)
 			}
-
 		}
 	}
 
 	return data, nil
 }
 
-func (app *CosmosApp) GetMsgs(arg string) ([]sdk.Msg, error) {
-	argbin, err := hex.DecodeString(arg)
-	if err != nil {
-		return nil, vm.ErrExecutionReverted
-	}
-
+func (app *CosmosApp) GetMsgs(argbin []byte) ([]sdk.Msg, error) {
 	var body tx.TxBody
-	err = app.codec.Marshaler.Unmarshal(argbin, &body)
+	err := app.codec.Marshaler.Unmarshal(argbin, &body)
 	body.UnpackInterfaces(app.codec.InterfaceRegistry)
 	if err != nil {
 		return nil, vm.ErrExecutionReverted

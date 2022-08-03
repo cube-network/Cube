@@ -96,10 +96,11 @@ type environment struct {
 
 // task contains all information for consensus engine sealing and result submitting.
 type task struct {
-	receipts  []*types.Receipt
-	state     *state.StateDB
-	block     *types.Block
-	createdAt time.Time
+	receipts     []*types.Receipt
+	state        *state.StateDB
+	block        *types.Block
+	createdAt    time.Time
+	cosmos_state *state.StateDB
 }
 
 const (
@@ -358,6 +359,8 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer w.wg.Done()
+	factor := time.Second
+	recommit += factor
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -367,9 +370,6 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	<-timer.C // discard the initial tick
-
-	// TODO for crosschain test
-	recommit *= 2
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
@@ -382,6 +382,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.exitCh:
 			return
 		}
+		println("recommit... ", recommit)
 		timer.Reset(recommit)
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
@@ -415,7 +416,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
-				println("timer txs size ", atomic.LoadInt32(&w.newTxs))
+				println("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
 					continue
@@ -675,6 +676,7 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
+			w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
 			// Commit block and state to database.
 			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
 			if err != nil {
@@ -1022,7 +1024,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 
 	println("============commitNewWork", header.Number)
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(header, false)
+	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, parent.Header(), *w.chain.GetVMConfig())
 
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
@@ -1052,6 +1055,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, parent.Header(), *w.chain.GetVMConfig())
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1059,21 +1063,20 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 	}
-	println("commitNewWork GasUsed 7: ", header.GasUsed)
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs, header.BaseFee)
-		println("commitNewWork GasUsed 8: ", header.GasUsed)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
 	}
-	println("commitNewWork GasUsed 9: ", header.GasUsed)
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	cosmos_state_root, cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd()
+	copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.
@@ -1090,7 +1093,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 			interval()
 		}
 		select {
-		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now()}:
+		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), cosmos_state: cosmos_state}:
 			println("worker commit send taskCh... ", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),

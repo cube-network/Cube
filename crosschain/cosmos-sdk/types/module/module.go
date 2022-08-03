@@ -316,7 +316,6 @@ func (m *Manager) InitGenesis(ctx sdk.Context, cdc codec.JSONCodec, genesisData 
 		if genesisData[moduleName] == nil {
 			continue
 		}
-
 		moduleValUpdates := m.Modules[moduleName].InitGenesis(ctx, cdc, genesisData[moduleName])
 
 		// use these validator updates if provided, the module manager assumes

@@ -3,8 +3,6 @@ package crosschain
 import (
 	"errors"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
@@ -61,11 +59,6 @@ func (api *API) CosmosLightBlock(height *int64) ([]byte, error) {
 	} else {
 		return nil, errors.New("invalid height")
 	}
-}
-
-func (api *API) CosmosBalances(account common.Address) (*sdk.Coins, error) {
-	// TODO
-	return nil, nil
 }
 
 func (api *API) CosmosLastBlockHeight() int64 {

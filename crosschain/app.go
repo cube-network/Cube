@@ -1,6 +1,9 @@
 package crosschain
 
 import (
+	"math/big"
+	"sync"
+
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -37,20 +40,19 @@ import (
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	abci "github.com/tendermint/tendermint/abci/types"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
-	"github.com/ethereum/go-ethereum/common"
-	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
 	"github.com/ethereum/go-ethereum/log"
 
 	tl "github.com/tendermint/tendermint/libs/log"
-	dbm "github.com/tendermint/tm-db"
 )
 
 // IBC application testing ports
@@ -86,11 +88,11 @@ var (
 
 type CosmosApp struct {
 	*baseapp.BaseApp
-	db           dbm.DB
+	// db           dbm.DB
+	db           *IBCStateDB
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
-	IsIBCInit    bool
 	// keys to access the substores
 	keys    map[string]*sdk.KVStoreKey
 	tkeys   map[string]*sdk.TransientStoreKey
@@ -117,21 +119,27 @@ type CosmosApp struct {
 	ICAHostKeeper       icahostkeeper.Keeper
 	//ICAAuthKeeper       icaauthkeeper.Keeper
 
-	cc *CosmosChain
-
 	anteHandler *CubeAnteHandler
+
+	is_genesis_init         bool
+	cc                      *CosmosChain
+	app_hash                common.Hash
+	state_root              common.Hash
+	bapp_mu                 sync.Mutex
+	last_begin_block_height int64
 }
 
 // TODO level db/mpt wrapper
-func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *CosmosApp {
+func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, header *types.Header, skipUpgradeHeights map[int64]bool) *CosmosApp {
 	log.Debug("new cosmos app...")
 
-	// TODO read path from cmdline/conf
-	path := "./data/"
 	// TODO make db
-	db, _ := sdk.NewLevelDB("application", path)
+	// db, _ := sdk.NewLevelDB("application", datadir)
+	// db := NewIBCStateDB("application", datadir)
+	db := NewIBCStateDB(ethdb)
 	codec := MakeEncodingConfig()
-	cc := MakeCosmosChain(path+"priv_validator_key.json", path+"priv_validator_state.json")
+	cc := MakeCosmosChain(chainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
+
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
 	bApp.CC = cc
 	// bApp.SetCommitMultiStoreTracer(traceStore)
@@ -144,7 +152,7 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
 
-	app.setupSDKModule(skipUpgradeHeights, path)
+	app.setupSDKModule(skipUpgradeHeights, datadir)
 
 	// IBC Keepers
 	app.setupIBCKeeper()
@@ -191,25 +199,9 @@ func NewCosmosApp(skipUpgradeHeights map[int64]bool, initheader *et.Header) *Cos
 	app.MountTransientStores(app.tkeys)
 	app.MountMemoryStores(app.memKeys)
 
-	app.LoadLatestVersion()
+	app.SetBeginBlocker(app.BeginBlocker)
 
-	th := app.cc.MakeCosmosSignedHeader(initheader, common.Hash{}).ToProto().Header
-	app.InitChain(abci.RequestInitChain{Time: th.Time, ChainId: th.ChainID, InitialHeight: th.Height})
-
-	// TODO call from external with real req, now for test only
-	// TODO get cube block header instead
-	app.MakeHeader(initheader, common.Hash{})
-
-	// TODO lastblockheight for test only, relace later
-	if !app.IsIBCInit {
-		var genesisState GenesisState
-		if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
-			panic(err)
-		}
-		app.OnBlockBegin(initheader, true)
-		app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
-		app.IsIBCInit = true
-	}
+	app.SetEndBlocker(app.EndBlocker)
 
 	return app
 }
@@ -255,10 +247,10 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	// )
 
 	// todo:
-	feecollectorAcc, _ := sdk.AccAddressFromHex("5c8d603127e242a10ee0779a1a768c80468b7648")
-	feeibcAcc, _ := sdk.AccAddressFromHex("5c8d603127e242a10ee0779a1a768c80468b7648")
-	transferAcc, _ := sdk.AccAddressFromHex("5c8d603127e242a10ee0779a1a768c80468b7648")
-	mintAcc, _ := sdk.AccAddressFromHex("5c8d603127e242a10ee0779a1a768c80468b7648")
+	feecollectorAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
+	feeibcAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
+	transferAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
+	mintAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
 	moduleAccs := map[string]sdk.AccAddress{
 		"fee_collector": feecollectorAcc,
 		"feeibc":        feeibcAcc,
@@ -430,4 +422,14 @@ func initParamsKeeper(appCodec codec.BinaryCodec, legacyAmino *codec.LegacyAmino
 	paramsKeeper.Subspace(icahosttypes.SubModuleName)
 
 	return paramsKeeper
+}
+
+// BeginBlocker application updates every begin block
+func (app *CosmosApp) BeginBlocker(ctx sdk.Context, req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+	return app.mm.BeginBlock(ctx, req)
+}
+
+// EndBlocker application updates every end block
+func (app *CosmosApp) EndBlocker(ctx sdk.Context, req abci.RequestEndBlock) abci.ResponseEndBlock {
+	return app.mm.EndBlock(ctx, req)
 }

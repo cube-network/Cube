@@ -2,7 +2,6 @@ package crosschain
 
 import (
 	"math/big"
-	"sync"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -121,11 +120,11 @@ type CosmosApp struct {
 
 	anteHandler *CubeAnteHandler
 
-	is_genesis_init         bool
-	cc                      *CosmosChain
-	app_hash                common.Hash
-	state_root              common.Hash
-	bapp_mu                 sync.Mutex
+	is_genesis_init bool
+	cc              *CosmosChain
+	app_hash        common.Hash
+	state_root      common.Hash
+	// bapp_mu                 sync.Mutex
 	last_begin_block_height int64
 }
 

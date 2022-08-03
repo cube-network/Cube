@@ -10,8 +10,8 @@ import (
 
 // ABCI Query
 func (app *CosmosApp) Query(path string, data bytes.HexBytes, opts tc.ABCIQueryOptions) (*ct.ResultABCIQuery, error) {
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	// TODO check base app query
 	q := abci.RequestQuery{

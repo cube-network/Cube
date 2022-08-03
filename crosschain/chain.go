@@ -67,8 +67,8 @@ func (app *CosmosApp) Load(init_block_height int64) {
 }
 
 func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	app.is_genesis_init = app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
 
@@ -96,8 +96,8 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 		return common.Hash{}, nil
 	}
 
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	c := app.BaseApp.Commit()
 	app.db.Set([]byte("cosmos_app_hash"), c.Data[:])

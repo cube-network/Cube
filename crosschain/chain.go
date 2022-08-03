@@ -55,6 +55,7 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 // TODO get cube block header instead
 func (app *CosmosApp) Load(init_block_height int64) {
 	if app.last_begin_block_height == 0 {
+		app.LoadVersion2(init_block_height)
 		app.last_begin_block_height = init_block_height
 	}
 

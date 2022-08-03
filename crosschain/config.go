@@ -14,7 +14,7 @@ func NewDefaultGenesisState(cdc codec.JSONCodec) GenesisState {
 }
 
 const (
-	ModuleAccount = "0x000000000000000000000000000000000000F00A"
+	ModuleAccount = "000000000000000000000000000000000000F00A"
 
 	IBCConfig = `
 {

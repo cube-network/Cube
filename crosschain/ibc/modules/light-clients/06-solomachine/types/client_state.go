@@ -149,21 +149,25 @@ func (cs *ClientState) VerifyClientConsensusState(
 
 	publicKey, sigData, timestamp, sequence, err := produceVerificationArgs(cdc, cs, height, prefix, proof)
 	if err != nil {
+		println("=================produceVerificationArgs failed ", err)
 		return err
 	}
 
 	clientPrefixedPath := commitmenttypes.NewMerklePath(host.FullConsensusStatePath(counterpartyClientIdentifier, consensusHeight))
 	path, err := commitmenttypes.ApplyPrefix(prefix, clientPrefixedPath)
 	if err != nil {
+		println("=================ApplyPrefix failed ", err)
 		return err
 	}
 
 	signBz, err := ConsensusStateSignBytes(cdc, sequence, timestamp, cs.ConsensusState.Diversifier, path, consensusState)
 	if err != nil {
+		println("=================ConsensusStateSignBytes failed ", err)
 		return err
 	}
 
 	if err := VerifySignature(publicKey, signBz, sigData); err != nil {
+		println("=================VerifySignature failed ", err)
 		return err
 	}
 

@@ -3,6 +3,7 @@ package crosschain
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/status-im/keycard-go/hexutils"
 	"strconv"
 	"strings"
 
@@ -72,6 +73,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 	}
 	for i, msg := range msgs {
 		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
+			//log.Info("============Run Msg", "index", i, "msg", msg.String())
 			msgResult, err := handler(app.GetContextForTx(simulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
 			if err != nil {
@@ -82,6 +84,8 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 			msgEvents := sdk.Events{sdk.NewEvent(sdk.EventTypeMessage, sdk.NewAttribute(sdk.AttributeKeyAction, eventMsgName))}
 			msgEvents = msgEvents.AppendEvents(msgResult.GetEvents())
 			events = events.AppendEvents(msgEvents)
+
+			log.Info("==========Handler Msg", "index", i, "name", eventMsgName, "result", msgResult.String())
 
 			txMsgData.Data = append(txMsgData.Data, &sdk.MsgData{MsgType: sdk.MsgTypeURL(msg), Data: msgResult.Data})
 			msgLogs = append(msgLogs, sdk.NewABCIMessageLog(uint32(i), msgResult.Log, msgEvents))
@@ -115,6 +119,12 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		BlockNumber: evm.Context.BlockNumber.Uint64(),
 	}
 	evm.StateDB.AddLog(evLog)
+	//log.Info("==========AddLog Run", "number", evLog.BlockNumber, "Address", evLog.Address.Hex(), "data", hexutils.BytesToHex(evLog.Data))
+	log.Info("==========AddLog Run", "log", rdtx.Log, "data", hexutils.BytesToHex(rdtx.Data))
+	abciEvents := events.ToABCIEvents()
+	for i, event := range abciEvents {
+		log.Info("==========AddLog Run", "index", i, "event", event.String())
+	}
 
 	// index
 	for _, event := range events {

@@ -2,6 +2,7 @@ package keeper
 
 import (
 	"bytes"
+	"github.com/status-im/keycard-go/hexutils"
 
 	"github.com/cosmos/cosmos-sdk/telemetry"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -63,17 +64,17 @@ func (k Keeper) ConnOpenInit(
 //  - Identifiers are checked on msg validation
 func (k Keeper) ConnOpenTry(
 	ctx sdk.Context,
-	previousConnectionID string, // previousIdentifier
+	previousConnectionID string,     // previousIdentifier
 	counterparty types.Counterparty, // counterpartyConnectionIdentifier, counterpartyPrefix and counterpartyClientIdentifier
 	delayPeriod uint64,
-	clientID string, // clientID of chainA
-	clientState exported.ClientState, // clientState that chainA has for chainB
+	clientID string,                         // clientID of chainA
+	clientState exported.ClientState,        // clientState that chainA has for chainB
 	counterpartyVersions []exported.Version, // supported versions of chain A
-	proofInit []byte, // proof that chainA stored connectionEnd in state (on ConnOpenInit)
-	proofClient []byte, // proof that chainA stored a light client of chainB
-	proofConsensus []byte, // proof that chainA stored chainB's consensus state at consensus height
-	proofHeight exported.Height, // height at which relayer constructs proof of A storing connectionEnd in state
-	consensusHeight exported.Height, // latest height of chain B which chain A has stored in its chain B client
+	proofInit []byte,                        // proof that chainA stored connectionEnd in state (on ConnOpenInit)
+	proofClient []byte,                      // proof that chainA stored a light client of chainB
+	proofConsensus []byte,                   // proof that chainA stored chainB's consensus state at consensus height
+	proofHeight exported.Height,             // height at which relayer constructs proof of A storing connectionEnd in state
+	consensusHeight exported.Height,         // latest height of chain B which chain A has stored in its chain B client
 ) (string, error) {
 	var (
 		connectionID       string
@@ -115,7 +116,7 @@ func (k Keeper) ConnOpenTry(
 	}
 
 	selfHeight := clienttypes.GetSelfHeight(ctx)
-	if consensusHeight.GTE(selfHeight) {
+	if consensusHeight.GTE(selfHeight) { //node1:selfHeight=31
 		return "", sdkerrors.Wrapf(
 			sdkerrors.ErrInvalidHeight,
 			"consensus height is greater than or equal to the current block height (%s >= %s)", consensusHeight, selfHeight,
@@ -127,7 +128,7 @@ func (k Keeper) ConnOpenTry(
 		return "", err
 	}
 
-	expectedConsensusState, err := k.clientKeeper.GetSelfConsensusState(ctx, consensusHeight)
+	expectedConsensusState, err := k.clientKeeper.GetSelfConsensusState(ctx, consensusHeight) // todo: maybe different between validators
 	if err != nil {
 		return "", sdkerrors.Wrapf(err, "self consensus state not found for height %s", consensusHeight.String())
 	}
@@ -147,13 +148,14 @@ func (k Keeper) ConnOpenTry(
 	// chain B picks a version from Chain A's available versions that is compatible
 	// with Chain B's supported IBC versions. PickVersion will select the intersection
 	// of the supported versions and the counterparty versions.
-	version, err := types.PickVersion(supportedVersions, counterpartyVersions)
+	version, err := types.PickVersion(supportedVersions, counterpartyVersions) //id=1,Features=[ORDER_ORDERED,ORDER_UNORDERED]
 	if err != nil {
 		return "", err
 	}
 
 	// connection defines chain B's ConnectionEnd
 	connection := types.NewConnectionEnd(types.TRYOPEN, clientID, counterparty, []*types.Version{version}, delayPeriod)
+	println("===============Connection: clientID=", clientID, " counterparty: id=", counterparty.ClientId, " connectionID=", counterparty.ConnectionId, " prefix=", counterparty.Prefix.String())
 
 	// Check that ChainA committed expectedConnectionEnd to its state
 	if err := k.VerifyConnectionState(
@@ -169,6 +171,7 @@ func (k Keeper) ConnOpenTry(
 	}
 
 	// Check that ChainA stored the correct ConsensusState of chainB at the given consensusHeight
+	println("================VerifyClientConsensusState: proofHeight:", proofHeight.GetRevisionHeight(), " consensusHeight:", consensusHeight.GetRevisionHeight(), " proofConsensus:", hexutils.BytesToHex(proofConsensus), " expectedConsensusState:", expectedConsensusState.ClientType(), expectedConsensusState.GetTimestamp(), hexutils.BytesToHex(expectedConsensusState.GetRoot().GetHash()))
 	if err := k.VerifyClientConsensusState(
 		ctx, connection, proofHeight, consensusHeight, proofConsensus, expectedConsensusState,
 	); err != nil {
@@ -200,12 +203,12 @@ func (k Keeper) ConnOpenAck(
 	ctx sdk.Context,
 	connectionID string,
 	clientState exported.ClientState, // client state for chainA on chainB
-	version *types.Version, // version that ChainB chose in ConnOpenTry
+	version *types.Version,           // version that ChainB chose in ConnOpenTry
 	counterpartyConnectionID string,
-	proofTry []byte, // proof that connectionEnd was added to ChainB state in ConnOpenTry
-	proofClient []byte, // proof of client state on chainB for chainA
-	proofConsensus []byte, // proof that chainB has stored ConsensusState of chainA on its client
-	proofHeight exported.Height, // height that relayer constructed proofTry
+	proofTry []byte,                 // proof that connectionEnd was added to ChainB state in ConnOpenTry
+	proofClient []byte,              // proof of client state on chainB for chainA
+	proofConsensus []byte,           // proof that chainB has stored ConsensusState of chainA on its client
+	proofHeight exported.Height,     // height that relayer constructed proofTry
 	consensusHeight exported.Height, // latest height of chainA that chainB has stored on its chainA client
 ) error {
 	// Check that chainB client hasn't stored invalid height
@@ -307,7 +310,7 @@ func (k Keeper) ConnOpenAck(
 func (k Keeper) ConnOpenConfirm(
 	ctx sdk.Context,
 	connectionID string,
-	proofAck []byte, // proof that connection opened on ChainA during ConnOpenAck
+	proofAck []byte,             // proof that connection opened on ChainA during ConnOpenAck
 	proofHeight exported.Height, // height that relayer constructed proofAck
 ) error {
 	// Retrieve connection

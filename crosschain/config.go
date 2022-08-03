@@ -83,3 +83,44 @@ const IBCConfig = `
 	  }
 }
 `
+
+const ValidatorsConfig = `
+[
+    {
+        "address":"2C4CD6E199A377D856F6D2BF9EE646865AE5D36C",
+        "pub_key":{
+            "type":"tendermint/PubKeyEd25519",
+            "value":"nOPLfpaB6YOhTZu/pulwcM/FLj1u3L5aB6myGsd6re8="
+        },
+        "voting_power":"100",
+        "name":""
+    },
+    {
+        "address":"695EA7EA41E50B71AD75D51ECEC63FA75BD475E2",
+        "pub_key":{
+            "type":"tendermint/PubKeyEd25519",
+            "value":"o10GuR9a9Q+TR+LvlslCLv2OZu/8uLJHiL2POAIlIRg="
+        },
+        "voting_power":"100",
+        "name":""
+    },
+    {
+        "address":"F7786E81F204A40DCA679664E46E3CE72A28387B",
+        "pub_key":{
+            "type":"tendermint/PubKeyEd25519",
+            "value":"JWEePRroDSKDrcYqlcGe2u2F0xgKozCLMuOQtLOI1ro="
+        },
+        "voting_power":"100",
+        "name":""
+    },
+    {
+        "address":"6262EDC062A5C72A6DB9371B2F2040A945F9A1CE",
+        "pub_key":{
+            "type":"tendermint/PubKeyEd25519",
+            "value":"iYU6fzPxOrMTkCGvfMjZh4sKVOLPWy5Uk9SRrp9+E+Y="
+        },
+        "voting_power":"100",
+        "name":""
+    }
+]
+`

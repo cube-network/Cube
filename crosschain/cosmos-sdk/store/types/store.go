@@ -139,9 +139,14 @@ type MultiStore interface {
 	AddListeners(key StoreKey, listeners []WriteListener)
 }
 
+type CacheManager interface {
+	IteratorCache(isdirty bool, cb func(key string, value []byte, isDirty bool, isDelete bool, storeKey StoreKey) bool, sKey StoreKey) bool
+}
+
 // From MultiStore.CacheMultiStore()....
 type CacheMultiStore interface {
 	MultiStore
+	//CacheManager
 	Write() // Writes operations to underlying KVStore
 }
 

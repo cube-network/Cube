@@ -2,6 +2,7 @@ package crosschain
 
 import (
 	"fmt"
+	tmjson "github.com/tendermint/tendermint/libs/json"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -15,7 +16,13 @@ import (
 	tt "github.com/tendermint/tendermint/types"
 )
 
+//type GetTopValidatorsFn func(chain consensus.ChainHeaderReader, header *et.Header) ([]common.Address, error)
+
 func (app *CosmosApp) OnBlockBegin(h *et.Header, netxBlock bool) {
+	// todo: need to deal with reorg
+	if h.Number.Int64() <= app.BaseApp.LastBlockHeight() {
+		return
+	}
 	hdr := app.cc.MakeCosmosSignedHeader(h, common.Hash{}).ToProto().Header
 	if netxBlock {
 		hdr.Height += 1
@@ -32,6 +39,10 @@ func (app *CosmosApp) CommitIBC() common.Hash {
 	println("commit ibc hash", h.Hex(), " version ", " ts ", time.Now().UTC().String())
 	return h
 	// return common.Hash{}
+}
+
+func (app *CosmosApp) OnBlockEnd(height int64) {
+	app.EndBlock(abci.RequestEndBlock{Height: height})
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header, app_hash common.Hash) *ct.Header {
@@ -69,18 +80,75 @@ func MakeCosmosChain(priv_validator_key_file, priv_validator_state_file string) 
 	c.light_block = make(map[int64]*ct.LightBlock)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
-	// TODO load validator set
-	c.priv_addr_idx = 0
-	val_size := 1
-	c.validators = make([]*ct.Validator, val_size)
-	priv_val_pubkey, _ := c.priv_validator.GetPubKey()
-	c.validators[c.priv_addr_idx] = ct.NewValidator(priv_val_pubkey, 1)
+	// TODO load validator set, should use contract to deal with validators getting changed in the future
+	c.initValidators()
+
 	// TODO load best block
 	psh := ct.PartSetHeader{Total: 1, Hash: make([]byte, 32)}
 	c.blockID = ct.BlockID{Hash: make([]byte, 32), PartSetHeader: psh}
 	c.best_block_height = 0
 
 	return c
+}
+
+//func MarshalPubKeyToAmino(cdc *amino.Codec, key crypto.PubKey) (data []byte, err error) {
+//	switch key.(type) {
+//	case secp256k1.PubKeySecp256k1:
+//		data = make([]byte, 0, secp256k1.PubKeySecp256k1Size+typePrefixAndSizeLen)
+//		data = append(data, typePubKeySecp256k1Prefix...)
+//		data = append(data, byte(secp256k1.PubKeySecp256k1Size))
+//		keyData := key.(secp256k1.PubKeySecp256k1)
+//		data = append(data, keyData[:]...)
+//		return data, nil
+//	case ed25519.PubKeyEd25519:
+//		data = make([]byte, 0, ed25519.PubKeyEd25519Size+typePrefixAndSizeLen)
+//		data = append(data, typePubKeyEd25519Prefix...)
+//		data = append(data, byte(ed25519.PubKeyEd25519Size))
+//		keyData := key.(ed25519.PubKeyEd25519)
+//		data = append(data, keyData[:]...)
+//		return data, nil
+//	case sr25519.PubKeySr25519:
+//		data = make([]byte, 0, sr25519.PubKeySr25519Size+typePrefixAndSizeLen)
+//		data = append(data, typePubKeySr25519Prefix...)
+//		data = append(data, byte(sr25519.PubKeySr25519Size))
+//		keyData := key.(sr25519.PubKeySr25519)
+//		data = append(data, keyData[:]...)
+//		return data, nil
+//	}
+//	data, err = cdc.MarshalBinaryBare(key)
+//	if err != nil {
+//		return nil, err
+//	}
+//	return data, nil
+//}
+
+func (c *CosmosChain) initValidators() error {
+	var validators []ct.Validator
+	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &validators); err != nil {
+		panic(err)
+	}
+
+	c.validators = make([]*ct.Validator, len(validators))
+	priv_val_pubkey, _ := c.priv_validator.GetPubKey()
+	for index, val := range validators {
+		c.validators[index] = &val
+		if val.PubKey.Equals(priv_val_pubkey) {
+			c.priv_addr_idx = uint32(index)
+			fmt.Printf("val.addr: %s, val.index: %d\n", val.Address.String(), c.priv_addr_idx)
+		}
+		//fmt.Printf("val.addr: %s, val.pubkey: %d\n", val.Address.String(), val.PubKey.Address().String())
+	}
+
+	//publicKey, _ := c.priv_validator.GetPubKey()
+	//publicKeyBytes := make([]byte, ed25519.PubKeySize)
+	//copy(publicKeyBytes, publicKey.Bytes())
+	//restoredPubkey := ed25519.PubKey{Key: publicKeyBytes}
+	//println(restoredPubkey.Address().String())
+	//println(publicKey.Address().String())
+	//println(restoredPubkey.String())
+	//println(string(publicKey.Bytes()))
+
+	return nil
 }
 
 func (c *CosmosChain) String() string {
@@ -141,6 +209,7 @@ func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig, light_block *ct.
 	// light_block := c.GetLightBlockInternal(block_height)
 	val_idx := 0
 	// TODO get val idx from c.valaditors (cs.ValidatorAddress)
+	// todo: add other signatures
 	light_block.Commit.Signatures[val_idx] = cs
 	c.SetLightBlock(light_block)
 	if c.IsLightBlockValid(light_block) {
@@ -155,6 +224,7 @@ func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.Lig
 	return light_block
 }
 
+// todo: light block need to be signed with most validators
 func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) *ct.LightBlock {
 
 	println("new crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())

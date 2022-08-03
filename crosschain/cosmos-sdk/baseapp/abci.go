@@ -158,6 +158,7 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 	// Initialize the DeliverTx state. If this is the first block, it should
 	// already be initialized in InitChain. Otherwise app.deliverState will be
 	// nil, since it is reset on Commit.
+	println("=============BeginBlock", req.Header.Height)
 	if req.Header.Height > 1 || app.deliverState == nil {
 		//if app.deliverState == nil {
 		app.setDeliverState(req.Header)
@@ -309,6 +310,14 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	app.deliverState.ms.Write()
 	commitID := app.cms.Commit()
 	app.logger.Info("commit synced", "commit", fmt.Sprintf("%X", commitID))
+	println("============commit synced ", header.Height, fmt.Sprintf("%X", commitID))
+
+	//app.deliverState.ms.IteratorCache(func(key, value []byte, isDirty bool) bool {
+	//	if isDirty {
+	//		fmt.Println(hex.EncodeToString(key), hex.EncodeToString(value))
+	//	}
+	//	return true
+	//})
 
 	// Reset the Check state to the latest committed.
 	//

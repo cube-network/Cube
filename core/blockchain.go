@@ -1365,7 +1365,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 
 	// TODO crosschain app hash
-	crosschain_app_hash := bc.Cosmosapp.CommitIBC()
+	var crosschain_app_hash common.Hash
+	if block.Number().Int64() > bc.Cosmosapp.LastBlockHeight() {
+		crosschain_app_hash = bc.Cosmosapp.CommitIBC()
+	}
 	// Commit all cached state changes into underlying memory database async.
 	if err = state.AsyncCommit(bc.chainConfig.IsEIP158(block.Number()), afterCommit); err != nil {
 		return NonStatTy, err
@@ -1426,8 +1429,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	bc.futureBlocks.Remove(block.Hash())
 
 	// TODO notify crosschain new header event
-	log.Debug("make new crosschain header", block.Header().Number.Uint64())
-	bc.Cosmosapp.MakeHeader(block.Header(), crosschain_app_hash)
+	// todo: make use of cosmos header
+	if block.Number().Int64() == bc.Cosmosapp.LastBlockHeight() {
+		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+		bc.Cosmosapp.MakeHeader(block.Header(), crosschain_app_hash)
+	}
 
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
@@ -1728,6 +1734,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// Process block using the parent state as reference point
 		substart := time.Now()
 		// TODO crosschain cosmosapp
+		println("============insertChain", block.Number())
 		bc.Cosmosapp.OnBlockBegin(block.Header(), false)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.Cosmosapp)
 		if err != nil {

@@ -4,6 +4,7 @@
     "homesteadBlock": 0,
     "eip150Block": 0,
     "eip150Hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+    "daoForkSupport": true,
     "eip155Block": 0,
     "eip158Block": 0,
     "byzantiumBlock": 0,
@@ -15,7 +16,8 @@
     "chaos": {
       "period": 3,
       "epoch": 200,
-      "attestationDelay": 2
+      "attestationDelay": 2,
+      "adminDevnet": "0x9043Bf9A52B5D09519351F5CB2124D0f5bbd4689"
     }
   },
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -29,13 +31,28 @@
   "coinbase": "0x0000000000000000000000000000000000000000",
   "extraData": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
   "alloc": {
-    "ce14a1122bfb4d281a4162f9313722d777d69bdb": {
+    "0x6BC0E9C6a939f8f6d3413091738665aD1D7d2776": {
+      "balance": "0xffffffffffffffffffbae1600000"
+    },
+    "0x9043Bf9A52B5D09519351F5CB2124D0f5bbd4689":{
       "balance": "50000000000000000000000000"
     },
-    "5c8d603127e242a10ee0779a1a768c80468b7648": {
+    "0xce14a1122bfb4d281a4162f9313722d777d69bdb": {
       "balance": "50000000000000000000000000"
     },
-    "0B13E80843353300F5001737c4bb26dd0128B218": {
+    "0x5c8d603127e242a10ee0779a1a768c80468b7648": {
+      "balance": "50000000000000000000000000"
+    },
+    "0x0B13E80843353300F5001737c4bb26dd0128B218": {
+      "balance": "50000000000000000000000000"
+    },
+    "0xA27dE7311AEc2Fd5DDE3cc8322129479B6997d28": {
+      "balance": "50000000000000000000000000"
+    },
+    "0x4d0d466Ef4E50F176419D6047Cf5FC292459D6Fd": {
+      "balance": "50000000000000000000000000"
+    },
+    "0x63c8ff996C5Ce222C1a7C3F26298De6B85Ff46a5": {
       "balance": "50000000000000000000000000"
     },
     "000000000000000000000000000000000000F000": {
@@ -107,7 +124,28 @@
       "address": "0x5c8d603127e242a10ee0779a1a768c80468b7648",
       "manager": "0xce14a1122bfb4d281a4162f9313722d777d69bdb",
       "rate": "20",
-      "stake": "350",
+      "stake": "24000000",
+      "acceptDelegation": true
+    },
+    {
+      "address": "0x0942737e33b1AD9B028bb4FAb46677B1e5371D79",
+      "manager": "0xA27dE7311AEc2Fd5DDE3cc8322129479B6997d28",
+      "rate": "20",
+      "stake": "24000000",
+      "acceptDelegation": true
+    },
+    {
+      "address": "0x7D63E9587ad75D73793a8384Dfc8f54ccdbE0CB7",
+      "manager": "0x4d0d466Ef4E50F176419D6047Cf5FC292459D6Fd",
+      "rate": "20",
+      "stake": "24000000",
+      "acceptDelegation": true
+    },
+    {
+      "address": "0xd502b3B6B5D11C8E174FC21F7A2A0C980fEff930",
+      "manager": "0x63c8ff996C5Ce222C1a7C3F26298De6B85Ff46a5",
+      "rate": "20",
+      "stake": "24000000",
       "acceptDelegation": true
     }
   ]

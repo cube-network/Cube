@@ -681,6 +681,9 @@ func (w *worker) resultLoop() {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
 			}
+			if len(block.Transactions()) > 0 {
+				log.Info("2 ================applyTransaction Proposer", "number", block.Number(), "hash", hash, "receipt", block.ReceiptHash())
+			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
@@ -790,6 +793,7 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 	println("ApplyTransaction ", tx.Hash().Hex())
+	// todo: will change header.GasUsed
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.chain.Cosmosapp)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
@@ -797,6 +801,11 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	}
 	w.current.txs = append(w.current.txs, tx)
 	w.current.receipts = append(w.current.receipts, receipt)
+
+	var receiptsTypes types.Receipts
+	receiptsTypes = w.current.receipts
+	receiptSha := types.DeriveSha(receiptsTypes, trie.NewStackTrie(nil))
+	log.Info("1 ================applyTransaction Proposer", "number", w.current.header.Number, "hash", w.current.header.Hash(), "receipt", receiptSha)
 
 	return receipt.Logs, nil
 }
@@ -1012,6 +1021,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
+	println("============commitNewWork", header.Number)
 	w.eth.BlockChain().Cosmosapp.OnBlockBegin(header, false)
 
 	// Prefer to locally generated uncle
@@ -1041,6 +1051,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
+
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1048,12 +1059,15 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 	}
+	println("commitNewWork GasUsed 7: ", header.GasUsed)
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs, header.BaseFee)
+		println("commitNewWork GasUsed 8: ", header.GasUsed)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
 			return
 		}
 	}
+	println("commitNewWork GasUsed 9: ", header.GasUsed)
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

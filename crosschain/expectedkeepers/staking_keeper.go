@@ -22,6 +22,7 @@ type CubeStakingKeeper struct {
 // todo: to be implemented
 func (c CubeStakingKeeper) GetHistoricalInfo(ctx sdk.Context, height int64) (stakingtypes.HistoricalInfo, bool) {
 	lb := c.Hisorical.GetLightBlock(height)
+	// todo: get valsets
 	return stakingtypes.HistoricalInfo{Header: *lb.Header.ToProto()}, true
 }
 

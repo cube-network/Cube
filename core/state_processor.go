@@ -18,6 +18,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 	"math/big"
 	"sync"
 
@@ -140,6 +141,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 		commonTxs = append(commonTxs, tx)
+
+		var receiptsTypes types.Receipts
+		receiptsTypes = receipts
+		receiptSha := types.DeriveSha(receiptsTypes, trie.NewStackTrie(nil))
+		log.Info("================applyTransaction Validator 2", "number", blockNumber, "hash", header.Hash(), "txIndex", i, "receipt", receiptSha)
 	}
 	bloomWg.Wait()
 	returnErrBeforeWaitGroup = false
@@ -215,6 +221,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		log.Debug("apply transaction with evm error", "txHash", tx.Hash().String(), "vmErr", result.Err)
 	}
 
+	//if len(receipt.Logs) > 0 {
+	//	log.Info("receipt info", "BlockNumber", receipt.BlockNumber.Int64(), "BlockHash", receipt.BlockHash, "Status", receipt.Status, "PostStatus", hexutils.BytesToHex(receipt.PostState), "CumulativeGasUsed", receipt.CumulativeGasUsed, "Logs", len(receipt.Logs))
+	//	reclog := receipt.Logs[0]
+	//	log.Info("receipt.Logs info", "Address", reclog.Address, "Data", hexutils.BytesToHex(reclog.Data), "Topics", len(reclog.Topics), "BlockNumber", reclog.BlockNumber, "TxHash", reclog.TxHash.Hex(), "TxIndex", reclog.TxIndex, "BlockHash", reclog.BlockHash, "Index", reclog.Index, "Removed", reclog.Removed)
+	//
+	//	log.Info("receipt other info", "Type", receipt.Type, "Bloom", receipt.Bloom.Big(), "TxHash", receipt.TxHash, "ContractAddress", receipt.ContractAddress.Hex(), "GasUsed", receipt.GasUsed, "TransactionIndex", receipt.TransactionIndex)
+	//}
+
 	return receipt, err
 }
 
@@ -231,5 +245,6 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	vmenv.Crosschain = crosschain
+	//log.Info("================applyTransaction Proposer", "number", header.Number, "hash", header.Hash())
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)
 }

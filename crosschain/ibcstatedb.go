@@ -95,11 +95,11 @@ func (mdb *IBCStateDB) Commit(statedb *state.StateDB) common.Hash {
 
 // TODO cache
 func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
+	mdb.mu.Lock()
+	defer mdb.mu.Unlock()
 	if mdb.evm == nil {
 		return nil, errors.New("IBCStateDB not init")
 	}
-	mdb.mu.Lock()
-	defer mdb.mu.Unlock()
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	is_exist, val, err := systemcontract.GetState(ctx, key)
 	if err != nil {
@@ -108,10 +108,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -135,15 +135,14 @@ func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
 }
 
 func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
+	println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	mdb.mu.Lock()
+	defer mdb.mu.Unlock()
 	if mdb.evm == nil {
 		return errors.New("IBCStateDB not init")
 	}
-
-	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.counter++
 
-	mdb.mu.Lock()
-	defer mdb.mu.Unlock()
 	var prefix string
 	skey := string(key)
 	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true}
@@ -165,21 +164,16 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 }
 
 func (mdb *IBCStateDB) SetSync(key []byte, val []byte) error {
-	if mdb.evm == nil {
-		return errors.New("IBCStateDB not init")
-	}
-	mdb.counter++
 	return mdb.Set(key, val)
 }
 
 func (mdb *IBCStateDB) Delete(key []byte) error {
-	if mdb.evm == nil {
-		return errors.New("IBCStateDB not init")
-	}
-
 	// TODO delete contract
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
+	if mdb.evm == nil {
+		return errors.New("IBCStateDB not init")
+	}
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	_, err := systemcontract.DelState(ctx, key)
 	if err != nil {
@@ -235,10 +229,6 @@ type IBCStateIterator struct {
 }
 
 func (mdb *IBCStateDB) NewIBCStateIterator(is_reverse bool, start []byte, end []byte) (*IBCStateIterator, error) {
-	if mdb.evm == nil {
-		return nil, errors.New("IBCStateDB not init")
-	}
-
 	is_rootkey := false
 	skey := string(start)
 	var dictkey string
@@ -257,6 +247,10 @@ func (mdb *IBCStateDB) NewIBCStateIterator(is_reverse bool, start []byte, end []
 
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
+	if mdb.evm == nil {
+		return nil, errors.New("IBCStateDB not init")
+	}
+
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	keys, vals, err := systemcontract.GetRoot(ctx, dictkey)
 	if err != nil {

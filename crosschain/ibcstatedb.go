@@ -118,11 +118,11 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 }
 
 func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
+	mdb.mu.Lock()
+	defer mdb.mu.Unlock()
 	if mdb.evm == nil {
 		return false, errors.New("IBCStateDB not init")
 	}
-	mdb.mu.Lock()
-	defer mdb.mu.Unlock()
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	is_exist, _, err := systemcontract.GetState(ctx, key)
 	if err != nil {

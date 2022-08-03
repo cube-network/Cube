@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	et "github.com/ethereum/go-ethereum/core/types"
@@ -19,10 +20,20 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
-func (app *CosmosApp) InitGenesis(init_block_height int64) {
+func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	if app.is_genesis_init {
 		return
 	}
+
+	// Module Account
+	evm.StateDB.CreateAccount(common.HexToAddress(ModuleAccount))
+	// deploy erc20 factory contract
+	evm.StateDB.CreateAccount(system.ERC20FactoryContract)
+	code, _ := hex.DecodeString(ERC20FactoryCode)
+	evm.StateDB.SetCode(system.ERC20FactoryContract, code)
+
+	// crosschain
+	init_block_height := evm.Context.BlockNumber.Int64()
 
 	app.LoadVersion2(0)
 	var genesisState GenesisState
@@ -38,6 +49,7 @@ func (app *CosmosApp) InitGenesis(init_block_height int64) {
 
 	hdr := app.cc.MakeCosmosSignedHeader(app.db.header, common.Hash{})
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+
 }
 
 // TODO get cube block header instead
@@ -62,7 +74,7 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 	println("begin block height", header.Number.Int64(), " genesis init ", app.is_genesis_init, " ts ", time.Now().UTC().String())
 
 	if !app.is_genesis_init {
-		// app.InitGenesis(header.Number.Int64())
+		// app.InitGenesis(app.db.evm)
 		return
 	} else {
 		app.Load(parent_header.Number.Int64())

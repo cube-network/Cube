@@ -1,6 +1,7 @@
 package crosschain
 
 import (
+	"encoding/hex"
 	"errors"
 	"strings"
 	"sync"
@@ -61,7 +62,8 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	if state_root.Hex() == empty_state_root.Hex() {
 		println("init statedb with code/account")
 		statedb.CreateAccount(system.IBCStateContract)
-		statedb.SetCode(system.IBCStateContract, cube_statedb.GetCode(system.IBCStateContract))
+		code, _ := hex.DecodeString(StateContractCode)
+		statedb.SetCode(system.IBCStateContract, code)
 
 		return false
 	}

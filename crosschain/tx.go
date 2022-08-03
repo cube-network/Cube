@@ -68,7 +68,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		return nil, vm.ErrExecutionReverted
 	}
 	if string(argbin) == "InitCosmosGenesis" {
-		app.InitGenesis(evm.Context.BlockNumber.Int64())
+		app.InitGenesis(evm)
 		txMsgData := &sdk.TxMsgData{}
 		data, _ := proto.Marshal(txMsgData)
 		return data, nil

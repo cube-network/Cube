@@ -160,7 +160,6 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 	// nil, since it is reset on Commit.
 	println("=============BeginBlock", req.Header.Height)
 	if req.Header.Height > 1 || app.deliverState == nil {
-		//if app.deliverState == nil {
 		app.setDeliverState(req.Header)
 	} else {
 		// In the first block, app.deliverState.ctx will already be initialized

@@ -33,6 +33,8 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	code, _ := hex.DecodeString(ERC20FactoryCode)
 	evm.StateDB.SetCode(system.ERC20FactoryContract, code)
 
+	// todo: deploy validators' register contract
+
 	// crosschain
 	init_block_height := evm.Context.BlockNumber.Int64()
 
@@ -48,9 +50,10 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	app.last_begin_block_height = init_block_height
 	app.is_genesis_init = true
 
+	app.cc.validators.initGenesisValidators(init_block_height)
+
 	hdr := app.cc.MakeCosmosSignedHeader(app.db.header, common.Hash{})
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
-
 }
 
 // TODO get cube block header instead
@@ -113,13 +116,17 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 }
 
 func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
-	if !app.is_genesis_init {
+	if !app.is_genesis_init || !app.cc.isProposer() {
 		return nil
 	}
 
 	app.cc.MakeLightBlockAndSign(h, app.app_hash)
-	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
-	return app.cc.GetLightBlock(h.Number.Int64()).Header
+	light_block := app.cc.GetLightBlock(h.Number.Int64())
+	if light_block != nil {
+		println("header ", light_block.Header.AppHash.String(), " ", time.Now().UTC().String())
+		return light_block.Header
+	}
+	return nil
 }
 
 func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
@@ -137,8 +144,9 @@ type CosmosChain struct {
 	ChainID     string
 	light_block map[int64]*ct.LightBlock // cache only for demo, write/read db instead later
 	// light_block    *lru.ARCCache
-	validators     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
-	priv_addr_idx  uint32
+	//validators     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
+	validators *ValidatorsMgr
+	//priv_addr_idx  uint32
 	priv_validator *privval.FilePV // use ed2559 for demo, secp256k1 support later;
 
 	blockID           ct.BlockID // load best block height later
@@ -154,8 +162,9 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	c.light_block = make(map[int64]*ct.LightBlock)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
+
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
-	c.initValidators()
+	c.validators = &ValidatorsMgr{}
 
 	// TODO load best block
 	psh := ct.PartSetHeader{Total: 1, Hash: make([]byte, 32)}
@@ -196,83 +205,95 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 //	return data, nil
 //}
 
-func (c *CosmosChain) initValidators() error {
-	var validators []ct.Validator
-	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &validators); err != nil {
-		panic(err)
-	}
-
-	c.validators = make([]*ct.Validator, len(validators))
-	priv_val_pubkey, _ := c.priv_validator.GetPubKey()
-	for index, val := range validators {
-		c.validators[index] = &val
-		if val.PubKey.Equals(priv_val_pubkey) {
-			c.priv_addr_idx = uint32(index)
-			fmt.Printf("val.addr: %s, val.index: %d\n", val.Address.String(), c.priv_addr_idx)
-		}
-		//fmt.Printf("val.addr: %s, val.pubkey: %d\n", val.Address.String(), val.PubKey.Address().String())
-	}
-
-	//publicKey, _ := c.priv_validator.GetPubKey()
-	//publicKeyBytes := make([]byte, ed25519.PubKeySize)
-	//copy(publicKeyBytes, publicKey.Bytes())
-	//restoredPubkey := ed25519.PubKey{Key: publicKeyBytes}
-	//println(restoredPubkey.Address().String())
-	//println(publicKey.Address().String())
-	//println(restoredPubkey.String())
-	//println(string(publicKey.Bytes()))
-
-	return nil
-}
+//func (c *CosmosChain) initValidators() error {
+//	c.validators = &ValidatorsMgr{}
+//
+//	var validators []ct.Validator
+//	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &validators); err != nil {
+//		panic(err)
+//	}
+//
+//	//validators := make([]*ct.Validator, len(validators))
+//	validators := make([]*ct.Validator, len(validators))
+//	priv_val_pubkey, _ := c.priv_validator.GetPubKey()
+//	for index, val := range validators {
+//		//validators[index] = &val
+//		if val.PubKey.Equals(priv_val_pubkey) {
+//			c.priv_addr_idx = uint32(index)
+//			fmt.Printf("val.addr: %s, val.index: %d\n", val.Address.String(), c.priv_addr_idx)
+//		}
+//		//fmt.Printf("val.addr: %s, val.pubkey: %d\n", val.Address.String(), val.PubKey.Address().String())
+//	}
+//
+//	//c.state.Validators = ct.NewValidatorSet(c.validators)
+//
+//	//publicKey, _ := c.priv_validator.GetPubKey()
+//	//publicKeyBytes := make([]byte, ed25519.PubKeySize)
+//	//copy(publicKeyBytes, publicKey.Bytes())
+//	//restoredPubkey := ed25519.PubKey{Key: publicKeyBytes}
+//	//println(restoredPubkey.Address().String())
+//	//println(publicKey.Address().String())
+//	//println(restoredPubkey.String())
+//	//println(string(publicKey.Bytes()))
+//
+//	return nil
+//}
 
 func (c *CosmosChain) String() string {
 	return fmt.Sprintf(
-		"Cosmos{\n ChainID:%v \n len(light_block):%v \n len(validators):%v \npriv_addr_idx:%v \n priv_validator:%v \n blockID:%v}",
+		"Cosmos{\n ChainID:%v \n len(light_block):%v \n priv_validator:%v \n blockID:%v}",
 		c.ChainID,
 		len(c.light_block),
-		len(c.validators),
-		c.priv_addr_idx,
+		//len(c.validators),
+		//c.priv_addr_idx,
 		c.priv_validator,
 		c.blockID,
 	)
 }
 
-func (c *CosmosChain) MakeValidatorSet() *ct.ValidatorSet {
-	vs := &ct.ValidatorSet{}
-	vs.Validators = c.validators
-	// TODO cube.header.coinbase
-	vs.Proposer = c.validators[0]
-
-	return vs
+func (c *CosmosChain) isProposer() bool {
+	if c.priv_validator == nil {
+		return false
+	}
+	return c.validators.isProposer(c.priv_validator.GetAddress())
 }
 
-func (c *CosmosChain) MakeValidatorshash() []byte {
-	return c.MakeValidatorSet().Hash()
-}
+//func (c *CosmosChain) MakeValidatorSet() *ct.ValidatorSet {
+//	vs := &ct.ValidatorSet{}
+//	vs.Validators = c.validators
+//	// TODO cube.header.coinbase
+//	vs.Proposer = c.validators[c.priv_addr_idx]
+//
+//	return vs
+//}
+//
+//func (c *CosmosChain) MakeValidatorshash() []byte {
+//	return c.MakeValidatorSet().Hash()
+//}
 
 func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
 	log.Debug("MakeCosmosSignedHeader")
-	validator_hash := c.MakeValidatorshash()
+	//validator_hash := c.MakeValidatorshash()
 	header := &ct.Header{
 		Version:            version.Consensus{Block: 11, App: 0},
 		ChainID:            c.ChainID,
 		Height:             h.Number.Int64(),
 		Time:               time.Unix(int64(h.Time), 0),
-		LastCommitHash:     make([]byte, 32),
+		LastCommitHash:     make([]byte, 32), // todo: to be replaced with
 		LastBlockID:        c.blockID,
 		DataHash:           h.TxHash[:],
-		ValidatorsHash:     validator_hash,
-		NextValidatorsHash: validator_hash,
-		ConsensusHash:      make([]byte, 32),
-		AppHash:            app_hash[:],
-		LastResultsHash:    make([]byte, 32),
-		EvidenceHash:       make([]byte, 32),
-		ProposerAddress:    c.validators[0].Address,
+		ValidatorsHash:     c.validators.Validators.Hash(),
+		NextValidatorsHash: c.validators.NextValidators.Hash(),
+		ConsensusHash:      make([]byte, 32), // todo: to be replaced with
+		AppHash:            app_hash[:],      // todo: to be replaced with
+		LastResultsHash:    make([]byte, 32), // todo: to be replaced with
+		EvidenceHash:       make([]byte, 32), // todo: to be replaced with
+		ProposerAddress:    c.validators.Validators.GetProposer().Address,
 	}
 
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
 	c.blockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
-	signatures := make([]ct.CommitSig, len(c.validators))
+	signatures := make([]ct.CommitSig, c.validators.Validators.Size())
 
 	commit := &ct.Commit{Height: header.Height, Round: 1, BlockID: c.blockID, Signatures: signatures}
 	return &ct.SignedHeader{Header: header, Commit: commit}
@@ -293,7 +314,7 @@ func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig, light_block *ct.
 
 func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.LightBlock {
 	// TODO load validator set from h.Extra, fixed for demo
-	light_block := &ct.LightBlock{SignedHeader: c.MakeCosmosSignedHeader(h, app_hash), ValidatorSet: c.MakeValidatorSet()}
+	light_block := &ct.LightBlock{SignedHeader: c.MakeCosmosSignedHeader(h, app_hash), ValidatorSet: c.validators.Validators}
 	// c.SetLightBlock(light_block)
 	return light_block
 }
@@ -304,14 +325,19 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 	println("make crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
 
 	light_block := c.MakeLightBlock(h, app_hash)
+	addr := c.priv_validator.GetAddress()
+	idx, val := c.validators.Validators.GetByAddress(addr)
+	if val == nil {
+		panic("not a validator")
+	}
 	vote := &ct.Vote{
 		Type:             tmproto.PrecommitType,
 		Height:           light_block.Height,
 		Round:            light_block.Commit.Round,
 		BlockID:          light_block.Commit.BlockID,
 		Timestamp:        light_block.Time,
-		ValidatorAddress: c.priv_validator.GetAddress(),
-		ValidatorIndex:   int32(c.priv_addr_idx),
+		ValidatorAddress: addr,
+		ValidatorIndex:   idx,
 	}
 	v := vote.ToProto()
 	c.priv_validator.SignVote(c.ChainID, v)
@@ -319,11 +345,13 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 	cc := ct.CommitSig{}
 	cc.BlockIDFlag = ct.BlockIDFlagCommit
 	cc.Timestamp = vote.Timestamp
-	cc.ValidatorAddress = c.priv_validator.GetAddress()
+	cc.ValidatorAddress = addr
 	cc.Timestamp = v.Timestamp
 	cc.Signature = v.Signature
 
 	c.Vote(light_block.Height, cc, light_block)
+
+	// todo: broadcast this light block
 
 	return light_block
 }

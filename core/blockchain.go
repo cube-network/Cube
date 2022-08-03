@@ -1417,11 +1417,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		status = SideStatTy
 	}
-	// Set new head.
+	// todo: Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
 		// TODO notify crosschain new header event
-		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+		log.Info("make new crosschain header", "height", block.Header().Number.Uint64())
 		bc.Cosmosapp.MakeHeader(block.Header())
 	}
 	bc.futureBlocks.Remove(block.Hash())

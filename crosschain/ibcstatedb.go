@@ -71,6 +71,13 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	return true
 }
 
+func (mdb *IBCStateDB) IntermediateRoot() common.Hash {
+	mdb.mu.Lock()
+	defer mdb.mu.Unlock()
+
+	return mdb.statedb.IntermediateRoot(false)
+}
+
 func (mdb *IBCStateDB) Commit(statedb *state.StateDB) common.Hash {
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
@@ -108,10 +115,10 @@ func (mdb *IBCStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		// println("store. get ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -135,7 +142,7 @@ func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
 }
 
 func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
-	println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// println("store. set ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
 	if mdb.evm == nil {

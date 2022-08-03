@@ -67,8 +67,8 @@ func (app *CosmosApp) Load(init_block_height int64) {
 }
 
 func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	app.is_genesis_init = app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
 
@@ -85,8 +85,8 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 }
 
 func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	if !app.is_genesis_init {
 		return
@@ -95,8 +95,8 @@ func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
 }
 
 func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
-	app.bapp_mu.Lock()
-	defer app.bapp_mu.Unlock()
+	// app.bapp_mu.Lock()
+	// defer app.bapp_mu.Unlock()
 
 	if !app.is_genesis_init {
 		return common.Hash{}, nil
@@ -106,12 +106,12 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 	app.db.Set([]byte("cosmos_app_hash"), c.Data[:])
 	app.app_hash.SetBytes(c.Data[:])
 
-	state_root := app.db.statedb.IntermediateRoot(false)
+	state_root := app.db.IntermediateRoot()
 	app.state_root = state_root
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
 
-	// TODO statedb ??
+	// TODO statedb lock??
 	return state_root, app.db.statedb
 }
 

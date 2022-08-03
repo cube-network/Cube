@@ -32,17 +32,10 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(height int64) error {
 		panic(err)
 	}
 
-	//validators := make([]*ct.Validator, len(validators))
 	validators := make([]*types.Validator, len(vals))
-	//priv_val_pubkey, _ := c.priv_validator.GetPubKey()
 	for i, val := range vals {
 		validators[i] = types.NewValidator(val.PubKey, val.VotingPower)
-		//validators[index] = &val
-		//if val.PubKey.Equals(priv_val_pubkey) {
-		//	c.priv_addr_idx = uint32(index)
-		//	fmt.Printf("val.addr: %s, val.index: %d\n", val.Address.String(), c.priv_addr_idx)
-		//}
-		//fmt.Printf("val.addr: %s, val.pubkey: %d\n", val.Address.String(), val.PubKey.Address().String())
+		//fmt.Printf("val.addr: %s, val.pubkey: %s\n", val.Address.String(), val.PubKey.Address().String())
 	}
 	vmgr.Validators = types.NewValidatorSet(validators)
 	vmgr.NextValidators = types.NewValidatorSet(validators).CopyIncrementProposerPriority(1)
@@ -50,17 +43,6 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(height int64) error {
 	vmgr.LastHeightValidatorsChanged = height
 
 	return nil
-
-	//c.state.Validators = ct.NewValidatorSet(c.validators)
-
-	//publicKey, _ := c.priv_validator.GetPubKey()
-	//publicKeyBytes := make([]byte, ed25519.PubKeySize)
-	//copy(publicKeyBytes, publicKey.Bytes())
-	//restoredPubkey := ed25519.PubKey{Key: publicKeyBytes}
-	//println(restoredPubkey.Address().String())
-	//println(publicKey.Address().String())
-	//println(restoredPubkey.String())
-	//println(string(publicKey.Bytes()))
 }
 
 func (vmgr *ValidatorsMgr) isProposer(address []byte) bool {

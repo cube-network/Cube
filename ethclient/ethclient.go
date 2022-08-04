@@ -632,12 +632,3 @@ func (ec *Client) CosmosTxsSearch(ctx context.Context, page, limit int, events [
 	}
 	return q, nil
 }
-
-func (ec *Client) CosmosLastBlockHeight(ctx context.Context) (int64, error) {
-	var q int64
-	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosLastBlockHeight")
-	if err != nil {
-		return q, err
-	}
-	return q, nil
-}

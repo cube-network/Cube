@@ -362,7 +362,3 @@ func (c *CosmosChain) IsLightBlockValid(light_block *ct.LightBlock) bool {
 
 	return talliedVotingPower > votingPowerNeeded
 }
-
-func (c *CosmosChain) LastBlockHeight() int64 {
-	return int64(c.best_block_height)
-}

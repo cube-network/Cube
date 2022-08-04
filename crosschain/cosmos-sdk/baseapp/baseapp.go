@@ -516,7 +516,7 @@ func (app *BaseApp) validateHeight(req abci.RequestBeginBlock) error {
 		// case we increment the version from there,
 		// - or there was no previous commit, and initial version was not set,
 		// in which case we start at version 1.
-		expectedHeight = app.LastBlockHeight() + 1
+		expectedHeight = app.LastBlockHeight() + 1 - 3
 	}
 
 	if req.Header.Height != expectedHeight {

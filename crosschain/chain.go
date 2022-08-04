@@ -146,6 +146,8 @@ type CosmosChain struct {
 
 	blockID           ct.BlockID // load best block height later
 	best_block_height uint64
+
+	cube_cosmos_header map[string][]byte
 }
 
 // priv_validator_addr: chaos.validator
@@ -186,6 +188,9 @@ func (c *CosmosChain) MakeValidatorshash() []byte {
 
 func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
 	log.Debug("MakeCosmosSignedHeader")
+
+	// TODO find_cosmos_parent_header(h.parent_hash) {return c.cube_cosmos_header[parent_hash]}
+
 	validator_hash := c.MakeValidatorshash()
 	header := &ct.Header{
 		Version:            version.Consensus{Block: 11, App: 0},
@@ -203,6 +208,10 @@ func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 		EvidenceHash:       make([]byte, 32),
 		ProposerAddress:    c.validators[0].Address,
 	}
+
+	// TODO
+	// c.cube_cosmos_header[h.hash] = header.hash
+	// save leveldb
 
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
 	c.blockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
@@ -277,6 +286,11 @@ func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
+	// TODO block_height is finalized??
+	// get cube header
+	// get cosmos light block by cube header.hash
+
+	// TODO
 	light_block, ok := c.light_block[block_height]
 	if ok {
 		if c.IsLightBlockValid(light_block) {

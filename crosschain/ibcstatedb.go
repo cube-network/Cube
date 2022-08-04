@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -27,9 +26,6 @@ type IBCStateDB struct {
 	statedb *state.StateDB
 	evm     *vm.EVM
 	counter int
-
-	header        *types.Header
-	parent_header *types.Header
 }
 
 func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
@@ -37,28 +33,21 @@ func NewIBCStateDB(ethdb ethdb.Database) *IBCStateDB {
 	return ibcstatedb
 }
 
-func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, cube_statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) bool {
+func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockContext, state_root common.Hash, cfg vm.Config) bool {
 	mdb.mu.Lock()
 	defer mdb.mu.Unlock()
 
+	println("ibcstatedb ", state_root.Hex())
 	mdb.counter = 0
-	mdb.header = header
-	mdb.parent_header = parent_header
-
-	var state_root, empty_state_root common.Hash
-	state_root.SetBytes(parent_header.Extra[:32])
-
-	println("cosmos restore state root ", state_root.Hex())
-	var statedb *state.StateDB
 	statedb, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
 	if err != nil {
-		state_root = empty_state_root
-		statedb, _ = state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
+		println("try open state root error, ", err.Error())
 	}
 
 	mdb.statedb = statedb
 	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 
+	var empty_state_root common.Hash
 	if state_root.Hex() == empty_state_root.Hex() {
 		println("init statedb with code/account")
 		statedb.CreateAccount(system.IBCStateContract)

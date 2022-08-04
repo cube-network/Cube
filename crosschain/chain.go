@@ -2,6 +2,7 @@ package crosschain
 
 import (
 	"encoding/hex"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -20,10 +21,61 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
+var (
+	state_block_number  = common.Hash{0x01, 0x01}
+	state_app_hash_last = common.Hash{0x01, 0x02}
+	state_root_last     = common.Hash{0x01, 0x03}
+	state_app_hash_cur  = common.Hash{0x01, 0x04}
+	state_root_cur      = common.Hash{0x01, 0x05}
+)
+
+func (app *CosmosApp) SetState(statedb vm.StateDB, app_hash common.Hash, state_root common.Hash, block_number int64) {
+	app_hash_last := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+	root_last := statedb.GetState(vm.CrossChainContractAddr, state_root_cur)
+
+	statedb.SetState(vm.CrossChainContractAddr, state_app_hash_last, app_hash_last)
+	statedb.SetState(vm.CrossChainContractAddr, state_root_last, root_last)
+
+	statedb.SetState(vm.CrossChainContractAddr, state_app_hash_cur, app_hash)
+	statedb.SetState(vm.CrossChainContractAddr, state_root_cur, state_root)
+
+	cn := common.BigToHash(big.NewInt(block_number))
+	statedb.SetState(vm.CrossChainContractAddr, state_block_number, cn)
+}
+
+func (app *CosmosApp) IsDuplicateBlock(statedb vm.StateDB, block_number int64) bool {
+	tcn := common.BigToHash(big.NewInt(block_number))
+	cn := statedb.GetState(vm.CrossChainContractAddr, state_block_number)
+
+	return tcn == cn
+}
+
+func (app *CosmosApp) GetLastStateRoot(statedb vm.StateDB) common.Hash {
+	// app_hash_cur := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+	// root_cur := statedb.GetState(vm.CrossChainContractAddr, state_root_cur)
+	// app_hash_last := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_last)
+	// root_last := statedb.GetState(vm.CrossChainContractAddr, state_root_last)
+	// println("xxxx last ", app_hash_last.Hex(), " ", root_last.Hex())
+	// println("xxxx cur ", app_hash_cur.Hex(), " ", root_cur.Hex())
+
+	if app.is_duplicate_block {
+		return statedb.GetState(vm.CrossChainContractAddr, state_root_last)
+	} else {
+		return statedb.GetState(vm.CrossChainContractAddr, state_root_cur)
+	}
+}
+
+func (app *CosmosApp) GetAppHash(statedb vm.StateDB, block_number int64) common.Hash {
+	return statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+}
+
 func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	if app.is_genesis_init {
 		return
 	}
+
+	init_block_height := evm.Context.BlockNumber.Int64()
+	app.SetState(evm.StateDB, common.Hash{}, common.Hash{}, init_block_height)
 
 	// Module Account
 	evm.StateDB.CreateAccount(common.HexToAddress(ModuleAccount))
@@ -33,8 +85,6 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	evm.StateDB.SetCode(system.ERC20FactoryContract, code)
 
 	// crosschain
-	init_block_height := evm.Context.BlockNumber.Int64()
-
 	app.LoadVersion2(0)
 	var genesisState GenesisState
 	if err := tmjson.Unmarshal([]byte(IBCConfig), &genesisState); err != nil {
@@ -44,41 +94,39 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: app.cc.ChainID, InitialHeight: init_block_height})
 	app.mm.InitGenesis(app.GetContextForDeliverTx([]byte{}), app.codec.Marshaler, genesisState)
 
-	app.last_begin_block_height = init_block_height
+	app.is_start_crosschain = true
 	app.is_genesis_init = true
 
-	hdr := app.cc.MakeCosmosSignedHeader(app.db.header, common.Hash{})
+	hdr := app.cc.MakeCosmosSignedHeader(app.header, common.Hash{})
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 
 }
 
 // TODO get cube block header instead
-func (app *CosmosApp) Load(init_block_height int64) {
-	if app.last_begin_block_height == 0 {
-		app.LoadVersion2(init_block_height)
-		app.last_begin_block_height = init_block_height
-	}
-
-	if app.last_begin_block_height != init_block_height {
+func (app *CosmosApp) Load() {
+	init_block_height := app.header.Number.Int64() - 1
+	if !app.is_start_crosschain || app.is_duplicate_block {
 		println("load version... ", init_block_height)
 		app.LoadVersion2(init_block_height)
+		app.is_start_crosschain = true
 	}
-	app.last_begin_block_height = init_block_height + 1
 }
 
-func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, parent_header *types.Header, cfg vm.Config) {
+func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 
-	app.is_genesis_init = app.db.SetEVM(config, blockContext, statedb, header, parent_header, cfg)
-
-	println("begin block height", header.Number.Int64(), " genesis init ", app.is_genesis_init, " ts ", time.Now().UTC().String())
+	app.header = header
+	app.is_duplicate_block = app.IsDuplicateBlock(statedb, header.Number.Int64())
+	state_root := app.GetLastStateRoot(statedb)
+	app.is_genesis_init = app.db.SetEVM(config, blockContext, state_root, cfg)
+	println("begin block height", header.Number.Int64(), " genesis init ", app.is_genesis_init, " duplicat block ", app.is_duplicate_block, " stateroot ", state_root.Hex(), " ts ", time.Now().UTC().String())
 
 	if !app.is_genesis_init {
 		// app.InitGenesis(app.db.evm)
 		return
 	} else {
-		app.Load(parent_header.Number.Int64())
+		app.Load()
 		hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
 		app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 	}
@@ -94,33 +142,32 @@ func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
 	app.db.Commit(statedb)
 }
 
-func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
+func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB) *state.StateDB {
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 
 	if !app.is_genesis_init {
-		return common.Hash{}, nil
+		return nil
 	}
 
 	c := app.BaseApp.Commit()
-	app.db.Set([]byte("cosmos_app_hash"), c.Data[:])
-	app.app_hash.SetBytes(c.Data[:])
-
 	state_root := app.db.IntermediateRoot()
-	app.state_root = state_root
+
+	app.SetState(statedb, common.BytesToHash(c.Data[:]), state_root, app.header.Number.Int64())
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())
 
 	// TODO statedb lock??
-	return state_root, app.db.statedb
+	return app.db.statedb
 }
 
-func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
+func (app *CosmosApp) MakeHeader(h *et.Header, statedb *state.StateDB) *ct.Header {
 	if !app.is_genesis_init {
 		return nil
 	}
-
-	app.cc.MakeLightBlockAndSign(h, app.app_hash)
+	// TODO
+	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+	app.cc.MakeLightBlockAndSign(h, app_hash)
 	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
 	return app.cc.GetLightBlock(h.Number.Int64()).Header
 }

@@ -16,7 +16,6 @@ contract IBCState {
     }
 
     mapping (bytes => State) private kv;
-    mapping (uint64 => bytes[]) private bk;
     mapping (string => CircularBuffer) private rootskey;
     uint64 latest_block_number;
     uint64 counter_kv;
@@ -29,7 +28,6 @@ contract IBCState {
         s.val = val;
 
         kv[key] = s;
-        bk[block_number].push(key);
         latest_block_number = block_number;
 
         if (bytes(prefix).length > 0) {
@@ -67,27 +65,4 @@ contract IBCState {
         delete kv[key];
          counter_kv--;
     }
-
-    // TODO block number begin/end
-    function clear(uint64 block_number) public {
-        while (true) {
-            bytes[] memory keys = bk[block_number];
-            if (keys.length == 0) {
-                break;
-            }
-            for (uint i = 0; i < keys.length; i++) {
-                kv[keys[i]].is_exist = false;
-                delete kv[keys[i]];
-                counter_kv--;
-            }
-
-            delete bk[block_number];
-            block_number = block_number-1;
-        }
-    }
-
-    function dump() public view returns(uint64, uint64){
-        return ( counter_kv, counter_kv);
-    }
-
 }

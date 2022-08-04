@@ -193,13 +193,3 @@ func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
 
 	return nil, nil
 }
-
-func ClearState(ctx sdk.Context, block_number uint64) ([]byte, error) {
-	method := "clear"
-	_, err := callContract(ctx, system.IBCStateContract, method, block_number)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
-}

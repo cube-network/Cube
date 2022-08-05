@@ -1,9 +1,9 @@
 package crosschain
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -53,8 +53,8 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 
 	app.cc.valsMgr.initGenesisValidators(init_block_height)
 
-	hdr := app.cc.MakeCosmosSignedHeader(app.db.header, common.Hash{})
-	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+	//hdr := app.cc.makeCosmosSignedHeader(app.db.header, common.Hash{})
+	//app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
 // TODO get cube block header instead
@@ -84,7 +84,8 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 		return
 	} else {
 		app.Load(parent_header.Number.Int64())
-		hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
+		//hdr := app.cc.makeCosmosSignedHeader(header, common.Hash{})
+		hdr := app.cc.getSignedHeader(header.Hash())
 		app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 	}
 }
@@ -120,29 +121,37 @@ func (app *CosmosApp) MakeSignedHeader(h *et.Header) *ct.SignedHeader {
 	if !app.is_genesis_init {
 		return nil
 	}
-	header := app.cc.MakeCosmosSignedHeader(h, app.app_hash)
+	header := app.cc.makeCosmosSignedHeader(h, app.app_hash)
 	return header
 }
 
-func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
+//func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
+//	if !app.is_genesis_init {
+//		return nil
+//	}
+//
+//	app.cc.MakeLightBlockAndSign(h, app.app_hash)
+//	light_block := app.cc.GetLightBlock(h.Number.Int64())
+//	if light_block != nil {
+//		println("header ", light_block.Header.AppHash.String(), " ", time.Now().UTC().String())
+//		return light_block.Header
+//	}
+//	return nil
+//}
+//
+//func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
+//	if !app.is_genesis_init {
+//		return
+//	}
+//	// app.cc.makeCosmosSignedHeader(h, nil)
+//}
+
+func (app *CosmosApp) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
 	if !app.is_genesis_init {
 		return nil
 	}
 
-	app.cc.MakeLightBlockAndSign(h, app.app_hash)
-	light_block := app.cc.GetLightBlock(h.Number.Int64())
-	if light_block != nil {
-		println("header ", light_block.Header.AppHash.String(), " ", time.Now().UTC().String())
-		return light_block.Header
-	}
-	return nil
-}
-
-func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
-	if !app.is_genesis_init {
-		return
-	}
-	// app.cc.MakeCosmosSignedHeader(h, nil)
+	return app.cc.handleSignedHeader(h, header)
 }
 
 // TODO validator set pubkey, config for demo, register in contract later
@@ -150,8 +159,9 @@ func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
 // validator index,pubkey
 
 type CosmosChain struct {
-	ChainID     string
-	light_block map[int64]*ct.LightBlock // cache only for demo, write/read db instead later
+	ChainID       string
+	light_block   map[int64]*ct.LightBlock         // cache only for demo, write/read db instead later
+	signed_header map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
 	// light_block    *lru.ARCCache
 	//valsMgr     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
 	valsMgr *ValidatorsMgr
@@ -169,6 +179,7 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	// TODO chainID
 	c.ChainID = "ibc-1"
 	c.light_block = make(map[int64]*ct.LightBlock)
+	c.signed_header = make(map[common.Hash]*ct.SignedHeader)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
 
@@ -195,28 +206,10 @@ func (c *CosmosChain) String() string {
 	)
 }
 
-//func (c *CosmosChain) MakeValidatorSet() *ct.ValidatorSet {
-//	vs := &ct.ValidatorSet{}
-//	vs.Validators = c.valsMgr
-//	// TODO cube.header.coinbase
-//	vs.Proposer = c.valsMgr[c.priv_addr_idx]
-//
-//	return vs
-//}
-//
-//func (c *CosmosChain) MakeValidatorshash() []byte {
-//	return c.MakeValidatorSet().Hash()
-//}
-
-func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
-	log.Debug("MakeCosmosSignedHeader")
-	// todo: update validators
-	// Ensure that the extra-data contains a validator list on checkpoint, but none otherwise
-	extraVanity := 32                   // Fixed number of extra-data prefix bytes reserved for validator vanity
-	extraSeal := crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
-	validatorsBytes := len(h.Extra) - extraVanity - extraSeal
-	count := validatorsBytes / common.AddressLength
-	c.valsMgr.updateValidators(h.Extra[extraVanity:], count, h.Number.Int64())
+func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
+	log.Debug("makeCosmosSignedHeader")
+	// update validators
+	c.valsMgr.updateValidators(h, h.Number.Int64())
 
 	// make header
 	header := &ct.Header{
@@ -241,35 +234,13 @@ func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 	signatures := make([]ct.CommitSig, c.valsMgr.Validators.Size())
 
 	commit := &ct.Commit{Height: header.Height, Round: 1, BlockID: c.blockID, Signatures: signatures}
-	return &ct.SignedHeader{Header: header, Commit: commit}
-	// Tendermint light.Verify()
+	signedHeader := &ct.SignedHeader{Header: header, Commit: commit}
+	c.voteSignedHeader(signedHeader)
+	c.signed_header[h.Hash()] = signedHeader
+	return signedHeader
 }
 
-func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig, light_block *ct.LightBlock) {
-	// light_block := c.GetLightBlockInternal(block_height)
-	val_idx := 0
-	// TODO get val idx from c.valaditors (cs.ValidatorAddress)
-	// todo: add other signatures
-	light_block.Commit.Signatures[val_idx] = cs
-	c.SetLightBlock(light_block)
-	if c.IsLightBlockValid(light_block) {
-		c.best_block_height = uint64(light_block.Height)
-	}
-}
-
-func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.LightBlock {
-	// TODO load validator set from h.Extra, fixed for demo
-	light_block := &ct.LightBlock{SignedHeader: c.MakeCosmosSignedHeader(h, app_hash), ValidatorSet: c.valsMgr.Validators}
-	// c.SetLightBlock(light_block)
-	return light_block
-}
-
-// todo: light block need to be signed with most valsMgr
-func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) *ct.LightBlock {
-
-	println("make crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
-
-	light_block := c.MakeLightBlock(h, app_hash)
+func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 	addr := c.priv_validator.GetAddress()
 	idx, val := c.valsMgr.Validators.GetByAddress(addr)
 	if val == nil {
@@ -277,10 +248,10 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 	}
 	vote := &ct.Vote{
 		Type:             tmproto.PrecommitType,
-		Height:           light_block.Height,
-		Round:            light_block.Commit.Round,
-		BlockID:          light_block.Commit.BlockID,
-		Timestamp:        light_block.Time,
+		Height:           header.Height,
+		Round:            header.Commit.Round,
+		BlockID:          header.Commit.BlockID,
+		Timestamp:        header.Time,
 		ValidatorAddress: addr,
 		ValidatorIndex:   idx,
 	}
@@ -289,32 +260,131 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) 
 
 	cc := ct.CommitSig{}
 	cc.BlockIDFlag = ct.BlockIDFlagCommit
-	cc.Timestamp = vote.Timestamp
 	cc.ValidatorAddress = addr
 	cc.Timestamp = v.Timestamp
 	cc.Signature = v.Signature
 
-	c.Vote(light_block.Height, cc, light_block)
-
-	// todo: broadcast this light block
-
-	return light_block
+	commit := header.Commit
+	commit.Signatures[idx] = cc
+	header.Commit = commit
 }
 
-// func (c *CosmosChain) GetLightBlockInternal(block_height int64) *ct.LightBlock {
-// 	light_block, ok := c.light_block[block_height]
-// 	if ok {
-// 		return light_block
-// 	} else {
-// 		return nil
-// 	}
-// }
-
-func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
-	if len(c.light_block) > 1200*24 {
-		delete(c.light_block, light_block.Header.Height-100)
+func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) error {
+	if err := header.ValidateBasic(c.ChainID); err != nil {
+		return err
 	}
-	c.light_block[light_block.Height] = light_block
+
+	// check state_root
+	var stateRoot common.Hash
+	copy(stateRoot[:], h.Extra[:32])
+
+	// check validators
+	_, vals := c.valsMgr.getValidators(h)
+	if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
+		return fmt.Errorf("Verify validatorsHash failed. number=%f hash=%s\n", h.Number, h.Hash())
+	}
+	// check proposer
+	proposer := c.valsMgr.getValidator(h.Coinbase)
+	if !bytes.Equal(proposer.Address, header.ProposerAddress) {
+		return fmt.Errorf("Verify proposer failed. number=%f hash=%s\n", h.Number, h.Hash())
+	}
+
+	// check votes
+	sigs := header.Commit.Signatures
+	if len(sigs) < 1 {
+		return fmt.Errorf("Commit signatures are wrong. number=%f hash=%s\n", h.Number, h.Hash())
+	}
+
+	//voteSet := ct.CommitToVoteSet(c.ChainID, header.Commit, vals)
+	// check proposer's signature
+	idx, val := vals.GetByAddress(proposer.Address)
+	vote := header.Commit.GetByIndex(idx) //voteSet.GetByIndex(idx)
+	if err := vote.Verify(c.ChainID, val.PubKey); err != nil {
+		return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
+	}
+
+	// todo: check other signatures
+
+	// store header
+	c.signed_header[h.Hash()] = header
+
+	return nil
+}
+
+//func (c *CosmosChain) verifySignature(validators *ct.ValidatorSet) error {
+//	addr := c.priv_validator.GetAddress()
+//	idx, val := validators.GetByAddress(addr)
+//	if val == nil {
+//		panic("not a validator")
+//	}
+//
+//}
+
+//func (c *CosmosChain) Vote(block_height int64, cs ct.CommitSig, light_block *ct.LightBlock) {
+//	// light_block := c.GetLightBlockInternal(block_height)
+//	val_idx := 0
+//	// TODO get val idx from c.valaditors (cs.ValidatorAddress)
+//	// todo: add other signatures
+//	light_block.Commit.Signatures[val_idx] = cs
+//	c.SetLightBlock(light_block)
+//	if c.IsLightBlockValid(light_block) {
+//		c.best_block_height = uint64(light_block.Height)
+//	}
+//}
+
+//func (c *CosmosChain) MakeLightBlock(h *et.Header, app_hash common.Hash) *ct.LightBlock {
+//	// TODO load validator set from h.Extra, fixed for demo
+//	light_block := &ct.LightBlock{SignedHeader: c.makeCosmosSignedHeader(h, app_hash), ValidatorSet: c.valsMgr.Validators}
+//	// c.SetLightBlock(light_block)
+//	return light_block
+//}
+//
+//// todo: light block need to be signed with most valsMgr
+//func (c *CosmosChain) MakeLightBlockAndSign(h *et.Header, app_hash common.Hash) *ct.LightBlock {
+//
+//	println("make crosschain block, height --  ", h.Number.Int64(), time.Now().UTC().String())
+//
+//	light_block := c.MakeLightBlock(h, app_hash)
+//	addr := c.priv_validator.GetAddress()
+//	idx, val := c.valsMgr.Validators.GetByAddress(addr)
+//	if val == nil {
+//		panic("not a validator")
+//	}
+//	vote := &ct.Vote{
+//		Type:             tmproto.PrecommitType,
+//		Height:           light_block.Height,
+//		Round:            light_block.Commit.Round,
+//		BlockID:          light_block.Commit.BlockID,
+//		Timestamp:        light_block.Time,
+//		ValidatorAddress: addr,
+//		ValidatorIndex:   idx,
+//	}
+//	v := vote.ToProto()
+//	c.priv_validator.SignVote(c.ChainID, v)
+//
+//	cc := ct.CommitSig{}
+//	cc.BlockIDFlag = ct.BlockIDFlagCommit
+//	cc.Timestamp = vote.Timestamp
+//	cc.ValidatorAddress = addr
+//	cc.Timestamp = v.Timestamp
+//	cc.Signature = v.Signature
+//
+//	c.Vote(light_block.Height, cc, light_block)
+//
+//	// todo: broadcast this light block
+//
+//	return light_block
+//}
+//
+//func (c *CosmosChain) SetLightBlock(light_block *ct.LightBlock) {
+//	if len(c.light_block) > 1200*24 {
+//		delete(c.light_block, light_block.Header.Height-100)
+//	}
+//	c.light_block[light_block.Height] = light_block
+//}
+
+func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
+	return c.signed_header[hash]
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {

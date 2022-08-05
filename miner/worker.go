@@ -691,7 +691,11 @@ func (w *worker) resultLoop() {
 
 			// Broadcast the block and announce chain insertion event
 			cosmosHeader := w.chain.Cosmosapp.MakeSignedHeader(block.Header())
-			w.mux.Post(core.NewMinedBlockEvent{Block: block, CosmosHeader: cosmosHeader})
+
+			w.mux.Post(core.NewMinedBlockEvent{&core.BlockAndCosmosHeader{
+				block,
+				cosmosHeader,
+			}})
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())

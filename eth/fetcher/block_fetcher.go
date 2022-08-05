@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -84,7 +85,7 @@ type bodyRequesterFn func([]common.Hash) error
 type headerVerifierFn func(header *types.Header) error
 
 // blockBroadcasterFn is a callback type for broadcasting a block to connected peers.
-type blockBroadcasterFn func(block *types.Block, propagate bool)
+type blockBroadcasterFn func(blockHeader *core.BlockAndCosmosHeader, propagate bool)
 
 // chainHeightFn is a callback type to retrieve the current chain height.
 type chainHeightFn func() uint64
@@ -812,7 +813,10 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 		case nil:
 			// All ok, quickly propagate to our peers
 			blockBroadcastOutTimer.UpdateSince(block.ReceivedAt)
-			go f.broadcastBlock(block, true)
+			// todo: get cosmos header
+			go f.broadcastBlock(&core.BlockAndCosmosHeader{
+				Block: block,
+			}, true)
 
 		case consensus.ErrFutureBlock:
 			// Weird future block, don't fail, but neither propagate
@@ -830,7 +834,10 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 		}
 		// If import succeeded, broadcast the block
 		blockAnnounceOutTimer.UpdateSince(block.ReceivedAt)
-		go f.broadcastBlock(block, false)
+		// todo: get cosmos header
+		go f.broadcastBlock(&core.BlockAndCosmosHeader{
+			Block: block,
+		}, false)
 
 		// Invoke the testing hook if needed
 		if f.importedHook != nil {

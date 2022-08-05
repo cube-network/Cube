@@ -254,19 +254,22 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	if err := ann.sanityCheck(); err != nil {
 		return err
 	}
-	if hash := types.CalcUncleHash(ann.Block.Uncles()); hash != ann.Block.UncleHash() {
-		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", ann.Block.UncleHash())
+
+	block := ann.BlockAndHeader.Block
+	if hash := types.CalcUncleHash(block.Uncles()); hash != block.UncleHash() {
+		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", block.UncleHash())
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
 	}
-	if hash := types.DeriveSha(ann.Block.Transactions(), trie.NewStackTrie(nil)); hash != ann.Block.TxHash() {
-		log.Warn("Propagated block has invalid body", "have", hash, "exp", ann.Block.TxHash())
+	if hash := types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)); hash != block.TxHash() {
+		log.Warn("Propagated block has invalid body", "have", hash, "exp", block.TxHash())
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
 	}
-	ann.Block.ReceivedAt = msg.Time()
-	ann.Block.ReceivedFrom = peer
+
+	block.ReceivedAt = msg.Time()
+	block.ReceivedFrom = peer
 
 	// Mark the peer as owning the block
-	peer.markBlock(ann.Block.Hash())
+	peer.markBlock(block.Hash())
 
 	return backend.Handle(peer, ann)
 }

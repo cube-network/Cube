@@ -470,7 +470,8 @@ func (h *handler) Stop() {
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
+func (h *handler) BroadcastBlock(blockHeader *core.BlockAndCosmosHeader, propagate bool) {
+	block := blockHeader.Block
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
 
@@ -488,7 +489,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
-			peer.AsyncSendNewBlock(block, td)
+			peer.AsyncSendNewBlock(blockHeader, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
@@ -574,8 +575,8 @@ func (h *handler) minedBroadcastLoop() {
 
 	for obj := range h.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
-			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
-			h.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+			h.BroadcastBlock(ev.BlockAndHeader, true)  // First propagate block to peers
+			h.BroadcastBlock(ev.BlockAndHeader, false) // Only then announce to the rest
 		}
 	}
 }

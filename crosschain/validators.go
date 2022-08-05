@@ -3,6 +3,8 @@ package crosschain
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/types"
@@ -27,7 +29,7 @@ type ValidatorsMgr struct {
 	LastValidators              *types.ValidatorSet
 	LastHeightValidatorsChanged int64
 
-	AddrValMap map[common.Address]*types.Validator
+	AddrValMap map[common.Address]*types.Validator // cube address => cosmos validator
 }
 
 func (vmgr *ValidatorsMgr) initGenesisValidators(height int64) error {
@@ -52,19 +54,27 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(height int64) error {
 	return nil
 }
 
-func (vmgr *ValidatorsMgr) updateValidators(data []byte, count int, height int64) {
+func (vmgr *ValidatorsMgr) updateValidators(h *et.Header, height int64) {
+	vmgr.LastValidators = types.NewValidatorSet(vmgr.Validators.Validators)
+	_, vmgr.Validators = vmgr.getValidators(h)
+	vmgr.LastHeightValidatorsChanged = height
+}
+
+func (vmgr *ValidatorsMgr) getValidators(h *et.Header) ([]common.Address, *types.ValidatorSet) {
+	addrs := core.GetAddressesFromHeader(h)
+	count := len(addrs)
 	validators := make([]*types.Validator, count)
 	for i := 0; i < count; i++ {
-		var addr common.Address
-		copy(addr[:], data[i*common.AddressLength:])
-		val := vmgr.AddrValMap[addr]
+		val := vmgr.AddrValMap[addrs[i]]
 		if val == nil {
 			panic("validator is nil")
 		}
 		tVal := types.NewValidator(val.PubKey, val.VotingPower)
 		validators[i] = tVal
 	}
-	vmgr.LastValidators = types.NewValidatorSet(vmgr.Validators.Validators)
-	vmgr.Validators = types.NewValidatorSet(validators)
-	vmgr.LastHeightValidatorsChanged = height
+	return addrs, types.NewValidatorSet(validators)
+}
+
+func (vmgr *ValidatorsMgr) getValidator(addr common.Address) *types.Validator {
+	return vmgr.AddrValMap[addr]
 }

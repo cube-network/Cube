@@ -23,6 +23,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -267,24 +268,24 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 }
 
 // SendNewBlock propagates an entire block to a remote peer.
-func (p *Peer) SendNewBlock(block *types.Block, td *big.Int) error {
+func (p *Peer) SendNewBlock(blockHeader *core.BlockAndCosmosHeader, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
-	p.knownBlocks.Add(block.Hash())
+	p.knownBlocks.Add(blockHeader.Block.Hash())
 	return p2p.Send(p.rw, NewBlockMsg, &NewBlockPacket{
-		Block: block,
-		TD:    td,
+		BlockAndHeader: blockHeader,
+		TD:             td,
 	})
 }
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
+func (p *Peer) AsyncSendNewBlock(blockHeader *core.BlockAndCosmosHeader, td *big.Int) {
 	select {
-	case p.queuedBlocks <- &blockPropagation{block: block, td: td}:
+	case p.queuedBlocks <- &blockPropagation{block: blockHeader, td: td}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
-		p.knownBlocks.Add(block.Hash())
+		p.knownBlocks.Add(blockHeader.Block.Hash())
 	default:
-		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+		p.Log().Debug("Dropping block propagation", "number", blockHeader.Block.NumberU64(), "hash", blockHeader.Block.Hash())
 	}
 }
 

@@ -690,7 +690,8 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+			cosmosHeader := w.chain.Cosmosapp.MakeSignedHeader(block.Header())
+			w.mux.Post(core.NewMinedBlockEvent{Block: block, CosmosHeader: cosmosHeader})
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())

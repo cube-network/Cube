@@ -3,6 +3,7 @@ package crosschain
 import (
 	"encoding/hex"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -115,8 +116,16 @@ func (app *CosmosApp) OnBlockEnd() (common.Hash, *state.StateDB) {
 	return state_root, app.db.statedb
 }
 
+func (app *CosmosApp) MakeSignedHeader(h *et.Header) *ct.SignedHeader {
+	if !app.is_genesis_init {
+		return nil
+	}
+	header := app.cc.MakeCosmosSignedHeader(h, app.app_hash)
+	return header
+}
+
 func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
-	if !app.is_genesis_init || !app.cc.isProposer() {
+	if !app.is_genesis_init {
 		return nil
 	}
 
@@ -174,37 +183,6 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	return c
 }
 
-//func MarshalPubKeyToAmino(cdc *amino.Codec, key crypto.PubKey) (data []byte, err error) {
-//	switch key.(type) {
-//	case secp256k1.PubKeySecp256k1:
-//		data = make([]byte, 0, secp256k1.PubKeySecp256k1Size+typePrefixAndSizeLen)
-//		data = append(data, typePubKeySecp256k1Prefix...)
-//		data = append(data, byte(secp256k1.PubKeySecp256k1Size))
-//		keyData := key.(secp256k1.PubKeySecp256k1)
-//		data = append(data, keyData[:]...)
-//		return data, nil
-//	case ed25519.PubKeyEd25519:
-//		data = make([]byte, 0, ed25519.PubKeyEd25519Size+typePrefixAndSizeLen)
-//		data = append(data, typePubKeyEd25519Prefix...)
-//		data = append(data, byte(ed25519.PubKeyEd25519Size))
-//		keyData := key.(ed25519.PubKeyEd25519)
-//		data = append(data, keyData[:]...)
-//		return data, nil
-//	case sr25519.PubKeySr25519:
-//		data = make([]byte, 0, sr25519.PubKeySr25519Size+typePrefixAndSizeLen)
-//		data = append(data, typePubKeySr25519Prefix...)
-//		data = append(data, byte(sr25519.PubKeySr25519Size))
-//		keyData := key.(sr25519.PubKeySr25519)
-//		data = append(data, keyData[:]...)
-//		return data, nil
-//	}
-//	data, err = cdc.MarshalBinaryBare(key)
-//	if err != nil {
-//		return nil, err
-//	}
-//	return data, nil
-//}
-
 func (c *CosmosChain) String() string {
 	return fmt.Sprintf(
 		"Cosmos{\n ChainID:%v \n len(light_block):%v \n priv_validator:%v \n blockID:%v}",
@@ -215,13 +193,6 @@ func (c *CosmosChain) String() string {
 		c.priv_validator,
 		c.blockID,
 	)
-}
-
-func (c *CosmosChain) isProposer() bool {
-	if c.priv_validator == nil {
-		return false
-	}
-	return c.valsMgr.isProposer(c.priv_validator.GetAddress())
 }
 
 //func (c *CosmosChain) MakeValidatorSet() *ct.ValidatorSet {
@@ -239,22 +210,30 @@ func (c *CosmosChain) isProposer() bool {
 
 func (c *CosmosChain) MakeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
 	log.Debug("MakeCosmosSignedHeader")
-	//validator_hash := c.MakeValidatorshash()
+	// todo: update validators
+	// Ensure that the extra-data contains a validator list on checkpoint, but none otherwise
+	extraVanity := 32                   // Fixed number of extra-data prefix bytes reserved for validator vanity
+	extraSeal := crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+	validatorsBytes := len(h.Extra) - extraVanity - extraSeal
+	count := validatorsBytes / common.AddressLength
+	c.valsMgr.updateValidators(h.Extra[extraVanity:], count, h.Number.Int64())
+
+	// make header
 	header := &ct.Header{
 		Version:            version.Consensus{Block: 11, App: 0},
 		ChainID:            c.ChainID,
 		Height:             h.Number.Int64(),
 		Time:               time.Unix(int64(h.Time), 0),
-		LastCommitHash:     make([]byte, 32), // todo: to be replaced with
+		LastCommitHash:     make([]byte, 32), // todo: to be changed
 		LastBlockID:        c.blockID,
 		DataHash:           h.TxHash[:],
 		ValidatorsHash:     c.valsMgr.Validators.Hash(),
 		NextValidatorsHash: c.valsMgr.NextValidators.Hash(),
-		ConsensusHash:      make([]byte, 32), // todo: to be replaced with
-		AppHash:            app_hash[:],      // todo: to be replaced with
-		LastResultsHash:    make([]byte, 32), // todo: to be replaced with
-		EvidenceHash:       make([]byte, 32), // todo: to be replaced with
-		ProposerAddress:    c.valsMgr.Validators.GetProposer().Address,
+		ConsensusHash:      make([]byte, 32), // todo: to be changed
+		AppHash:            app_hash[:],
+		LastResultsHash:    make([]byte, 32),              // todo: to be changed
+		EvidenceHash:       make([]byte, 32),              // todo: to be changed
+		ProposerAddress:    c.priv_validator.GetAddress(), //c.valsMgr.Validators.GetProposer().Address,
 	}
 
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}

@@ -84,7 +84,7 @@ var (
 		BerlinBlock:           big.NewInt(0),
 		LondonBlock:           big.NewInt(0),
 		HeliocentrismBlock:    big.NewInt(1404110),
-		GravitationBlock:      big.NewInt(100),
+		GravitationBlock:      big.NewInt(1404110),
 		CrosschainCosmosBlock: big.NewInt(100),
 		Chaos: &ChaosConfig{
 			Period:                3,

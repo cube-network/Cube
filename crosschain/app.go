@@ -120,7 +120,6 @@ type CosmosApp struct {
 	anteHandler *CubeAnteHandler
 
 	cc                  *CosmosChain
-	is_genesis_init     bool
 	is_start_crosschain bool
 	is_duplicate_block  bool
 	header              *types.Header

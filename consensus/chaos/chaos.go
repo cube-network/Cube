@@ -473,9 +473,14 @@ func (c *Chaos) snapshot(chain consensus.ChainHeaderReader, number uint64, hash 
 			if checkpoint != nil {
 				hash := checkpoint.Hash()
 
-				validators := make([]common.Address, (len(checkpoint.Extra)-extraVanity-extraSeal)/common.AddressLength)
+				var extraSuffix int = 0
+				if c.chainConfig.IsCrosschainCosmos(checkpoint.Number) {
+					extraSuffix = extraCrosschainCosmos
+				}
+
+				validators := make([]common.Address, (len(checkpoint.Extra)-extraVanity-extraSeal-extraSuffix)/common.AddressLength)
 				for i := 0; i < len(validators); i++ {
-					copy(validators[i][:], checkpoint.Extra[extraVanity+i*common.AddressLength:])
+					copy(validators[i][:], checkpoint.Extra[extraVanity+extraSuffix+i*common.AddressLength:])
 				}
 				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, validators)
 				if err := snap.store(c.db); err != nil {
@@ -608,7 +613,9 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
 	}
 	header.Extra = header.Extra[:extraVanity]
-	header.Extra = append(header.Extra, make([]byte, extraCrosschainCosmos)...)
+	if c.chainConfig.IsCrosschainCosmos(header.Number) {
+		header.Extra = append(header.Extra, make([]byte, extraCrosschainCosmos)...)
+	}
 
 	if number%c.config.Epoch == 0 {
 		newSortedValidators, err := c.getTopValidators(chain, header)
@@ -666,6 +673,7 @@ func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *t
 			log.Warn("FinalizeAndAssemble failed", "err", err)
 		}
 	}()
+
 	// Preparing jobs before finalize
 	if err := c.prepareFinalize(chain, header, state, &txs, &receipts, nil, nil, true); err != nil {
 		panic(err)
@@ -750,6 +758,7 @@ func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consen
 		for i, validator := range newValidators {
 			copy(validatorsBytes[i*common.AddressLength:], validator.Bytes())
 		}
+
 		is_crosschain_cosmos := c.chainConfig.IsCrosschainCosmos(vmCtx.Header.Number)
 		if is_crosschain_cosmos {
 			if !bytes.Equal(vmCtx.Header.Extra[extraVanity+extraCrosschainCosmos:len(vmCtx.Header.Extra)-extraSeal], validatorsBytes) {
@@ -854,7 +863,6 @@ func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn
 func (c *Chaos) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	println("chaos seal... ", time.Now().UTC().String())
 	header := block.Header()
-
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
 	if number == 0 {

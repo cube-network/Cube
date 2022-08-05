@@ -680,7 +680,9 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
-			w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
+			if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+				w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
+			}
 			// Commit block and state to database.
 			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
 			if err != nil {
@@ -796,7 +798,12 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 	println("ApplyTransaction ", tx.Hash().Hex())
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, w.chain.Cosmosapp)
+
+	crosschain_cosmos := w.chain.Cosmosapp
+	if !w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+		crosschain_cosmos = nil
+	}
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, crosschain_cosmos)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -975,6 +982,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 		header.Coinbase = w.coinbase
 	}
+
 	if err := w.engine.Prepare(w.chain, header); err != nil {
 		log.Error("Failed to prepare header for mining", "err", err)
 		return
@@ -1029,9 +1037,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
+	// if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
 	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
 	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
-
+	// }
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
@@ -1059,8 +1068,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-
+	// if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+	// blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
 	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
+	// }
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1080,14 +1091,16 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state, w.current.header)
+	var cosmos_state *state.StateDB = nil
+	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+		cosmos_state = w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state, w.current.header)
+	}
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.
 	txs := make([]*types.Transaction, len(w.current.txs))
 	copy(txs, w.current.txs)
 	s := w.current.state.Copy()
-
 	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, txs, uncles, cpyReceipts)
 	if err != nil {
 		return err

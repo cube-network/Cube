@@ -47,6 +47,7 @@ require (
 	github.com/karalabe/usb v0.0.0-20211005121534-4c5740d64559
 	github.com/mattn/go-colorable v0.1.12
 	github.com/mattn/go-isatty v0.0.14
+	github.com/modern-go/reflect2 v1.0.2
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/panjf2000/ants/v2 v2.4.6

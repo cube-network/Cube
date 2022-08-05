@@ -1080,8 +1080,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state)
-	// copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
+	cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state, w.current.header)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.

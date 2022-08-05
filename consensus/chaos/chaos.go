@@ -62,8 +62,9 @@ const (
 var (
 	epochLength = uint64(30000) // Default number of blocks after which to checkpoint and reset the pending votes
 
-	extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for validator vanity
-	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+	extraVanity           = 32                     // Fixed number of extra-data prefix bytes reserved for validator vanity
+	extraSeal             = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+	extraCrosschainCosmos = 32
 
 	uncleHash = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
 
@@ -92,6 +93,8 @@ var (
 	// errMissingSignature is returned if a block's extra-data section doesn't seem
 	// to contain a 65 byte secp256k1 signature.
 	errMissingSignature = errors.New("extra-data 65 byte signature suffix missing")
+
+	errMissingCrosschainCosmosAppHash = errors.New("extra-data 32 byte crosschain cosmos app hash suffix missing")
 
 	// errExtraValidators is returned if non-checkpoint block contain validator data in
 	// their extra-data fields.
@@ -167,14 +170,18 @@ type ValidatorFn func(validator accounts.Account, mimeType string, message []byt
 type SignTxFn func(account accounts.Account, tx *types.Transaction, chainID *big.Int) (*types.Transaction, error)
 
 // ecrecover extracts the Ethereum account address from a signed header.
-func ecrecover(header *types.Header, sigcache *lru.ARCCache) (common.Address, error) {
+func ecrecover(header *types.Header, sigcache *lru.ARCCache, is_crosschain_cosmos bool) (common.Address, error) {
 	// If the signature's already cached, return that
 	hash := header.Hash()
 	if address, known := sigcache.Get(hash); known {
 		return address.(common.Address), nil
 	}
 	// Retrieve the signature from the header extra-data
-	if len(header.Extra) < extraSeal {
+	min_extra_len := extraVanity + extraSeal
+	if is_crosschain_cosmos {
+		min_extra_len += extraCrosschainCosmos
+	}
+	if len(header.Extra) < min_extra_len {
 		return common.Address{}, errMissingSignature
 	}
 	signature := header.Extra[len(header.Extra)-extraSeal:]
@@ -341,11 +348,22 @@ func (c *Chaos) verifyHeader(chain consensus.ChainHeaderReader, header *types.He
 	if len(header.Extra) < extraVanity+extraSeal {
 		return errMissingSignature
 	}
+	is_crosschain_cosmos := c.chainConfig.IsCrosschainCosmos(header.Number)
+	if is_crosschain_cosmos {
+		if len(header.Extra) < extraVanity+extraSeal+extraCrosschainCosmos {
+			return errMissingCrosschainCosmosAppHash
+		}
+	}
 	// check extra data
 	isEpoch := number%c.config.Epoch == 0
 
 	// Ensure that the extra-data contains a validator list on checkpoint, but none otherwise
-	validatorsBytes := len(header.Extra) - extraVanity - extraSeal
+	var validatorsBytes int
+	if is_crosschain_cosmos {
+		validatorsBytes = len(header.Extra) - extraVanity - extraSeal - extraCrosschainCosmos
+	} else {
+		validatorsBytes = len(header.Extra) - extraVanity - extraSeal
+	}
 	if !isEpoch && validatorsBytes != 0 {
 		return errExtraValidators
 	}
@@ -538,7 +556,7 @@ func (c *Chaos) verifySeal(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	// Resolve the authorization key and check against validators
-	signer, err := ecrecover(header, c.signatures)
+	signer, err := ecrecover(header, c.signatures, c.chainConfig.IsCrosschainCosmos(header.Number))
 	if err != nil {
 		return err
 	}
@@ -590,6 +608,7 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
 	}
 	header.Extra = header.Extra[:extraVanity]
+	header.Extra = append(header.Extra, make([]byte, extraCrosschainCosmos)...)
 
 	if number%c.config.Epoch == 0 {
 		newSortedValidators, err := c.getTopValidators(chain, header)
@@ -731,9 +750,17 @@ func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consen
 		for i, validator := range newValidators {
 			copy(validatorsBytes[i*common.AddressLength:], validator.Bytes())
 		}
-		if !bytes.Equal(vmCtx.Header.Extra[extraVanity:len(vmCtx.Header.Extra)-extraSeal], validatorsBytes) {
-			return errInvalidExtraValidators
+		is_crosschain_cosmos := c.chainConfig.IsCrosschainCosmos(vmCtx.Header.Number)
+		if is_crosschain_cosmos {
+			if !bytes.Equal(vmCtx.Header.Extra[extraVanity+extraCrosschainCosmos:len(vmCtx.Header.Extra)-extraSeal], validatorsBytes) {
+				return errInvalidExtraValidators
+			}
+		} else {
+			if !bytes.Equal(vmCtx.Header.Extra[extraVanity:len(vmCtx.Header.Extra)-extraSeal], validatorsBytes) {
+				return errInvalidExtraValidators
+			}
 		}
+
 	}
 	// update contract new validators if new set exists
 	if err := systemcontract.UpdateActiveValidatorSet(vmCtx, newValidators); err != nil {
@@ -875,6 +902,7 @@ func (c *Chaos) Seal(chain consensus.ChainHeaderReader, block *types.Block, resu
 	if err != nil {
 		return err
 	}
+
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))

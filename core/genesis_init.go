@@ -33,9 +33,10 @@ import (
 )
 
 const (
-	initBatch   = 30
-	extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for validator vanity
-	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+	initBatch             = 30
+	extraVanity           = 32                     // Fixed number of extra-data prefix bytes reserved for validator vanity
+	extraSeal             = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+	extraCrosschainCosmos = 32
 )
 
 var (
@@ -254,8 +255,18 @@ func (env *genesisInit) initValidators() ([]byte, error) {
 		return env.header.Extra, errors.New("validators are missing in genesis!")
 	}
 	activeSet := make([]common.Address, 0, len(env.genesis.Validators))
-	extra := make([]byte, 0, extraVanity+common.AddressLength*len(env.genesis.Validators)+extraSeal)
-	extra = append(extra, env.header.Extra[:extraVanity]...)
+	var extra []byte
+	is_crosschain_cosmos := env.genesis.Config.IsCrosschainCosmos(big.NewInt(0))
+	if is_crosschain_cosmos {
+		extra := make([]byte, 0, extraVanity+extraCrosschainCosmos+common.AddressLength*len(env.genesis.Validators)+extraSeal)
+		extra = append(extra, env.header.Extra[:extraVanity]...)
+		extra = append(extra, env.header.Extra[extraVanity:extraCrosschainCosmos]...)
+	} else {
+		extra := make([]byte, 0, extraVanity+common.AddressLength*len(env.genesis.Validators)+extraSeal)
+		extra = append(extra, env.header.Extra[:extraVanity]...)
+	}
+
+	// TODO genesis block for cosmos app hash
 	for _, v := range env.genesis.Validators {
 		if _, err := env.callContract(system.StakingContract, "initValidator",
 			v.Address, v.Manager, v.Rate, v.Stake, v.AcceptDelegation); err != nil {

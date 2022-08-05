@@ -116,6 +116,11 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 
+	is_crosschain_cosmos := config.IsCrosschainCosmos(header.Number)
+	if is_crosschain_cosmos {
+
+	}
+
 	app.header = header
 	app.is_duplicate_block = app.IsDuplicateBlock(statedb, header.Number.Int64())
 	state_root := app.GetLastStateRoot(statedb)
@@ -142,7 +147,7 @@ func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
 	app.db.Commit(statedb)
 }
 
-func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB) *state.StateDB {
+func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB, header *types.Header) *state.StateDB {
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 
@@ -152,7 +157,7 @@ func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB) *state.StateDB {
 
 	c := app.BaseApp.Commit()
 	state_root := app.db.IntermediateRoot()
-
+	copy(header.Extra[32:64], c.Data[:])
 	app.SetState(statedb, common.BytesToHash(c.Data[:]), state_root, app.header.Number.Int64())
 
 	println("OnBlockEnd ibc hash", hex.EncodeToString(c.Data[:]), " state root ", state_root.Hex(), " ts ", time.Now().UTC().String())

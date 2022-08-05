@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/syncx"
@@ -234,6 +235,9 @@ type BlockChain struct {
 	lockFutureAttessCache              sync.RWMutex
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
+
+	// TODO IBC
+	Cosmosapp *crosschain.CosmosApp
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1404,6 +1408,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
+			println("reorg... currentBLock ", block.Header().Number.Int64())
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
@@ -1415,6 +1420,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
+		// TODO notify crosschain new header event
+		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+		bc.Cosmosapp.MakeHeader(block.Header(), state)
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1429,11 +1437,14 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
+			println("ChainHeadEvent ", block.Header().Number.Uint64())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
+		println("ChainSideEvent ", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
 	return status, nil
 }
 
@@ -1713,13 +1724,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
+		// TODO crosschain cosmosapp
+		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-
+		cosmos_state := bc.Cosmosapp.OnBlockEnd(statedb)
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them
@@ -1754,6 +1768,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		log.Info("metric", "method", "validateBlock", "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(),
 			"cost", time.Since(substart)-(statedb.AccountHashes+statedb.StorageHashes-triehash))
 
+		bc.Cosmosapp.CommitIBC(cosmos_state)
 		// Write the block to the chain and get the status.
 		substart = time.Now()
 		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)
@@ -1950,6 +1965,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 // blocks and inserts them to be part of the new canonical chain and accumulates
 // potential missing transactions and post an event about them.
 func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
+	println("reorg ....")
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks

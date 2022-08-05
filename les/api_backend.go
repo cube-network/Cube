@@ -210,7 +210,9 @@ func (b *LesApiBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 			context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, parentState)
 		}
 	}
-	return vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig), state.Error, nil
+	env:= vm.NewEVM(context, txContext, state, b.eth.chainConfig, *vmConfig)
+	env.Crosschain = b.eth.blockchain.CrossChain
+	return env, state.Error, nil
 }
 
 func (b *LesApiBackend) SendTx(ctx context.Context, signedTx *types.Transaction) error {
@@ -364,4 +366,8 @@ func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 
 func (b *LesApiBackend) ChainHeaderReader() consensus.ChainHeaderReader {
 	return b.eth.blockchain
+}
+
+func (b *LesApiBackend) CrossChain() vm.CrossChainContract {
+	return b.eth.blockchain.CrossChain
 }

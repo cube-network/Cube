@@ -277,6 +277,7 @@ func (s *stateObject) SetState(db Database, key, value common.Hash) {
 	if prev == value {
 		return
 	}
+	
 	// New value is different, update and journal the change
 	s.db.journal.append(storageChange{
 		account:  &s.address,

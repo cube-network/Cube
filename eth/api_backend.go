@@ -229,7 +229,9 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 		}
 		context.AccessFilter = b.eth.chaosEngine.CreateEvmAccessFilter(header, parentState)
 	}
-	return vm.NewEVM(context, txContext, state, b.eth.blockchain.Config(), *vmConfig), vmError, nil
+	env :=  vm.NewEVM(context, txContext, state, b.eth.blockchain.Config(), *vmConfig)
+	env.Crosschain = b.CrossChain()
+	return env, vmError, nil
 }
 
 func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent) event.Subscription {
@@ -395,4 +397,8 @@ func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 
 func (b *EthAPIBackend) ChainHeaderReader() consensus.ChainHeaderReader {
 	return b.eth.blockchain
+}
+
+func (b *EthAPIBackend) CrossChain() vm.CrossChainContract {
+	return b.eth.blockchain.Cosmosapp
 }

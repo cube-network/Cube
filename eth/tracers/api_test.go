@@ -180,6 +180,10 @@ func (b *testBackend) ChainHeaderReader() consensus.ChainHeaderReader {
 	return b.chain
 }
 
+func (b *testBackend) CrossChain() vm.CrossChainContract {
+	return b.chain.Cosmosapp
+}
+
 func TestTraceCall(t *testing.T) {
 	t.Parallel()
 

@@ -310,7 +310,8 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	stateObject := s.getStateObject(addr)
 	if stateObject != nil {
-		return stateObject.GetState(s.db, hash)
+		t := stateObject.GetState(s.db, hash)
+		return t // stateObject.GetState(s.db, hash)
 	}
 	return common.Hash{}
 }
@@ -536,7 +537,7 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	return nil
 }
 
-// preload accounts from Transactions
+// preload accounts from TransactionsX
 func (s *StateDB) PreloadAccounts(block *types.Block, signer types.Signer) {
 	if s.snap == nil {
 		return
@@ -919,6 +920,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		// the commit-phase will be a lot faster
 		addressesToPrefetch = append(addressesToPrefetch, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
+
 	if s.prefetcher != nil && len(addressesToPrefetch) > 0 {
 		s.prefetcher.prefetch(s.originalRoot, addressesToPrefetch)
 	}
@@ -1239,7 +1241,8 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		var storageCommitted int
 		for addr := range s.stateObjectsDirty {
 			if obj := s.stateObjects[addr]; !obj.deleted {
-
+				// println
+				// fmt.Printf("statedb commit %p addr %s\n", s, obj.address.Hex())
 				// Write any storage changes in the state object to its storage trie
 				committed, err := obj.CommitTrie(s.db)
 				if err != nil {

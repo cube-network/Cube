@@ -18,19 +18,20 @@
 package web3ext
 
 var Modules = map[string]string{
-	"admin":    AdminJs,
-	"clique":   CliqueJs,
-	"chaos":    ChaosJs,
-	"ethash":   EthashJs,
-	"debug":    DebugJs,
-	"eth":      EthJs,
-	"miner":    MinerJs,
-	"net":      NetJs,
-	"personal": PersonalJs,
-	"rpc":      RpcJs,
-	"txpool":   TxpoolJs,
-	"les":      LESJs,
-	"vflux":    VfluxJs,
+	"admin":      AdminJs,
+	"clique":     CliqueJs,
+	"chaos":      ChaosJs,
+	"ethash":     EthashJs,
+	"debug":      DebugJs,
+	"eth":        EthJs,
+	"miner":      MinerJs,
+	"net":        NetJs,
+	"personal":   PersonalJs,
+	"rpc":        RpcJs,
+	"txpool":     TxpoolJs,
+	"les":        LESJs,
+	"vflux":      VfluxJs,
+	"crosschain": CrossChainJs,
 }
 
 const CliqueJs = `
@@ -928,6 +929,45 @@ web3._extend({
 		new web3._extend.Property({
 			name: 'requestStats',
 			getter: 'vflux_requestStats'
+		}),
+	]
+});
+`
+
+const CrossChainJs = `
+web3._extend({
+	property: 'crosschain',
+	methods:
+	[
+		new web3._extend.Method({
+			name: 'cosmosABCIInfo',
+			call: 'crosschain_cosmosABCIInfo',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'cosmosABCIQuery',
+			call: 'crosschain_cosmosABCIQuery',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'cosmosCommit',
+			call: 'crosschain_cosmosCommit',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'cosmosValidators',
+			call: 'crosschain_cosmosValidators',
+			params: 3
+		}),
+		new web3._extend.Method({
+			name: 'cosmosLightBlock',
+			call: 'crosschain_cosmosLightBlock',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'cosmosTxsSearch',
+			call: 'crosschain_cosmosTxsSearch',
+			params: 3
 		}),
 	]
 });

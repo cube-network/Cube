@@ -1037,10 +1037,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	// if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
-	// }
+	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+		blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
+		w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
+	}
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
@@ -1068,10 +1068,10 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-	// if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-	// blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
-	// }
+	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+		blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
+		w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
+	}
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)

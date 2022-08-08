@@ -497,7 +497,6 @@ const (
 		}
 	]`
 
-
 	// ERC20FactoryABI contains methods to interactive with ERC20Factory contract.
 	ERC20FactoryABI = `[
     {
@@ -878,12 +877,12 @@ const (
 		  {
 			"inputs": [
 			  {
-				"internalType": "uint64",
-				"name": "block_number",
-				"type": "uint64"
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
 			  }
 			],
-			"name": "clear",
+			"name": "del",
 			"stateMutability": "nonpayable",
 			"type": "function"
 		  }
@@ -946,8 +945,8 @@ func init() {
 		GenesisLockContract:   GenesisLockABI,
 		AddressListContract:   AddressListABI,
 		OnChainDaoContract:    OnChainDaoABI,
-		ERC20FactoryContract: ERC20FactoryABI, 
-		IBCStateContract: IBCStateABI,
+		ERC20FactoryContract:  ERC20FactoryABI,
+		IBCStateContract:      IBCStateABI,
 	} {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {
 			panic(err)

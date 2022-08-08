@@ -1,6 +1,7 @@
 package crosschain
 
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"strings"
@@ -142,7 +143,9 @@ func (mdb *IBCStateDB) Set(key []byte, val []byte) error {
 
 	var prefix string
 	skey := string(key)
-	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true}
+	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true,
+		"s/k:bank/o": true, "s/k:capability/o": true, "s/k:feeibc/o": true, "s/k:ibc/o": true, "s/k:icacontroller/o": true, "s/k:icahost/o": true, "s/k:params/o": true, "s/k:staking/o": true, "s/k:transfer/o": true, "s/k:upgrade/o": true,
+		"s/k:bank/n": true, "s/k:capability/n": true, "s/k:feeibc/n": true, "s/k:ibc/n": true, "s/k:icacontroller/n": true, "s/k:icahost/n": true, "s/k:params/n": true, "s/k:staking/n": true, "s/k:transfer/n": true, "s/k:upgrade/n": true}
 	for k := range dict {
 		if strings.Contains(skey, k) {
 			prefix = k
@@ -171,10 +174,11 @@ func (mdb *IBCStateDB) Delete(key []byte) error {
 	if mdb.evm == nil {
 		return errors.New("IBCStateDB not init")
 	}
+	// println("store. del ", len(key), " key ", string(key))
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	_, err := systemcontract.DelState(ctx, key)
 	if err != nil {
-		println("Failed to Get, err", err.Error())
+		println("Failed to Del, err", err.Error())
 		return err
 	}
 
@@ -226,10 +230,13 @@ type IBCStateIterator struct {
 }
 
 func (mdb *IBCStateDB) NewIBCStateIterator(is_reverse bool, start []byte, end []byte) (*IBCStateIterator, error) {
+	// println("Iterator reverse ", is_reverse, " start ", string(start), "  ", hex.EncodeToString(start), " end ", string(end), " ", hex.EncodeToString(end))
 	is_rootkey := false
 	skey := string(start)
 	var dictkey string
-	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true}
+	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true,
+		"s/k:bank/o": true, "s/k:capability/o": true, "s/k:feeibc/o": true, "s/k:ibc/o": true, "s/k:icacontroller/o": true, "s/k:icahost/o": true, "s/k:params/o": true, "s/k:staking/o": true, "s/k:transfer/o": true, "s/k:upgrade/o": true,
+		"s/k:bank/n": true, "s/k:capability/n": true, "s/k:feeibc/n": true, "s/k:ibc/n": true, "s/k:icacontroller/n": true, "s/k:icahost/n": true, "s/k:params/n": true, "s/k:staking/n": true, "s/k:transfer/n": true, "s/k:upgrade/n": true}
 	for k := range dict {
 		if strings.Contains(skey, k) {
 			is_rootkey = true
@@ -254,7 +261,33 @@ func (mdb *IBCStateDB) NewIBCStateIterator(is_reverse bool, start []byte, end []
 		println("Failed to Get, err", err.Error())
 		return nil, err
 	}
-
+	// 10, 9, 8
+	if len(keys) > 0 && len(vals) > 0 {
+		// for i := 0; i < len(keys); i++ {
+		// 	println("keys ", i, " ", hex.EncodeToString(keys[i]))
+		// }
+		si, ei := 0, len(keys)-1
+		for i := 0; i < len(keys); i++ {
+			cmp := bytes.Compare(keys[i], end)
+			if cmp >= 0 {
+				si = i
+			} else {
+				break
+			}
+		}
+		for i := 0; i < len(keys); i++ {
+			cmp := bytes.Compare(keys[i], start)
+			if cmp >= 0 {
+				ei = i
+			} else {
+				break
+			}
+		}
+		// println("len keys ", len(keys), " ", si, " ei ", ei)
+		keys = keys[si:ei]
+		vals = vals[si:ei]
+		// println(len(keys), " ")
+	}
 	if !is_reverse {
 		for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
 			keys[i], keys[j] = keys[j], keys[i]
@@ -262,7 +295,6 @@ func (mdb *IBCStateDB) NewIBCStateIterator(is_reverse bool, start []byte, end []
 		for i, j := 0, len(vals)-1; i < j; i, j = i+1, j-1 {
 			vals[i], vals[j] = vals[j], vals[i]
 		}
-
 	}
 
 	it := &IBCStateIterator{start: start, end: end, cur: 0, keys: keys, vals: vals}

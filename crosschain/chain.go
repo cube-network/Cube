@@ -2,6 +2,7 @@ package crosschain
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -128,6 +129,10 @@ func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB, header *types.Header) *
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 	c := app.BaseApp.Commit()
+	if header.Number.Int64() > 128 {
+		key := fmt.Sprintf("s/%d", header.Number.Int64()-128)
+		app.db.Delete([]byte(key))
+	}
 	state_root := app.db.IntermediateRoot()
 	copy(header.Extra[32:64], c.Data[:])
 	app.SetState(statedb, common.BytesToHash(c.Data[:]), state_root, app.header.Number.Int64())

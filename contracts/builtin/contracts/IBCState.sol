@@ -10,17 +10,13 @@ contract IBCState {
     }
 
     struct CircularBuffer{
-        bytes[128] keys;
+        bytes[129] keys;
         uint256 counter;
         uint256 cur;
     }
 
     mapping (bytes => State) private kv;
     mapping (string => CircularBuffer) private rootskey;
-    uint64 latest_block_number;
-    uint64 counter_kv;
-
-    // TODO prefix query
 
     function set(bytes memory key, bytes memory val, uint64 block_number, string memory prefix) public{
         State memory s;
@@ -28,18 +24,15 @@ contract IBCState {
         s.val = val;
 
         kv[key] = s;
-        latest_block_number = block_number;
 
         if (bytes(prefix).length > 0) {
             rootskey[prefix].keys[rootskey[prefix].cur] = key;
             rootskey[prefix].cur++;
-            rootskey[prefix].cur %= 128;
-            if (rootskey[prefix].counter < 128) {
+            rootskey[prefix].cur %= 129;
+            if (rootskey[prefix].counter < 129) {
                 rootskey[prefix].counter++;
             }
         }
-    
-        counter_kv++;
     }
     
     function get(bytes memory key) public view returns (bool, bytes memory){
@@ -50,8 +43,12 @@ contract IBCState {
     function getroot(string memory prefix) public view returns (bytes[] memory, bytes[] memory) {
         bytes[] memory keys = new bytes[](rootskey[prefix].counter);
         bytes[] memory vals = new bytes[](rootskey[prefix].counter);
+        uint256 cnt = rootskey[prefix].counter;
+        if (cnt > 128) {
+            cnt = 128;
+        }
         for (uint256 i = 0; i < rootskey[prefix].counter; ++i) {
-            uint256 idx = (rootskey[prefix].cur + 128 - i - 1) % 128;
+            uint256 idx = (rootskey[prefix].cur + 129 - i - 1) % 129;
             keys[i] = rootskey[prefix].keys[idx];
             bytes memory k = keys[i];
             vals[i] = kv[k].val;
@@ -63,6 +60,7 @@ contract IBCState {
     function del(bytes memory key) public{
         kv[key].is_exist = false;
         delete kv[key];
-         counter_kv--;
     }
+
+    // seq?
 }

@@ -112,6 +112,15 @@ func (st *Store) Commit() types.CommitID {
 		panic(err)
 	}
 
+	// TODO
+	try_del_version := version - 128
+	if st.tree.VersionExists(try_del_version) {
+		err := st.tree.DeleteVersion(try_del_version)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	return types.CommitID{
 		Version: version,
 		Hash:    hash,

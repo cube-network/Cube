@@ -51,13 +51,6 @@ func (app *CosmosApp) IsDuplicateBlock(statedb vm.StateDB, block_number int64) b
 }
 
 func (app *CosmosApp) GetLastStateRoot(statedb vm.StateDB) common.Hash {
-	// app_hash_cur := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
-	// root_cur := statedb.GetState(vm.CrossChainContractAddr, state_root_cur)
-	// app_hash_last := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_last)
-	// root_last := statedb.GetState(vm.CrossChainContractAddr, state_root_last)
-	// println("xxxx last ", app_hash_last.Hex(), " ", root_last.Hex())
-	// println("xxxx cur ", app_hash_cur.Hex(), " ", root_cur.Hex())
-
 	if app.is_duplicate_block {
 		return statedb.GetState(vm.CrossChainContractAddr, state_root_last)
 	} else {

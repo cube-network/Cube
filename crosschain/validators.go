@@ -3,9 +3,9 @@ package crosschain
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	et "github.com/ethereum/go-ethereum/core/types"
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/ethereum/go-ethereum/crypto"
+	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/types"
 )
@@ -13,8 +13,8 @@ import (
 type Validator struct {
 	CubeAddr common.Address `json:"address"`
 	//CosmosAddr  types.Address  `json:"cosmos_address"`
-	PubKey      crypto.PubKey `json:"pub_key"`
-	VotingPower int64         `json:"voting_power"`
+	PubKey      tmcrypto.PubKey `json:"pub_key"`
+	VotingPower int64           `json:"voting_power"`
 }
 
 type ValidatorsMgr struct {
@@ -61,7 +61,7 @@ func (vmgr *ValidatorsMgr) updateValidators(h *et.Header, height int64) {
 }
 
 func (vmgr *ValidatorsMgr) getValidators(h *et.Header) ([]common.Address, *types.ValidatorSet) {
-	addrs := core.GetAddressesFromHeader(h)
+	addrs := getAddressesFromHeader(h) // make([]common.Address, 1) //
 	count := len(addrs)
 	validators := make([]*types.Validator, count)
 	for i := 0; i < count; i++ {
@@ -77,4 +77,18 @@ func (vmgr *ValidatorsMgr) getValidators(h *et.Header) ([]common.Address, *types
 
 func (vmgr *ValidatorsMgr) getValidator(addr common.Address) *types.Validator {
 	return vmgr.AddrValMap[addr]
+}
+
+func getAddressesFromHeader(h *et.Header) []common.Address {
+	extraVanity := 32                   // Fixed number of extra-data prefix bytes reserved for validator vanity
+	extraSeal := crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for validator seal
+
+	validatorsBytes := len(h.Extra) - extraVanity - extraSeal
+	count := validatorsBytes / common.AddressLength
+
+	addresses := make([]common.Address, count)
+	for i := 0; i < count; i++ {
+		copy(addresses[i][:], h.Extra[extraVanity+i*common.AddressLength:])
+	}
+	return addresses
 }

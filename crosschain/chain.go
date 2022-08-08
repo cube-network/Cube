@@ -22,6 +22,8 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
+type GetHeaderByNumber func(number uint64) *types.Header
+
 func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	if app.is_genesis_init {
 		return
@@ -55,6 +57,10 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 
 	//hdr := app.cc.makeCosmosSignedHeader(app.db.header, common.Hash{})
 	//app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
+}
+
+func (app *CosmosApp) SetGetHeaderFn(getHeaderFn GetHeaderByNumber) {
+	app.cc.SetGetHeaderFn(getHeaderFn)
 }
 
 // TODO get cube block header instead
@@ -125,27 +131,6 @@ func (app *CosmosApp) MakeSignedHeader(h *et.Header) *ct.SignedHeader {
 	return header
 }
 
-//func (app *CosmosApp) MakeHeader(h *et.Header) *ct.Header {
-//	if !app.is_genesis_init {
-//		return nil
-//	}
-//
-//	app.cc.MakeLightBlockAndSign(h, app.app_hash)
-//	light_block := app.cc.GetLightBlock(h.Number.Int64())
-//	if light_block != nil {
-//		println("header ", light_block.Header.AppHash.String(), " ", time.Now().UTC().String())
-//		return light_block.Header
-//	}
-//	return nil
-//}
-//
-//func (app *CosmosApp) Vote(block_height uint64, Address ct.Address) {
-//	if !app.is_genesis_init {
-//		return
-//	}
-//	// app.cc.makeCosmosSignedHeader(h, nil)
-//}
-
 func (app *CosmosApp) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
 	if !app.is_genesis_init {
 		return nil
@@ -170,6 +155,8 @@ type CosmosChain struct {
 
 	blockID           ct.BlockID // load best block height later
 	best_block_height uint64
+
+	getHeaderByNumber GetHeaderByNumber
 }
 
 // priv_validator_addr: chaos.validator
@@ -194,6 +181,10 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	return c
 }
 
+func (c *CosmosChain) SetGetHeaderFn(getHeaderFn GetHeaderByNumber) {
+	c.getHeaderByNumber = getHeaderFn
+}
+
 func (c *CosmosChain) String() string {
 	return fmt.Sprintf(
 		"Cosmos{\n ChainID:%v \n len(light_block):%v \n priv_validator:%v \n blockID:%v}",
@@ -207,7 +198,7 @@ func (c *CosmosChain) String() string {
 }
 
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
-	log.Debug("makeCosmosSignedHeader")
+	log.Info("makeCosmosSignedHeader", "height", h.Number, "hash", h.Hash())
 	// update validators
 	c.valsMgr.updateValidators(h, h.Number.Int64())
 
@@ -270,6 +261,8 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 }
 
 func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) error {
+	log.Info("handleSignedHeader", "height", h.Number, "hash", h.Hash())
+
 	if err := header.ValidateBasic(c.ChainID); err != nil {
 		return err
 	}
@@ -388,16 +381,31 @@ func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
-	light_block, ok := c.light_block[block_height]
-	if ok {
-		if c.IsLightBlockValid(light_block) {
-			return light_block
-		} else {
-			return nil
-		}
-	} else {
+	h := c.getHeaderByNumber(uint64(block_height))
+	if h == nil {
+		log.Error("Cannot get block header", "number", block_height)
 		return nil
 	}
+	header := c.getSignedHeader(h.Hash())
+	if header == nil {
+		log.Error("Cannot get cosmos signed header", "number", block_height)
+		return nil
+	}
+
+	// make light block
+	_, validators := c.valsMgr.getValidators(h)
+	return &ct.LightBlock{SignedHeader: header, ValidatorSet: validators}
+
+	//light_block, ok := c.light_block[block_height]
+	//if ok {
+	//	if c.IsLightBlockValid(light_block) {
+	//		return light_block
+	//	} else {
+	//		return nil
+	//	}
+	//} else {
+	//	return nil
+	//}
 }
 
 func (c *CosmosChain) IsLightBlockValid(light_block *ct.LightBlock) bool {

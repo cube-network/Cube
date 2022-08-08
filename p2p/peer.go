@@ -199,6 +199,8 @@ func (p *Peer) Disconnect(reason DiscReason) {
 		p.testPipe.Close()
 	}
 
+	fmt.Println("================disconnect peer", "reason", reason)
+
 	select {
 	case p.disc <- reason:
 	case <-p.closed:

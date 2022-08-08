@@ -203,6 +203,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	log.Debug("make cos mos app")
 	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(stack.DataDir(), chainConfig.ChainID, chainDb, eth.blockchain.CurrentBlock().Header(), map[int64]bool{})
+	eth.blockchain.Cosmosapp.SetGetHeaderFn(eth.blockchain.GetHeaderByNumber)
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
@@ -232,7 +233,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 
 		// todo: update validators for CosmosApp
-		
+
 	}
 
 	// Permit the downloader to use the trie cache allowance during fast sync

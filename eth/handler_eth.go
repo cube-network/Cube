@@ -201,11 +201,13 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, blockAndHeader *core.BlockAndCosmosHeader, td *big.Int) error {
 	block := blockAndHeader.Block
+	log.Info("handleBlockBroadcast", "number", blockAndHeader.Block.NumberU64(), "hash", block.Hash())
 
 	// deal with cosmos header
 	if h.chain.Cosmosapp != nil && blockAndHeader.CosmosHeader != nil {
 		err := h.chain.Cosmosapp.HandleHeader(block.Header(), blockAndHeader.CosmosHeader)
 		if err != nil {
+			log.Error("handle cosmos header failed", "err", err)
 			return err
 		}
 	}

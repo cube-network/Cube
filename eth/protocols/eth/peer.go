@@ -17,13 +17,13 @@
 package eth
 
 import (
+	"github.com/ethereum/go-ethereum/core"
 	"math/big"
 	"math/rand"
 	"sync"
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -76,9 +76,10 @@ type Peer struct {
 	head common.Hash // Latest advertised head block hash
 	td   *big.Int    // Latest advertised head block total difficulty
 
-	knownBlocks     *knownCache            // Set of block hashes known to be known by this peer
-	queuedBlocks    chan *blockPropagation // Queue of blocks to broadcast to the peer
-	queuedBlockAnns chan *types.Block      // Queue of blocks to announce to the peer
+	knownBlocks           *knownCache                     // Set of block hashes known to be known by this peer
+	queuedBlocks          chan *blockPropagation          // Queue of blocks to broadcast to the peer
+	queuedBlockAndHeaders chan *blockAndHeaderPropagation // Queue of blocks to broadcast to the peer
+	queuedBlockAnns       chan *types.Block               // Queue of blocks to announce to the peer
 
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
 	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
@@ -93,18 +94,19 @@ type Peer struct {
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
 	peer := &Peer{
-		id:              p.ID().String(),
-		Peer:            p,
-		rw:              rw,
-		version:         version,
-		knownTxs:        newKnownCache(maxKnownTxs),
-		knownBlocks:     newKnownCache(maxKnownBlocks),
-		queuedBlocks:    make(chan *blockPropagation, maxQueuedBlocks),
-		queuedBlockAnns: make(chan *types.Block, maxQueuedBlockAnns),
-		txBroadcast:     make(chan []common.Hash),
-		txAnnounce:      make(chan []common.Hash),
-		txpool:          txpool,
-		term:            make(chan struct{}),
+		id:                    p.ID().String(),
+		Peer:                  p,
+		rw:                    rw,
+		version:               version,
+		knownTxs:              newKnownCache(maxKnownTxs),
+		knownBlocks:           newKnownCache(maxKnownBlocks),
+		queuedBlocks:          make(chan *blockPropagation, maxQueuedBlocks),
+		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
+		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
+		txBroadcast:           make(chan []common.Hash),
+		txAnnounce:            make(chan []common.Hash),
+		txpool:                txpool,
+		term:                  make(chan struct{}),
 	}
 	// Start up all the broadcasters
 	go peer.broadcastBlocks()
@@ -268,10 +270,33 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 }
 
 // SendNewBlock propagates an entire block to a remote peer.
-func (p *Peer) SendNewBlock(blockHeader *core.BlockAndCosmosHeader, td *big.Int) error {
+func (p *Peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
-	p.knownBlocks.Add(blockHeader.Block.Hash())
+	p.knownBlocks.Add(block.Hash())
 	return p2p.Send(p.rw, NewBlockMsg, &NewBlockPacket{
+		Block: block,
+		TD:    td,
+	})
+}
+
+// AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
+// the peer's broadcast queue is full, the event is silently dropped.
+func (p *Peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
+	select {
+	case p.queuedBlocks <- &blockPropagation{block: block, td: td}:
+		// Mark all the block hash as known, but ensure we don't overflow our limits
+		p.knownBlocks.Add(block.Hash())
+	default:
+		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+	}
+}
+
+// SendNewBlockAndHeader propagates an entire block to a remote peer.
+func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td *big.Int) error {
+	// Mark all the block hash as known, but ensure we don't overflow our limits
+	block := blockHeader.Block
+	p.knownBlocks.Add(block.Hash())
+	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
 		BlockAndHeader: blockHeader,
 		TD:             td,
 	})
@@ -279,13 +304,14 @@ func (p *Peer) SendNewBlock(blockHeader *core.BlockAndCosmosHeader, td *big.Int)
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewBlock(blockHeader *core.BlockAndCosmosHeader, td *big.Int) {
+func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td *big.Int) {
+	block := blockHeader.Block
 	select {
-	case p.queuedBlocks <- &blockPropagation{block: blockHeader, td: td}:
+	case p.queuedBlockAndHeaders <- &blockAndHeaderPropagation{blockAndHeader: blockHeader, td: td}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
-		p.knownBlocks.Add(blockHeader.Block.Hash())
+		p.knownBlocks.Add(block.Hash())
 	default:
-		p.Log().Debug("Dropping block propagation", "number", blockHeader.Block.NumberU64(), "hash", blockHeader.Block.Hash())
+		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}
 }
 

@@ -26,13 +26,12 @@ type NewTxsEvent struct{ Txs []*types.Transaction }
 
 // NewMinedBlockEvent is posted when a block has been imported.
 type NewMinedBlockEvent struct {
-	//Block *types.Block
-	BlockAndHeader *BlockAndCosmosHeader
+	Block *types.Block
 }
 
-//type NewMinedBlockAndHeaderEvent struct {
-//	BlockAndHeader *BlockAndCosmosHeader
-//}
+type NewMinedBlockAndHeaderEvent struct {
+	BlockAndHeader *BlockAndCosmosHeader
+}
 
 // RemovedLogsEvent is posted when a reorg happens
 type RemovedLogsEvent struct{ Logs []*types.Log }

@@ -255,7 +255,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool) {
 
 		select {
 		case ev := <-sub.Chan():
-			block := ev.Data.(core.NewMinedBlockEvent).Block.Block
+			block := ev.Data.(core.NewMinedBlockEvent).Block
 			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 				t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}

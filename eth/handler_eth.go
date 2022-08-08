@@ -88,7 +88,10 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		return h.handleBlockAnnounces(peer, hashes, numbers)
 
 	case *eth.NewBlockPacket:
-		return h.handleBlockBroadcast(peer, packet.BlockAndHeader, packet.TD)
+		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
+
+	case *eth.NewBlockAndHeaderPacket:
+		return h.handleBlockAndHeaderBroadcast(peer, packet.BlockAndHeader, packet.TD)
 
 	case *eth.NewPooledTransactionHashesPacket:
 		return h.txFetcher.Notify(peer.ID(), *packet)
@@ -199,11 +202,34 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
-func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, blockAndHeader *core.BlockAndCosmosHeader, td *big.Int) error {
-	block := blockAndHeader.Block
-	log.Info("handleBlockBroadcast", "number", blockAndHeader.Block.NumberU64(), "hash", block.Hash())
+func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
+	log.Info("handleBlockBroadcast", "number", block.NumberU64(), "hash", block.Hash())
 
-	// deal with cosmos header
+	// Schedule the block for import
+	h.blockFetcher.Enqueue(peer.ID(), block)
+
+	// Assuming the block is importable by the peer, but possibly not yet done so,
+	// calculate the head hash and TD that the peer truly must have.
+	var (
+		trueHead = block.ParentHash()
+		trueTD   = new(big.Int).Sub(td, block.Difficulty())
+	)
+	// Update the peer's total difficulty if better than the previous
+	if _, td := peer.Head(); trueTD.Cmp(td) > 0 {
+		peer.SetHead(trueHead, trueTD)
+		h.chainSync.handlePeerEvent(peer)
+	}
+
+	return nil
+}
+
+// handleBlockBroadcast is invoked from a peer's message handler when it transmits a
+// block broadcast for the local node to process.
+func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeader *core.BlockAndCosmosHeader, td *big.Int) error {
+	block := blockAndHeader.Block
+	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash())
+
+	// todo: deal with cosmos header
 	if h.chain.Cosmosapp != nil && blockAndHeader.CosmosHeader != nil {
 		err := h.chain.Cosmosapp.HandleHeader(block.Header(), blockAndHeader.CosmosHeader)
 		if err != nil {

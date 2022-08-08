@@ -112,14 +112,15 @@ type handler struct {
 	txFetcher    *fetcher.TxFetcher
 	peers        *peerSet
 
-	eventMux      *event.TypeMux
-	txsCh         chan core.NewTxsEvent
-	txsSub        event.Subscription
-	naCh          chan core.NewAttestationEvent
-	naSub         event.Subscription
-	njfCh         chan core.NewJustifiedOrFinalizedBlockEvent
-	njfSub        event.Subscription
-	minedBlockSub *event.TypeMuxSubscription
+	eventMux               *event.TypeMux
+	txsCh                  chan core.NewTxsEvent
+	txsSub                 event.Subscription
+	naCh                   chan core.NewAttestationEvent
+	naSub                  event.Subscription
+	njfCh                  chan core.NewJustifiedOrFinalizedBlockEvent
+	njfSub                 event.Subscription
+	minedBlockSub          *event.TypeMuxSubscription
+	minedBlockAndHeaderSub *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
 
@@ -224,7 +225,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return n, err
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)
@@ -430,6 +431,11 @@ func (h *handler) Start(maxPeers int) {
 	h.minedBlockSub = h.eventMux.Subscribe(core.NewMinedBlockEvent{})
 	go h.minedBroadcastLoop()
 
+	// broadcast mined blocks
+	h.wg.Add(1)
+	h.minedBlockAndHeaderSub = h.eventMux.Subscribe(core.NewMinedBlockAndHeaderEvent{})
+	go h.minedBlockAndHeaderBroadcastLoop()
+
 	// broadcast self-built attestation
 	h.wg.Add(1)
 	h.naCh = make(chan core.NewAttestationEvent, naChanSize)
@@ -448,10 +454,11 @@ func (h *handler) Start(maxPeers int) {
 }
 
 func (h *handler) Stop() {
-	h.txsSub.Unsubscribe()        // quits txBroadcastLoop
-	h.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
-	h.naSub.Unsubscribe()         // quits newAttestationBroadcastLoop
-	h.njfSub.Unsubscribe()        // quits newJustifiedOrFinalizedBlockBroadcastLoop
+	h.txsSub.Unsubscribe()                 // quits txBroadcastLoop
+	h.minedBlockSub.Unsubscribe()          // quits blockBroadcastLoop
+	h.minedBlockAndHeaderSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
+	h.naSub.Unsubscribe()                  // quits newAttestationBroadcastLoop
+	h.njfSub.Unsubscribe()                 // quits newJustifiedOrFinalizedBlockBroadcastLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -470,11 +477,11 @@ func (h *handler) Stop() {
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastBlock(blockHeader *core.BlockAndCosmosHeader, propagate bool) {
-	block := blockHeader.Block
+func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
+	//block := blockHeader.Block
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
-	log.Info("Broadcast Block", "peers", len(peers), "number", blockHeader.Block.NumberU64(), "hash", blockHeader.Block.Hash())
+	log.Info("Broadcast Block", "peers", len(peers), "number", block.NumberU64(), "hash", block.Hash())
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
@@ -490,12 +497,49 @@ func (h *handler) BroadcastBlock(blockHeader *core.BlockAndCosmosHeader, propaga
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
-			peer.AsyncSendNewBlock(blockHeader, td)
+			peer.AsyncSendNewBlock(block, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return
 	}
 	// Otherwise if the block is indeed in out own chain, announce it
+	if h.chain.HasBlock(hash, block.NumberU64()) {
+		for _, peer := range peers {
+			peer.AsyncSendNewBlockHash(block)
+			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", false)
+		}
+		log.Trace("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
+	}
+}
+
+// BroadcastBlock will either propagate a block to a subset of its peers, or
+// will only announce its availability (depending what's requested).
+func (h *handler) BroadcastBlockAndHeader(blockAndHeader *core.BlockAndCosmosHeader, propagate bool) {
+	block := blockAndHeader.Block
+	hash := block.Hash()
+	peers := h.peers.peersWithoutBlock(hash)
+	log.Info("Broadcast BlockAndHeader", "peers", len(peers), "number", block.NumberU64(), "hash", block.Hash())
+
+	// If propagation is requested, send to a subset of the peer
+	if propagate {
+		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
+		var td *big.Int
+		if parent := h.chain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
+			td = new(big.Int).Add(block.Difficulty(), h.chain.GetTd(block.ParentHash(), block.NumberU64()-1))
+		} else {
+			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
+			return
+		}
+		// Send the block to a subset of our peers
+		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+		for _, peer := range transfer {
+			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
+			peer.AsyncSendNewBlockAndHeader(blockAndHeader, td)
+		}
+		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
+		return
+	}
+	// Otherwise if the block is indeed in our own chain, announce it
 	if h.chain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
@@ -576,8 +620,20 @@ func (h *handler) minedBroadcastLoop() {
 
 	for obj := range h.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
-			h.BroadcastBlock(ev.BlockAndHeader, true)  // First propagate block to peers
-			h.BroadcastBlock(ev.BlockAndHeader, false) // Only then announce to the rest
+			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
+			h.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+		}
+	}
+}
+
+// minedBroadcastLoop sends mined blocks to connected peers.
+func (h *handler) minedBlockAndHeaderBroadcastLoop() {
+	defer h.wg.Done()
+
+	for obj := range h.minedBlockAndHeaderSub.Chan() {
+		if ev, ok := obj.Data.(core.NewMinedBlockAndHeaderEvent); ok {
+			h.BroadcastBlockAndHeader(ev.BlockAndHeader, true)  // First propagate block to peers
+			h.BroadcastBlockAndHeader(ev.BlockAndHeader, false) // Only then announce to the rest
 		}
 	}
 }

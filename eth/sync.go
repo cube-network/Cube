@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -257,9 +256,10 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		// scenario will most often crop up in private and hackathon networks with
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
-		h.BroadcastBlock(&core.BlockAndCosmosHeader{
-			Block: head,
-		}, false)
+		//h.BroadcastBlock(&core.BlockAndCosmosHeader{
+		//	Block: head,
+		//}, false)
+		h.BroadcastBlock(head, false)
 	}
 	return nil
 }

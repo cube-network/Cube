@@ -19,11 +19,11 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core"
 	"io"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -65,6 +65,7 @@ const (
 	NewPooledTransactionHashesMsg = 0x08
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
+	NewBlockAndHeaderMsg          = 0x0b
 )
 
 var (
@@ -178,12 +179,36 @@ type BlockHeadersPacket66 struct {
 
 // NewBlockPacket is the network packet for the block propagation message.
 type NewBlockPacket struct {
-	BlockAndHeader *core.BlockAndCosmosHeader
-	TD             *big.Int
+	//BlockAndHeader *core.BlockAndCosmosHeader
+	Block *types.Block
+	TD    *big.Int
 }
 
 // sanityCheck verifies that the values are reasonable, as a DoS protection
 func (request *NewBlockPacket) sanityCheck() error {
+	if request.Block == nil {
+		return fmt.Errorf("block is empty")
+	}
+	if err := request.Block.SanityCheck(); err != nil {
+		return err
+	}
+	//TD at mainnet block #7753254 is 76 bits. If it becomes 100 million times
+	// larger, it will still fit within 100 bits
+	if tdlen := request.TD.BitLen(); tdlen > 100 {
+		return fmt.Errorf("too large block TD: bitlen %d", tdlen)
+	}
+	return nil
+}
+
+// NewBlockPacket is the network packet for the block propagation message.
+type NewBlockAndHeaderPacket struct {
+	BlockAndHeader *core.BlockAndCosmosHeader
+	//Block *types.Block
+	TD *big.Int
+}
+
+// sanityCheck verifies that the values are reasonable, as a DoS protection
+func (request *NewBlockAndHeaderPacket) sanityCheck() error {
 	if request.BlockAndHeader == nil || request.BlockAndHeader.Block == nil {
 		return fmt.Errorf("block is empty")
 	}
@@ -344,6 +369,9 @@ func (*BlockBodiesPacket) Kind() byte   { return BlockBodiesMsg }
 
 func (*NewBlockPacket) Name() string { return "NewBlock" }
 func (*NewBlockPacket) Kind() byte   { return NewBlockMsg }
+
+func (*NewBlockAndHeaderPacket) Name() string { return "NewBlockAndHeader" }
+func (*NewBlockAndHeaderPacket) Kind() byte   { return NewBlockAndHeaderMsg }
 
 func (*GetNodeDataPacket) Name() string { return "GetNodeData" }
 func (*GetNodeDataPacket) Kind() byte   { return GetNodeDataMsg }

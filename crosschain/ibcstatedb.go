@@ -124,7 +124,7 @@ func (mdb *IBCStateDB) Has(key []byte) (bool, error) {
 	ctx := sdk.Context{}.WithEvm(mdb.evm)
 	is_exist, _, err := systemcontract.GetState(ctx, key)
 	if err != nil {
-		println("Failed to Get, err", err.Error())
+		println("Failed to Has, err", err.Error())
 		return false, err
 	}
 	// println("store. has ", mdb.counter, " batch counter ", mdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)

@@ -102,7 +102,7 @@ func callContract(ctx sdk.Context, contract common.Address, method string, args 
 	if err == vm.ErrExecutionReverted {
 		reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
 		if errUnpack != nil {
-			reason = "internal error"
+			reason = "internal error: " + errUnpack.Error()
 		}
 		err = fmt.Errorf("%s: %s", err.Error(), reason)
 	}

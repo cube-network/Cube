@@ -58,8 +58,10 @@ contract IBCState {
     }
 
     function del(bytes memory key) public{
-        kv[key].is_exist = false;
-        delete kv[key];
+        if (kv[key].is_exist) {
+            kv[key].is_exist = false;
+            delete kv[key];
+        }
     }
 
     // seq?

@@ -90,6 +90,7 @@ func (app *CosmosApp) Run(simulateMode bool, evm *vm.EVM, input []byte) ([]byte,
 		if handler := app.MsgServiceRouter().Handler(msg); handler != nil {
 			msgResult, err := handler(app.GetContextForTx(simulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
+			println("process tx ", eventMsgName)
 			if err != nil {
 				log.Info("eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted

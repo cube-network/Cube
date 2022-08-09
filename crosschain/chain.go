@@ -98,8 +98,8 @@ func (app *CosmosApp) Load() {
 }
 
 func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
-	// app.bapp_mu.Lock()
-	// defer app.bapp_mu.Unlock()
+	app.bapp_mu.Lock()
+	defer app.bapp_mu.Unlock()
 	app.header = header
 	app.is_duplicate_block = app.IsDuplicateBlock(statedb, header.Number.Int64())
 	state_root := app.GetLastStateRoot(statedb)
@@ -120,14 +120,14 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 }
 
 func (app *CosmosApp) CommitIBC(statedb *state.StateDB) {
-	// app.bapp_mu.Lock()
-	// defer app.bapp_mu.Unlock()
+	app.bapp_mu.Lock()
+	defer app.bapp_mu.Unlock()
 	app.db.Commit(statedb)
 }
 
 func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB, header *types.Header) *state.StateDB {
-	// app.bapp_mu.Lock()
-	// defer app.bapp_mu.Unlock()
+	app.bapp_mu.Lock()
+	defer app.bapp_mu.Unlock()
 	c := app.BaseApp.Commit()
 	if header.Number.Int64() > 128 {
 		key := fmt.Sprintf("s/%d", header.Number.Int64()-128)

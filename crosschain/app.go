@@ -2,6 +2,7 @@ package crosschain
 
 import (
 	"math/big"
+	"sync"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -120,6 +121,7 @@ type CosmosApp struct {
 	anteHandler *CubeAnteHandler
 
 	cc                  *CosmosChain
+	bapp_mu             sync.Mutex
 	is_start_crosschain bool
 	is_duplicate_block  bool
 	header              *types.Header

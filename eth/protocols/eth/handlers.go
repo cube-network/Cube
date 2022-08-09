@@ -19,12 +19,12 @@ package eth
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 )
 
 // handleGetBlockHeaders66 is the eth/66 version of handleGetBlockHeaders
@@ -270,6 +270,53 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 
 	// Mark the peer as owning the block
 	peer.markBlock(block.Hash())
+
+	return backend.Handle(peer, ann)
+}
+
+func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	ann := new(NewBlockAndHeaderPacket)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	if err := ann.sanityCheck(); err != nil {
+		return err
+	}
+
+	block := ann.BlockAndHeader.Block
+	if hash := types.CalcUncleHash(block.Uncles()); hash != block.UncleHash() {
+		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", block.UncleHash())
+		return nil // TODO(karalabe): return error eventually, but wait a few releases
+	}
+	if hash := types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)); hash != block.TxHash() {
+		log.Warn("Propagated block has invalid body", "have", hash, "exp", block.TxHash())
+		return nil // TODO(karalabe): return error eventually, but wait a few releases
+	}
+
+	block.ReceivedAt = msg.Time()
+	block.ReceivedFrom = peer
+
+	// Mark the peer as owning the block
+	peer.markBlock(block.Hash())
+
+	return backend.Handle(peer, ann)
+}
+
+func handleNewCosmosHeader(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	ann := new(NewCosmosHeaderPacket)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	if err := ann.sanityCheck(); err != nil {
+		return err
+	}
+
+	// todo: do some verification
+
+	// Mark the peer as owning the block
+	peer.markCosmosHeader(ann.Header.Hash)
 
 	return backend.Handle(peer, ann)
 }

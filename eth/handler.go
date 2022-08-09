@@ -549,6 +549,26 @@ func (h *handler) BroadcastBlockAndHeader(blockAndHeader *core.BlockAndCosmosHea
 	}
 }
 
+// BroadcastBlock will either propagate a block to a subset of its peers, or
+// will only announce its availability (depending what's requested).
+func (h *handler) BroadcastCosmosHeader(header *core.CosmosHeader, propagate bool) {
+	hash := header.Hash
+	peers := h.peers.peersWithoutBlock(hash)
+	log.Info("Broadcast BlockAndHeader", "peers", len(peers), "number", header.CosmosHeader.Height, "hash", hash)
+
+	// If propagation is requested, send to a subset of the peer
+	if propagate {
+		// Send the block to a subset of our peers
+		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+		for _, peer := range transfer {
+			log.Info("metric", "method", "BroadcastCosmosHeader", "peer", peer.ID(), "hash", hash.String(), "number", header.CosmosHeader.Height, "fullBlock", false)
+			peer.AsyncSendNewCosmosHeader(header)
+		}
+		log.Trace("Propagated cosmos header", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(header.CosmosHeader.Time)))
+		return
+	}
+}
+
 // BroadcastTransactions will propagate a batch of transactions
 // - To a square root of all peers
 // - And, separately, as announcements to all peers which are not known to

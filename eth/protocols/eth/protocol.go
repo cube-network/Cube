@@ -66,6 +66,7 @@ const (
 	GetPooledTransactionsMsg      = 0x09
 	PooledTransactionsMsg         = 0x0a
 	NewBlockAndHeaderMsg          = 0x0b
+	NewCosmosHeaderMsg            = 0x0c
 )
 
 var (
@@ -223,6 +224,28 @@ func (request *NewBlockAndHeaderPacket) sanityCheck() error {
 	return nil
 }
 
+// NewBlockPacket is the network packet for the block propagation message.
+type NewCosmosHeaderPacket struct {
+	Header *core.CosmosHeader
+}
+
+// sanityCheck verifies that the values are reasonable, as a DoS protection
+func (request *NewCosmosHeaderPacket) sanityCheck() error {
+	if request.Header == nil || request.Header.CosmosHeader == nil {
+		return fmt.Errorf("header is empty")
+	}
+	// todo: should check the relative of block header and cosmos header
+	//if err := request.header.Block.SanityCheck(); err != nil {
+	//	return err
+	//}
+	//TD at mainnet block #7753254 is 76 bits. If it becomes 100 million times
+	// larger, it will still fit within 100 bits
+	//if tdlen := request.TD.BitLen(); tdlen > 100 {
+	//	return fmt.Errorf("too large block TD: bitlen %d", tdlen)
+	//}
+	return nil
+}
+
 // GetBlockBodiesPacket represents a block body query.
 type GetBlockBodiesPacket []common.Hash
 
@@ -372,6 +395,9 @@ func (*NewBlockPacket) Kind() byte   { return NewBlockMsg }
 
 func (*NewBlockAndHeaderPacket) Name() string { return "NewBlockAndHeader" }
 func (*NewBlockAndHeaderPacket) Kind() byte   { return NewBlockAndHeaderMsg }
+
+func (*NewCosmosHeaderPacket) Name() string { return "NewCosmosHeader" }
+func (*NewCosmosHeaderPacket) Kind() byte   { return NewCosmosHeaderMsg }
 
 func (*GetNodeDataPacket) Name() string { return "GetNodeData" }
 func (*GetNodeDataPacket) Kind() byte   { return GetNodeDataMsg }

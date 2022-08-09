@@ -44,6 +44,13 @@ type blockAndHeaderPropagation struct {
 	td             *big.Int
 }
 
+// cosmosHeaderPropagation is a block propagation event, waiting for its turn in the
+// broadcast queue.
+type cosmosHeaderPropagation struct {
+	header *core.CosmosHeader
+	td     *big.Int
+}
+
 // broadcastBlocks is a write loop that multiplexes blocks and block accouncements
 // to the remote peer. The goal is to have an async writer that does not lock up
 // node internals and at the same time rate limits queued data.
@@ -67,6 +74,12 @@ func (p *Peer) broadcastBlocks() {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+
+		case prop := <-p.queuedCosmosHeaders:
+			if err := p.SendNewCosmosHeader(prop.header); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated cosmos header", "number", prop.header.CosmosHeader.Height, "hash", prop.header.Hash, "td", prop.td)
 
 		case <-p.term:
 			return

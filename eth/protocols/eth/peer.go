@@ -18,6 +18,7 @@ package eth
 
 import (
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"math/rand"
 	"sync"
@@ -81,6 +82,9 @@ type Peer struct {
 	queuedBlockAndHeaders chan *blockAndHeaderPropagation // Queue of blocks to broadcast to the peer
 	queuedBlockAnns       chan *types.Block               // Queue of blocks to announce to the peer
 
+	knownCosmosHeaders  *knownCache                   // Set of cosmos headers known to be known by this peer
+	queuedCosmosHeaders chan *cosmosHeaderPropagation // Queue of cosmos headers to broadcast to the peer
+
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
 	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
 	txBroadcast chan []common.Hash // Channel used to queue transaction propagation requests
@@ -103,6 +107,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		queuedBlocks:          make(chan *blockPropagation, maxQueuedBlocks),
 		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
 		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
+		queuedCosmosHeaders:   make(chan *cosmosHeaderPropagation, maxQueuedBlocks),
 		txBroadcast:           make(chan []common.Hash),
 		txAnnounce:            make(chan []common.Hash),
 		txpool:                txpool,
@@ -156,6 +161,11 @@ func (p *Peer) KnownBlock(hash common.Hash) bool {
 	return p.knownBlocks.Contains(hash)
 }
 
+// KnownCosmosHeader returns whether peer is known to already have a cosmos header.
+func (p *Peer) KnownCosmosHeader(hash common.Hash) bool {
+	return p.knownCosmosHeaders.Contains(hash)
+}
+
 // KnownTransaction returns whether peer is known to already have a transaction.
 func (p *Peer) KnownTransaction(hash common.Hash) bool {
 	return p.knownTxs.Contains(hash)
@@ -166,6 +176,13 @@ func (p *Peer) KnownTransaction(hash common.Hash) bool {
 func (p *Peer) markBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	p.knownBlocks.Add(hash)
+}
+
+// markCosmosHeader marks a cosmos-header as known for the peer, ensuring that the cosmos-header will
+// never be propagated to this particular peer.
+func (p *Peer) markCosmosHeader(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known cosmos-header hash
+	p.knownCosmosHeaders.Add(hash)
 }
 
 // markTransaction marks a transaction as known for the peer, ensuring that it
@@ -296,6 +313,8 @@ func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td 
 	// Mark all the block hash as known, but ensure we don't overflow our limits
 	block := blockHeader.Block
 	p.knownBlocks.Add(block.Hash())
+	p.knownCosmosHeaders.Add(block.Hash())
+	log.Info("=====SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
 	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
 		BlockAndHeader: blockHeader,
 		TD:             td,
@@ -310,8 +329,32 @@ func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader
 	case p.queuedBlockAndHeaders <- &blockAndHeaderPropagation{blockAndHeader: blockHeader, td: td}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
 		p.knownBlocks.Add(block.Hash())
+		p.knownCosmosHeaders.Add(block.Hash())
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+	}
+}
+
+// SendNewCosmosHeader propagates a cosmos-header to a remote peer.
+func (p *Peer) SendNewCosmosHeader(header *core.CosmosHeader) error {
+	// Mark all the block hash as known, but ensure we don't overflow our limits
+	p.knownCosmosHeaders.Add(header.Hash)
+	log.Info("=====SendNewCosmosHeader", "number", header.CosmosHeader.Height, "hash", header.Hash)
+	return p2p.Send(p.rw, NewCosmosHeaderMsg, &NewCosmosHeaderPacket{
+		Header: header,
+	})
+}
+
+// AsyncSendNewCosmosHeader queues a cosmos-header for propagation to a remote peer. If
+// the peer's broadcast queue is full, the event is silently dropped.
+func (p *Peer) AsyncSendNewCosmosHeader(header *core.CosmosHeader) {
+	//block := blockHeader.Block
+	select {
+	case p.queuedCosmosHeaders <- &cosmosHeaderPropagation{header: header}:
+		// Mark all the block hash as known, but ensure we don't overflow our limits
+		p.knownCosmosHeaders.Add(header.Hash)
+	default:
+		p.Log().Debug("Dropping block propagation", "number", header.CosmosHeader.Height, "hash", header.Hash)
 	}
 }
 

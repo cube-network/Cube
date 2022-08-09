@@ -202,7 +202,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	log.Debug("make cos mos app")
-	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(stack.DataDir(), chainConfig.ChainID, chainDb, eth.blockchain.CurrentBlock().Header(), map[int64]bool{})
+	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(stack.InstanceDir(), chainConfig.ChainID, chainDb, eth.blockchain.CurrentBlock().Header(), map[int64]bool{})
 	eth.blockchain.Cosmosapp.SetGetHeaderFn(eth.blockchain.GetHeaderByNumber)
 
 	// Rewind the chain in case of an incompatible config upgrade.
@@ -566,6 +566,8 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
+		s.blockchain.Cosmosapp.SetCubeAddress(eb)
+
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)

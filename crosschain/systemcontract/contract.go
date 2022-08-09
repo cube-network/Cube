@@ -203,3 +203,58 @@ func ClearState(ctx sdk.Context, block_number uint64) ([]byte, error) {
 
 	return nil, nil
 }
+
+func RegisterValidator(ctx sdk.Context, address common.Address, pubkey string) ([]byte, error) {
+	return callContract(ctx, system.AddrToPubkeyMapContract, "registerValidator", address, pubkey)
+}
+
+func GetAllValidators(ctx sdk.Context) ([]common.Address, []string, error) { //map[common.Address]*crosschain.Validator
+	contract := system.AddrToPubkeyMapContract
+	method := "getAllValidators"
+	result, err := callContract(ctx, contract, method)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// unpack data
+	ret, err := system.ABIUnpack(contract, method, result)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(ret) != 2 {
+		return nil, nil, errors.New("GetAllValidators: invalid result length")
+	}
+	addrs, ok := ret[0].([]common.Address)
+	if !ok {
+		return nil, nil, errors.New("GetAllValidators: invalid result format")
+	}
+	pubkeys, ok := ret[1].([]string)
+	if !ok || len(addrs) != len(pubkeys) {
+		return nil, nil, errors.New("GetAllValidators: invalid result format")
+	}
+
+	return addrs, pubkeys, nil
+}
+
+func GetValidator(ctx sdk.Context, address common.Address) (string, error) { // *crosschain.Validator
+	contract := system.AddrToPubkeyMapContract
+	method := "getValidator"
+	result, err := callContract(ctx, contract, method, address)
+	if err != nil {
+		return string(0), err
+	}
+
+	// unpack data
+	ret, err := system.ABIUnpack(contract, method, result)
+	if err != nil {
+		return string(0), err
+	}
+	if len(ret) != 1 {
+		return string(0), errors.New("GetValidator: invalid result length")
+	}
+	pubkey, ok := ret[0].(string)
+	if !ok {
+		return string(0), errors.New("GetValidator: invalid result format")
+	}
+	return pubkey, nil
+}

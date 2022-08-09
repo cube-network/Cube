@@ -138,7 +138,7 @@ func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, header
 	// db := NewIBCStateDB("application", datadir)
 	db := NewIBCStateDB(ethdb)
 	codec := MakeEncodingConfig()
-	cc := MakeCosmosChain(chainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
+	cc := MakeCosmosChain(chainID.String(), "priv_validator_key.json", "priv_validator_state.json")
 
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
 	bApp.CC = cc

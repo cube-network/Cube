@@ -36,7 +36,13 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	code, _ := hex.DecodeString(ERC20FactoryCode)
 	evm.StateDB.SetCode(system.ERC20FactoryContract, code)
 
-	// todo: deploy validators' register contract
+	// deploy validators' register contract
+	evm.StateDB.CreateAccount(system.AddrToPubkeyMapContract)
+	code, _ = hex.DecodeString(AddrToPubkeyMapCode)
+	evm.StateDB.SetCode(system.AddrToPubkeyMapContract, code)
+
+	//// register validator
+	//app.cc.RegisterValidator(evm)
 
 	// crosschain
 	init_block_height := evm.Context.BlockNumber.Int64()
@@ -53,7 +59,7 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	app.last_begin_block_height = init_block_height
 	app.is_genesis_init = true
 
-	app.cc.valsMgr.initGenesisValidators(init_block_height)
+	app.cc.valsMgr.initGenesisValidators(evm, init_block_height)
 
 	//hdr := app.cc.makeCosmosSignedHeader(app.db.header, common.Hash{})
 	//app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
@@ -139,6 +145,10 @@ func (app *CosmosApp) HandleHeader(h *et.Header, header *ct.SignedHeader) error 
 	return app.cc.handleSignedHeader(h, header)
 }
 
+func (app *CosmosApp) SetCubeAddress(addr common.Address) {
+	app.cc.cubeAddr = addr
+}
+
 // TODO validator set pubkey, config for demo, register in contract later
 // only one validator now, read more validator addr2pubkey mapping from conf/contract later
 // validator index,pubkey
@@ -152,6 +162,7 @@ type CosmosChain struct {
 	valsMgr *ValidatorsMgr
 	//priv_addr_idx  uint32
 	priv_validator *privval.FilePV // use ed2559 for demo, secp256k1 support later;
+	cubeAddr       common.Address
 
 	blockID           ct.BlockID // load best block height later
 	best_block_height uint64
@@ -167,8 +178,11 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	c.ChainID = "ibc-1"
 	c.light_block = make(map[int64]*ct.LightBlock)
 	c.signed_header = make(map[common.Hash]*ct.SignedHeader)
-	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
+	c.priv_validator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
+
+	pubkey, _ := c.priv_validator.GetPubKey()
+	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.priv_validator.GetAddress().String())
 
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
 	c.valsMgr = &ValidatorsMgr{}
@@ -197,10 +211,55 @@ func (c *CosmosChain) String() string {
 	)
 }
 
+func (c *CosmosChain) SetCubeAddress(addr common.Address) {
+	c.cubeAddr = addr
+}
+
+//func (c *CosmosChain) RegisterValidator(evm *vm.EVM) error {
+//	ctx := sdk.Context{}.WithEvm(evm)
+//	pubkey, err := c.priv_validator.GetPubKey()
+//	if err != nil {
+//		panic("GetPubKey failed")
+//	}
+//	// todo: pubkey to string
+//	val := Validator{PubKey: pubkey, VotingPower: 100}
+//	valBytes, err := tmjson.Marshal(val)
+//	if err != nil {
+//		panic("Marshal validator failed")
+//	}
+//	log.Info("Marshal", "result", string(valBytes))
+//
+//	_, err = systemcontract.RegisterValidator(ctx, c.cubeAddr, string(valBytes))
+//	if err != nil {
+//		log.Error("RegisterValidator failed", "err", err)
+//	}
+//	result, err := systemcontract.GetValidator(ctx, c.cubeAddr)
+//	if err != nil {
+//		log.Error("GetValidator failed", "err", err)
+//	}
+//	log.Info("GetValidator", "result", string(result))
+//	var tmpVal Validator
+//	err = tmjson.Unmarshal([]byte(result), &tmpVal)
+//	if err != nil {
+//		panic("Unmarshal validator failed")
+//	}
+//	if !tmpVal.PubKey.Equals(val.PubKey) {
+//		panic("Conversion failed")
+//	}
+//
+//	return err
+//}
+
+func (c *CosmosChain) getAllValidators() {
+
+}
+
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash) *ct.SignedHeader {
 	log.Info("makeCosmosSignedHeader", "height", h.Number, "hash", h.Hash())
-	// update validators
-	c.valsMgr.updateValidators(h, h.Number.Int64())
+	// todo: cannot use header to update validators as validators are only updated every Epoch length to reset votes and checkpoint. see more info from chaos.Prepare()
+	pubkey, _ := c.priv_validator.GetPubKey()
+	addr := pubkey.Address()
+	//c.valsMgr.updateValidators(h, h.Number.Int64())
 
 	// make header
 	header := &ct.Header{
@@ -215,9 +274,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 		NextValidatorsHash: c.valsMgr.NextValidators.Hash(),
 		ConsensusHash:      make([]byte, 32), // todo: to be changed
 		AppHash:            app_hash[:],
-		LastResultsHash:    make([]byte, 32),              // todo: to be changed
-		EvidenceHash:       make([]byte, 32),              // todo: to be changed
-		ProposerAddress:    c.priv_validator.GetAddress(), //c.valsMgr.Validators.GetProposer().Address,
+		LastResultsHash:    make([]byte, 32), // todo: to be changed
+		EvidenceHash:       make([]byte, 32), // todo: to be changed
+		ProposerAddress:    addr,             //c.valsMgr.Validators.GetProposer().Address,
 	}
 
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
@@ -226,15 +285,19 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 
 	commit := &ct.Commit{Height: header.Height, Round: 1, BlockID: c.blockID, Signatures: signatures}
 	signedHeader := &ct.SignedHeader{Header: header, Commit: commit}
+
 	c.voteSignedHeader(signedHeader)
 	c.signed_header[h.Hash()] = signedHeader
+
 	return signedHeader
 }
 
 func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
-	addr := c.priv_validator.GetAddress()
+	pubkey, _ := c.priv_validator.GetPubKey()
+	addr := pubkey.Address()
 	idx, val := c.valsMgr.Validators.GetByAddress(addr)
 	if val == nil {
+		log.Error("voteSignedHeader", "cosmosAddr", addr.String())
 		panic("not a validator")
 	}
 	vote := &ct.Vote{

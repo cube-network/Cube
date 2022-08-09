@@ -702,15 +702,80 @@ const (
 			"type": "function"
 		  }
 	]`
+
+	AddrToPubkeyMapABI = `[
+    {
+      "inputs": [],
+      "name": "getAllValidators",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses_",
+          "type": "address[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "pubkeys_",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        }
+      ],
+      "name": "getValidator",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "pubkey",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "_pubkey",
+          "type": "string"
+        }
+      ],
+      "name": "registerValidator",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]`
 )
 
 var (
-	StakingContract       = common.HexToAddress("0x000000000000000000000000000000000000F000")
-	CommunityPoolContract = common.HexToAddress("0x000000000000000000000000000000000000F001")
-	BonusPoolContract     = common.HexToAddress("0x000000000000000000000000000000000000F002")
-	GenesisLockContract   = common.HexToAddress("0x000000000000000000000000000000000000F003")
-	ERC20FactoryContract  = common.HexToAddress("0x000000000000000000000000000000000000F008")
-	IBCStateContract      = common.HexToAddress("0x000000000000000000000000000000000000F009")
+	StakingContract         = common.HexToAddress("0x000000000000000000000000000000000000F000")
+	CommunityPoolContract   = common.HexToAddress("0x000000000000000000000000000000000000F001")
+	BonusPoolContract       = common.HexToAddress("0x000000000000000000000000000000000000F002")
+	GenesisLockContract     = common.HexToAddress("0x000000000000000000000000000000000000F003")
+	ERC20FactoryContract    = common.HexToAddress("0x000000000000000000000000000000000000F008")
+	IBCStateContract        = common.HexToAddress("0x000000000000000000000000000000000000F009")
+	AddrToPubkeyMapContract = common.HexToAddress("0x000000000000000000000000000000000000F00A")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -720,7 +785,7 @@ func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
 
 	rawAbiMap := map[common.Address]string{StakingContract: StakingABI, CommunityPoolContract: CommunityPoolABI,
-		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI, ERC20FactoryContract: ERC20FactoryABI, IBCStateContract: IBCStateABI}
+		BonusPoolContract: BonusPoolABI, GenesisLockContract: GenesisLockABI, ERC20FactoryContract: ERC20FactoryABI, IBCStateContract: IBCStateABI, AddrToPubkeyMapContract: AddrToPubkeyMapABI}
 
 	for addr, rawAbi := range rawAbiMap {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {

@@ -715,6 +715,8 @@ func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consen
 		log.Error("Fail to update validators to system contract", "err", err)
 		return err
 	}
+	// todo: update cosmos validators
+
 	return nil
 }
 

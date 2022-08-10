@@ -1255,17 +1255,17 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 }
 
 // WriteBlockWithState writes the block and all associated state to the database.
-func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) WriteBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, fromMiner bool) (status WriteStatus, err error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errInsertionInterrupted
 	}
 	defer bc.chainmu.Unlock()
-	return bc.writeBlockWithState(block, receipts, logs, state, emitHeadEvent)
+	return bc.writeBlockWithState(block, receipts, logs, state, emitHeadEvent, fromMiner)
 }
 
 // writeBlockWithState writes the block and all associated state to the database,
 // but is expects the chain mutex to be held.
-func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, fromMiner bool) (status WriteStatus, err error) {
 	if bc.insertStopped() {
 		return NonStatTy, errInsertionInterrupted
 	}
@@ -1417,13 +1417,14 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		status = SideStatTy
 	}
-	// todo: Set new head.
-	if status == CanonStatTy {
-		bc.writeHeadBlock(block)
-		// TODO notify crosschain new header event
-		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+	// TODO notify crosschain new header event
+	if fromMiner {
 		//bc.Cosmosapp.MakeHeader(block.Header(), state)
 		bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
+	}
+
+	if status == CanonStatTy {
+		bc.writeHeadBlock(block)
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1727,15 +1728,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		substart := time.Now()
 		// TODO crosschain cosmosapp
 		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
-		log.Info("===============insertChain OnBlockBegin", "number", block.NumberU64(), "hash", block.Hash())
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig, false)
+		log.Info("insertChain OnBlockBegin", "number", block.NumberU64(), "hash", block.Hash())
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.Cosmosapp)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-		log.Info("===============insertChain OnBlockEnd", "number", block.NumberU64(), "hash", block.Hash())
+		log.Info("insertChain OnBlockEnd", "number", block.NumberU64(), "hash", block.Hash())
 		cosmos_state := bc.Cosmosapp.OnBlockEnd(statedb)
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
@@ -1774,7 +1775,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		bc.Cosmosapp.CommitIBC(cosmos_state)
 		// Write the block to the chain and get the status.
 		substart = time.Now()
-		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)
+
+		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false, false)
 		atomic.StoreUint32(&followupInterrupt, 1)
 		if err != nil {
 			return it.index, err

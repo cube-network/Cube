@@ -679,7 +679,7 @@ func (w *worker) resultLoop() {
 			}
 			w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
 			// Commit block and state to database.
-			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
+			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true, true)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -691,13 +691,15 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			cosmosHeader := w.chain.Cosmosapp.GetSignedHeader(block.Hash())
+			cosmosHeader := w.chain.Cosmosapp.GetSignedHeader(block.NumberU64(), block.Hash())
 			if cosmosHeader != nil {
+				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
 				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
 					block,
 					cosmosHeader,
 				}})
 			} else {
+				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
 				w.mux.Post(core.NewMinedBlockEvent{block})
 			}
 
@@ -837,7 +839,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-
+	log.Info("commitTransactions", "number", w.current.header.Number, "hash", w.current.header.Hash())
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -1032,10 +1034,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	log.Info("============commitNewWork", "number", header.Number.Uint64(), "hash", header.Hash())
 	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
-	log.Info("===============commitNewWork OnBlockStart 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header,  *w.chain.GetVMConfig(), true)
+	log.Info("commitNewWork OnBlockBegin 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
 
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
@@ -1065,8 +1066,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	log.Info("===============commitNewWork OnBlockStart 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig(), true)
+	log.Info("commitNewWork OnBlockBegin 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
+	log.Info("commitNewWork OnBlockBegin 2-2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1080,13 +1082,14 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 	}
+	log.Info("commitNewWork before commit", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	log.Info("===============commit OnBlockEnd 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
+	log.Info("commit OnBlockEnd 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state)
 	// copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
 	//log.Info("===============commit OnBlockEnd 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())

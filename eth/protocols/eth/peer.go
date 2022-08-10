@@ -104,6 +104,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		version:               version,
 		knownTxs:              newKnownCache(maxKnownTxs),
 		knownBlocks:           newKnownCache(maxKnownBlocks),
+		knownCosmosHeaders:    newKnownCache(maxKnownBlocks),
 		queuedBlocks:          make(chan *blockPropagation, maxQueuedBlocks),
 		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
 		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
@@ -314,7 +315,7 @@ func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td 
 	block := blockHeader.Block
 	p.knownBlocks.Add(block.Hash())
 	p.knownCosmosHeaders.Add(block.Hash())
-	log.Info("=====SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
+	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
 	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
 		BlockAndHeader: blockHeader,
 		TD:             td,

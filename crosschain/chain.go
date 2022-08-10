@@ -81,6 +81,8 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 	init_block_height := evm.Context.BlockNumber.Int64()
 	app.SetState(evm.StateDB, common.Hash{}, common.Hash{}, init_block_height)
 
+	log.Info("===============initGenesis OnBlockBegin", "number", init_block_height)
+
 	// Module Account
 	evm.StateDB.CreateAccount(common.HexToAddress(ModuleAccount))
 	// deploy erc20 factory contract
@@ -113,7 +115,6 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 
 	hdr := app.cc.makeCosmosSignedHeader(app.header, common.Hash{})
 	//hdr := app.cc.makeCosmosSignedHeader(app.db.header, common.Hash{})
-	log.Info("===============initGenesis OnBlockStart", "number", evm.Context.BlockNumber.Int64())
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
@@ -131,7 +132,7 @@ func (app *CosmosApp) Load() {
 	}
 }
 
-func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config, fromMine bool) {
+func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.BlockContext, statedb *state.StateDB, header *types.Header, cfg vm.Config) {
 	// app.bapp_mu.Lock()
 	// defer app.bapp_mu.Unlock()
 
@@ -139,21 +140,29 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 	app.is_duplicate_block = app.IsDuplicateBlock(statedb, header.Number.Int64())
 	state_root := app.GetLastStateRoot(statedb)
 	app.is_genesis_init = app.db.SetEVM(config, blockContext, state_root, cfg)
-	println("begin block height", header.Number.Int64(), " genesis init ", app.is_genesis_init, " duplicat block ", app.is_duplicate_block, " stateroot ", state_root.Hex(), " ts ", time.Now().UTC().String())
+	log.Info("OnBlockBegin", "number", header.Number.Int64(), "genesisInit", app.is_genesis_init, "duplicatBlock", app.is_duplicate_block, "stateroot ", state_root.Hex(), "ts", time.Now().UTC().String())
 
 	if !app.is_genesis_init {
 		// app.InitGenesis(app.db.evm)
 		return
 	} else {
 		app.Load()
-		var hdr *ct.SignedHeader
-		if fromMine {
-			app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
-			hdr = app.cc.makeCosmosSignedHeader(header, app_hash)
-		} else {
-			hdr = app.cc.getSignedHeader(header.Hash())
+		//var hdr *ct.SignedHeader
+		//if fromMine {
+		//	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+		//	hdr = app.cc.makeCosmosSignedHeader(header, app_hash)
+		//} else {
+		hdr := app.cc.getSignedHeader(header.Number.Uint64(), header.Hash())
+		if hdr == nil {
+			if bytes.Equal(blockContext.Coinbase.Bytes(), app.cc.cubeAddr.Bytes()) {
+				app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+				// todo: should broadcast this header
+				hdr = app.cc.makeCosmosSignedHeader(header, app_hash)
+			} else {
+				log.Error("getSignedHeader failed")
+				return
+			}
 		}
-		//hdr := app.cc.MakeCosmosSignedHeader(header, common.Hash{})
 		app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 	}
 }
@@ -207,11 +216,11 @@ func (app *CosmosApp) MakeSignedHeader(h *et.Header, statedb *state.StateDB) *ct
 	return header
 }
 
-func (app *CosmosApp) GetSignedHeader(hash common.Hash) *ct.SignedHeader {
+func (app *CosmosApp) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
 	if !app.is_genesis_init {
 		return nil
 	}
-	header := app.cc.getSignedHeader(hash)
+	header := app.cc.getSignedHeader(height, hash)
 	return header
 }
 
@@ -419,7 +428,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
 	c.signed_header[hash] = header
-	log.Info("store signed header", "hash", hash, "header", header.Hash())
+	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
 }
 
 //func (c *CosmosChain) verifySignature(validators *ct.ValidatorSet) error {
@@ -443,8 +452,8 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 //	}
 //}
 
-func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
-	log.Info("============getSignedHeader", "hash", hash)
+func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
+	log.Info("getSignedHeader", "number", height, "hash", hash)
 	return c.signed_header[hash]
 }
 
@@ -454,7 +463,7 @@ func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 		log.Error("Cannot get block header", "number", block_height)
 		return nil
 	}
-	header := c.getSignedHeader(h.Hash())
+	header := c.getSignedHeader(h.Number.Uint64(), h.Hash())
 	if header == nil {
 		log.Error("Cannot get cosmos signed header", "number", block_height)
 		return nil

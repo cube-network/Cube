@@ -3,6 +3,7 @@ package crosschain
 import (
 	"encoding/hex"
 	"errors"
+	"github.com/ethereum/go-ethereum/log"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	var statedb *state.StateDB
 	statedb, err := state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
 	if err != nil {
+		log.Error("restore statedb failed", "err", err)
 		state_root = empty_state_root
 		statedb, _ = state.New(state_root, state.NewDatabase(mdb.ethdb), nil)
 	}
@@ -60,6 +62,7 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	mdb.evm = vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 
 	if state_root.Hex() == empty_state_root.Hex() {
+		// todo: state_root
 		println("init statedb with code/account")
 		statedb.CreateAccount(system.IBCStateContract)
 		code, _ := hex.DecodeString(StateContractCode)

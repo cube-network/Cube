@@ -1726,13 +1726,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		substart := time.Now()
 		// TODO crosschain cosmosapp
 		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.GetHeader(block.Header().ParentHash, block.Header().Number.Uint64()-1), bc.vmConfig)
+		log.Info("===============insertChain OnBlockBegin", "number", block.NumberU64(), "hash", block.Hash())
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.GetHeader(block.Header().ParentHash, block.Header().Number.Uint64()-1), bc.vmConfig, false)
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.Cosmosapp)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
+		log.Info("===============insertChain OnBlockEnd", "number", block.NumberU64(), "hash", block.Hash())
 		_, cosmos_state := bc.Cosmosapp.OnBlockEnd()
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them

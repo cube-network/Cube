@@ -1422,7 +1422,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		bc.writeHeadBlock(block)
 		// TODO notify crosschain new header event
 		log.Debug("make new crosschain header", block.Header().Number.Uint64())
-		bc.Cosmosapp.MakeHeader(block.Header(), state)
+		//bc.Cosmosapp.MakeHeader(block.Header(), state)
+		bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1727,8 +1728,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// TODO crosschain cosmosapp
 		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
 		log.Info("===============insertChain OnBlockBegin", "number", block.NumberU64(), "hash", block.Hash())
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig, false)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.Cosmosapp)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)

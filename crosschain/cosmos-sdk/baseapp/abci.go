@@ -421,7 +421,7 @@ func (app *BaseApp) Query(req abci.RequestQuery) (res abci.ResponseQuery) {
 
 	// when a client did not provide a query height, manually inject the latest
 	if req.Height == 0 {
-		req.Height = app.LastBlockHeight()
+		req.Height = app.LastBlockHeight() - 3
 	}
 
 	println("query path ", req.Path, " height ", req.Height)
@@ -633,7 +633,7 @@ func (app *BaseApp) createQueryContext(height int64, prove bool) (sdk.Context, e
 		return sdk.Context{}, err
 	}
 
-	lastBlockHeight := app.LastBlockHeight()
+	lastBlockHeight := app.LastBlockHeight() - 3
 	if height > lastBlockHeight {
 		return sdk.Context{},
 			sdkerrors.Wrap(

@@ -1420,9 +1420,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// todo: Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
-		//// TODO notify crosschain new header event
-		//log.Info("make new crosschain header", "height", block.Header().Number.Uint64())
-		//bc.Cosmosapp.MakeHeader(block.Header())
+		// TODO notify crosschain new header event
+		log.Debug("make new crosschain header", block.Header().Number.Uint64())
+		bc.Cosmosapp.MakeHeader(block.Header(), state)
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1727,15 +1727,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// TODO crosschain cosmosapp
 		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
 		log.Info("===============insertChain OnBlockBegin", "number", block.NumberU64(), "hash", block.Hash())
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.GetHeader(block.Header().ParentHash, block.Header().Number.Uint64()-1), bc.vmConfig, false)
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, bc.Cosmosapp)
+		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
+		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
 		log.Info("===============insertChain OnBlockEnd", "number", block.NumberU64(), "hash", block.Hash())
-		_, cosmos_state := bc.Cosmosapp.OnBlockEnd()
+		cosmos_state := bc.Cosmosapp.OnBlockEnd(statedb)
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them

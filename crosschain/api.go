@@ -60,7 +60,3 @@ func (api *API) CosmosLightBlock(height *int64) ([]byte, error) {
 		return nil, errors.New("invalid height")
 	}
 }
-
-func (api *API) CosmosLastBlockHeight() int64 {
-	return api.app.cc.LastBlockHeight()
-}

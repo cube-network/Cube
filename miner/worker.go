@@ -542,6 +542,7 @@ func (w *worker) mainLoop() {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
+				println("commitTransactions...")
 				w.commitTransactions(txset, coinbase, nil)
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -1034,7 +1035,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	log.Info("============commitNewWork", "number", header.Number.Uint64(), "hash", header.Hash())
 	blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
 	log.Info("===============commitNewWork OnBlockStart 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, parent.Header(), *w.chain.GetVMConfig(), true)
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header,  *w.chain.GetVMConfig(), true)
 
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
@@ -1065,7 +1066,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	}
 
 	log.Info("===============commitNewWork OnBlockStart 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, parent.Header(), *w.chain.GetVMConfig(), true)
+	w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig(), true)
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1086,10 +1087,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	log.Info("===============commit OnBlockEnd 1", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-	cosmos_state_root, cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd()
-	copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
-	log.Info("===============commit OnBlockEnd 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
-
+	cosmos_state := w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state)
+	// copy(w.current.header.Extra[:32], cosmos_state_root.Bytes())
+	//log.Info("===============commit OnBlockEnd 2", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.

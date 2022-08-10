@@ -2,7 +2,6 @@ package crosschain
 
 import (
 	"math/big"
-	"sync"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -40,7 +39,6 @@ import (
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -121,12 +119,11 @@ type CosmosApp struct {
 
 	anteHandler *CubeAnteHandler
 
-	is_genesis_init         bool
-	cc                      *CosmosChain
-	app_hash                common.Hash
-	state_root              common.Hash
-	bapp_mu                 sync.Mutex
-	last_begin_block_height int64
+	cc                  *CosmosChain
+	is_genesis_init     bool
+	is_start_crosschain bool
+	is_duplicate_block  bool
+	header              *types.Header
 }
 
 // TODO level db/mpt wrapper
@@ -141,7 +138,6 @@ func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, header
 	cc := MakeCosmosChain(chainID.String(), "priv_validator_key.json", "priv_validator_state.json")
 
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
-	bApp.CC = cc
 	// bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetVersion(version.Version)
 	bApp.SetInterfaceRegistry(codec.InterfaceRegistry)

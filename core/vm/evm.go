@@ -81,6 +81,8 @@ type BlockContext struct {
 	CanCreate CanCreateFunc
 	// AccessFilter do some extra validation to a message during it's execution
 	AccessFilter EvmAccessFilter
+	// crosschain
+	Crosschain CrossChain
 
 	// Block information
 	Coinbase    common.Address // Provides information for COINBASE
@@ -135,8 +137,6 @@ type EVM struct {
 	// applied in opCall*.
 	callGasTemp uint64
 
-	// TODO run crosschain tx
-	Crosschain   CrossChainContract
 	SimulateMode bool
 }
 
@@ -207,8 +207,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	p, isPrecompile := evm.precompile(addr)
 
 	isCrossChain := false
-	if evm.Crosschain != nil {
-		isCrossChain = IsCrossChainContract(addr)
+	if evm.Context.Crosschain != nil {
+		isCrossChain = evm.Context.Crosschain.IsCrossChainContract(addr)
 	}
 
 	if !evm.StateDB.Exist(addr) {
@@ -248,7 +248,7 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if isPrecompile {
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
 	} else if isCrossChain {
-		ret, gas, err = RunCrossChainContract(evm.Crosschain, evm.SimulateMode, evm, input, gas)
+		ret, gas, err = evm.Context.Crosschain.RunCrossChainContract(evm, input, gas)
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.

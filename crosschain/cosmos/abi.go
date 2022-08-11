@@ -1,59 +1,19 @@
-package crosschain
+package cosmos
 
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/contracts/system"
 )
 
-const (
-	IBCContractABI = `[
-		{
-			"inputs": [
-				{
-					"internalType": "string",
-					"name": "selector",
-					"type": "string"
-				},
-				{
-					"internalType": "string",
-					"name": "args",
-					"type": "string"
-				}
-			],
-			"name": "submit",
-			"outputs": [
-				{
-					"internalType": "string",
-					"name": "",
-					"type": "string"
-				}
-			],
-			"stateMutability": "",
-			"type": "function"
-		}
-	]`
-)
 const (
 	method = "submit"
 )
 
-var (
-	IBCABI abi.ABI
-)
-
-func init() {
-	if abi, err := abi.JSON(strings.NewReader(IBCContractABI)); err != nil {
-		panic(err)
-	} else {
-		IBCABI = abi
-	}
-}
-
 func PackInput(args ...interface{}) ([]byte, error) {
-	return IBCABI.Pack(method, args...)
+	return system.ABI(system.CrossChainCosmosContract).Pack(method, args...)
 }
 
 func UnpackInput(data []byte) (string, string, error) {
@@ -66,7 +26,7 @@ func UnpackInput(data []byte) (string, string, error) {
 }
 
 func PackOutput(args ...interface{}) ([]byte, error) {
-	method, exist := IBCABI.Methods[method]
+	method, exist := system.ABI(system.CrossChainCosmosContract).Methods[method]
 	if !exist {
 		return nil, fmt.Errorf("method '%s' not found", method)
 	}
@@ -90,7 +50,7 @@ func getArguments(name string, data []byte, is_input bool) (abi.Arguments, error
 	// since there can't be naming collisions with contracts and events,
 	// we need to decide whether we're calling a method or an event
 	var args abi.Arguments
-	if method, ok := IBCABI.Methods[name]; ok {
+	if method, ok := system.ABI(system.CrossChainCosmosContract).Methods[name]; ok {
 		if len(data)%32 != 0 {
 			return nil, fmt.Errorf("abi: improperly formatted output: %s - Bytes: [%+v]", string(data), data)
 		}

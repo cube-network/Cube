@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -95,15 +96,16 @@ type environment struct {
 	receipts []*types.Receipt
 
 	accessFilter vm.EvmAccessFilter
+	crosschain   vm.CrossChain
 }
 
 // task contains all information for consensus engine sealing and result submitting.
 type task struct {
-	receipts     []*types.Receipt
-	state        *state.StateDB
-	block        *types.Block
-	createdAt    time.Time
-	cosmos_state *state.StateDB
+	receipts   []*types.Receipt
+	state      *state.StateDB
+	block      *types.Block
+	createdAt  time.Time
+	crosschain vm.CrossChain
 }
 
 const (
@@ -500,7 +502,7 @@ func (w *worker) mainLoop() {
 			// If our mining block contains less than 2 uncle blocks,
 			// add the new uncle block if valid and regenerate a mining block.
 			if w.isRunning() && w.current != nil && w.current.uncles.Cardinality() < 2 {
-				start := time.Now()
+				// start := time.Now()
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					var uncles []*types.Header
 					w.current.uncles.Each(func(item interface{}) bool {
@@ -518,7 +520,8 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					w.commit(uncles, nil, true, start)
+					println("child chainch commit...")
+					// w.commit(uncles, nil, true, start)
 				}
 			}
 
@@ -545,7 +548,7 @@ func (w *worker) mainLoop() {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
-				println("commitTransactions...")
+				println("recv txsCh commitTransactions...")
 				w.commitTransactions(txset, coinbase, nil)
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -557,6 +560,7 @@ func (w *worker) mainLoop() {
 				// submit mining work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+					println("recv txsCh commitnetwork unexpected...")
 					w.commitNewWork(nil, true, time.Now().Unix())
 				}
 			}
@@ -651,6 +655,7 @@ func (w *worker) resultLoop() {
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
 			if !exist {
+				crosschain.GetCrossChain().FreeExecutor(task.crosschain)
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
 			}
@@ -680,9 +685,7 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
-			if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-				w.chain.Cosmosapp.CommitIBC(task.cosmos_state)
-			}
+			crosschain.GetCrossChain().FreeExecutor(task.crosschain)
 			// Commit block and state to database.
 			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
 			if err != nil {
@@ -703,6 +706,8 @@ func (w *worker) resultLoop() {
 		}
 	}
 }
+
+// TODO make crosschain for current
 
 // makeCurrent creates a new environment for the current cycle.
 func (w *worker) makeCurrent(parent *types.Block, header *types.Header) error {
@@ -799,11 +804,7 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	snap := w.current.state.Snapshot()
 	println("ApplyTransaction ", tx.Hash().Hex())
 
-	crosschain_cosmos := w.chain.Cosmosapp
-	if !w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-		crosschain_cosmos = nil
-	}
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, crosschain_cosmos)
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, w.current.crosschain)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
 		return nil, err
@@ -1037,10 +1038,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 
-	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-		blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
-		w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
-	}
 	// Prefer to locally generated uncle
 	commitUncles(w.localUncles)
 	commitUncles(w.remoteUncles)
@@ -1048,7 +1045,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
+		current_state := w.current.state
+		w.current.state = w.current.state.Copy()
+		w.current.crosschain = crosschain.GetCrossChain().NewExecutor(header, w.current.state)
 		w.commit(uncles, nil, false, tstart)
+		crosschain.GetCrossChain().Seal(w.current.crosschain)
+		w.current.state = current_state
 	}
 
 	// Fill the block with all available pending transactions.
@@ -1060,6 +1062,9 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		w.updateSnapshot()
 		return
 	}
+
+	w.current.crosschain = crosschain.GetCrossChain().NewExecutor(header, w.current.state)
+
 	// Split the pending transactions into locals and remotes
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
@@ -1068,10 +1073,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-		blockContext := core.NewEVMBlockContext(w.current.header, w.chain, &w.coinbase)
-		w.eth.BlockChain().Cosmosapp.OnBlockBegin(w.chainConfig, blockContext, w.current.state, w.current.header, *w.chain.GetVMConfig())
-	}
+
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1086,15 +1088,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	w.commit(uncles, w.fullTaskHook, true, tstart)
+	crosschain.GetCrossChain().Seal(w.current.crosschain)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	var cosmos_state *state.StateDB = nil
-	if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
-		cosmos_state = w.eth.BlockChain().Cosmosapp.OnBlockEnd(w.current.state, w.current.header)
-	}
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.
@@ -1110,7 +1109,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 			interval()
 		}
 		select {
-		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), cosmos_state: cosmos_state}:
+		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), crosschain: w.current.crosschain}:
 			println("worker commit send taskCh... ", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),

@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/ethereum/go-ethereum/crosschain/systemcontract"
+	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
 )
 
 // BankKeeper defines the expected bank keeper

@@ -202,7 +202,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	log.Debug("make cos mos app")
-	eth.blockchain.Cosmosapp = crosschain.NewCosmosApp(stack.DataDir(), chainConfig.ChainID, chainDb, eth.blockchain.CurrentBlock().Header(), map[int64]bool{})
+	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, eth.blockchain.StateCache(), chainConfig, core.NewEVMBlockContext(eth.blockchain.CurrentBlock().Header(), eth.blockchain, nil), eth.blockchain.CurrentBlock().Header())
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
@@ -378,7 +378,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
-	apis = append(apis, crosschain.APIs(s.BlockChain().Cosmosapp)...)
+	apis = append(apis, crosschain.GetCrossChain().APIs()...)
 
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{

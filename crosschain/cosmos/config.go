@@ -1,4 +1,4 @@
-package crosschain
+package cosmos
 
 import (
 	"encoding/json"
@@ -14,8 +14,6 @@ func NewDefaultGenesisState(cdc codec.JSONCodec) GenesisState {
 }
 
 const (
-	ModuleAccount = "000000000000000000000000000000000000F00A"
-
 	IBCConfig = `
 {
 	"ibc": {

@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -143,7 +144,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 		return nil, err
 	}
 	// TODO
-	leth.blockchain.CrossChain = crosschain.NewCosmosApp(stack.DataDir(), leth.chainConfig.ChainID, chainDb, leth.blockchain.CurrentHeader(), map[int64]bool{})
+	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, state.NewDatabase(chainDb), leth.chainConfig, core.NewEVMBlockContext(leth.blockchain.CurrentHeader(), leth.blockchain, nil), leth.blockchain.CurrentHeader())
 
 	leth.chainReader = leth.blockchain
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)

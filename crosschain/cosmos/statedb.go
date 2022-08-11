@@ -1,0 +1,274 @@
+package cosmos
+
+import (
+	"bytes"
+	"errors"
+	"strings"
+	"sync"
+
+	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
+	dbm "github.com/tendermint/tm-db"
+)
+
+// call contract
+
+type CosmosStateDB struct {
+	mu  sync.Mutex
+	evm *vm.EVM
+}
+
+func NewCosmosStateDB(evm *vm.EVM) *CosmosStateDB {
+	csdb := &CosmosStateDB{}
+	csdb.SetContext(evm)
+
+	return csdb
+}
+
+func (csdb *CosmosStateDB) SetContext(evm *vm.EVM) bool {
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+
+	csdb.evm = evm
+
+	return true
+}
+
+func (csdb *CosmosStateDB) Get(key []byte) ([]byte, error) {
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+
+	if csdb.evm == nil {
+		return nil, errors.New("IBCStateDB not init")
+	}
+	ctx := sdk.Context{}.WithEvm(csdb.evm)
+	is_exist, val, err := systemcontract.GetState(ctx, key)
+	if err != nil {
+		println("Failed to Get, err", err.Error())
+		return nil, err
+	}
+
+	if is_exist {
+		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		return val, nil
+	} else {
+		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+
+		return nil, nil
+	}
+}
+
+func (csdb *CosmosStateDB) Has(key []byte) (bool, error) {
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+
+	if csdb.evm == nil {
+		return false, errors.New("IBCStateDB not init")
+	}
+	ctx := sdk.Context{}.WithEvm(csdb.evm)
+	is_exist, _, err := systemcontract.GetState(ctx, key)
+	if err != nil {
+		println("Failed to Has, err", err.Error())
+		return false, err
+	}
+	// println("store. has ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
+
+	return is_exist, nil
+}
+
+func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
+	// println("store. set ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+
+	if csdb.evm == nil {
+		return errors.New("IBCStateDB not init")
+	}
+
+	var prefix string
+	skey := string(key)
+	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true,
+		"s/k:bank/o": true, "s/k:capability/o": true, "s/k:feeibc/o": true, "s/k:ibc/o": true, "s/k:icacontroller/o": true, "s/k:icahost/o": true, "s/k:params/o": true, "s/k:staking/o": true, "s/k:transfer/o": true, "s/k:upgrade/o": true,
+		"s/k:bank/n": true, "s/k:capability/n": true, "s/k:feeibc/n": true, "s/k:ibc/n": true, "s/k:icacontroller/n": true, "s/k:icahost/n": true, "s/k:params/n": true, "s/k:staking/n": true, "s/k:transfer/n": true, "s/k:upgrade/n": true}
+	for k := range dict {
+		if strings.Contains(skey, k) {
+			prefix = k
+			break
+		}
+	}
+
+	ctx := sdk.Context{}.WithEvm(csdb.evm)
+	_, err := systemcontract.SetState(ctx, key, val, prefix)
+	if err != nil {
+		println("Failed to Set, err", err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func (csdb *CosmosStateDB) SetSync(key []byte, val []byte) error {
+	return csdb.Set(key, val)
+}
+
+func (csdb *CosmosStateDB) Delete(key []byte) error {
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+	if csdb.evm == nil {
+		return errors.New("CosmosStateDB not init")
+	}
+	// println("store. del ", len(key), " key ", string(key))
+	ctx := sdk.Context{}.WithEvm(csdb.evm)
+	_, err := systemcontract.DelState(ctx, key)
+	if err != nil {
+		println("Failed to Del, err", err.Error())
+		return err
+	}
+
+	return nil
+}
+
+func (csdb *CosmosStateDB) DeleteSync(key []byte) error {
+	return csdb.Delete(key)
+}
+
+func (csdb *CosmosStateDB) Iterator(start, end []byte) (dbm.Iterator, error) {
+	return csdb.NewCosmosStateIterator(false, start, end)
+}
+
+func (csdb *CosmosStateDB) ReverseIterator(start, end []byte) (dbm.Iterator, error) {
+	return csdb.NewCosmosStateIterator(true, start, end)
+}
+
+func (csdb *CosmosStateDB) Close() error {
+	return nil
+}
+
+func (csdb *CosmosStateDB) NewBatch() dbm.Batch {
+	return csdb
+}
+
+func (csdb *CosmosStateDB) Print() error {
+	return nil
+}
+
+func (csdb *CosmosStateDB) Write() error {
+	return nil
+}
+func (csdb *CosmosStateDB) WriteSync() error {
+	return nil
+}
+
+func (csdb *CosmosStateDB) Stats() map[string]string {
+	return map[string]string{}
+}
+
+type CosmosStateIterator struct {
+	start []byte
+	end   []byte
+
+	keys [][]byte
+	vals [][]byte
+	cur  int
+}
+
+func (csdb *CosmosStateDB) NewCosmosStateIterator(is_reverse bool, start []byte, end []byte) (*CosmosStateIterator, error) {
+	// println("Iterator reverse ", is_reverse, " start ", string(start), "  ", hex.EncodeToString(start), " end ", string(end), " ", hex.EncodeToString(end))
+	is_rootkey := false
+	skey := string(start)
+	var dictkey string
+	dict := map[string]bool{"s/k:bank/r": true, "s/k:capability/r": true, "s/k:feeibc/r": true, "s/k:ibc/r": true, "s/k:icacontroller/r": true, "s/k:icahost/r": true, "s/k:params/r": true, "s/k:staking/r": true, "s/k:transfer/r": true, "s/k:upgrade/r": true,
+		"s/k:bank/o": true, "s/k:capability/o": true, "s/k:feeibc/o": true, "s/k:ibc/o": true, "s/k:icacontroller/o": true, "s/k:icahost/o": true, "s/k:params/o": true, "s/k:staking/o": true, "s/k:transfer/o": true, "s/k:upgrade/o": true,
+		"s/k:bank/n": true, "s/k:capability/n": true, "s/k:feeibc/n": true, "s/k:ibc/n": true, "s/k:icacontroller/n": true, "s/k:icahost/n": true, "s/k:params/n": true, "s/k:staking/n": true, "s/k:transfer/n": true, "s/k:upgrade/n": true}
+	for k := range dict {
+		if strings.Contains(skey, k) {
+			is_rootkey = true
+			dictkey = k
+			break
+		}
+	}
+
+	if !is_rootkey {
+		return nil, errors.New("not support iterator")
+	}
+
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+	if csdb.evm == nil {
+		return nil, errors.New("CosmosStateDB not init")
+	}
+
+	ctx := sdk.Context{}.WithEvm(csdb.evm)
+	keys, vals, err := systemcontract.GetRoot(ctx, dictkey)
+	if err != nil {
+		println("Failed to Get, err", err.Error())
+		return nil, err
+	}
+	// 10, 9, 8
+	if len(keys) > 0 && len(vals) > 0 {
+		// for i := 0; i < len(keys); i++ {
+		// 	println("keys ", i, " ", hex.EncodeToString(keys[i]))
+		// }
+		si, ei := 0, len(keys)-1
+		for i := 0; i < len(keys); i++ {
+			cmp := bytes.Compare(keys[i], end)
+			if cmp >= 0 {
+				si = i
+			} else {
+				break
+			}
+		}
+		for i := 0; i < len(keys); i++ {
+			cmp := bytes.Compare(keys[i], start)
+			if cmp >= 0 {
+				ei = i
+			} else {
+				break
+			}
+		}
+		// println("len keys ", len(keys), " ", si, " ei ", ei)
+		keys = keys[si:ei]
+		vals = vals[si:ei]
+		// println(len(keys), " ")
+	}
+	if !is_reverse {
+		for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
+			keys[i], keys[j] = keys[j], keys[i]
+		}
+		for i, j := 0, len(vals)-1; i < j; i, j = i+1, j-1 {
+			vals[i], vals[j] = vals[j], vals[i]
+		}
+	}
+
+	it := &CosmosStateIterator{start: start, end: end, cur: 0, keys: keys, vals: vals}
+	return it, nil
+}
+
+func (it *CosmosStateIterator) Domain() (start []byte, end []byte) {
+	return it.start, it.end
+}
+
+func (it *CosmosStateIterator) Valid() bool {
+	return it.cur < len(it.keys)
+}
+
+func (it *CosmosStateIterator) Next() {
+	it.cur++
+}
+
+func (it *CosmosStateIterator) Key() (key []byte) {
+	return it.keys[it.cur]
+}
+
+func (it *CosmosStateIterator) Value() (value []byte) {
+	return it.vals[it.cur]
+}
+
+func (it *CosmosStateIterator) Error() error {
+	return nil
+}
+
+func (it *CosmosStateIterator) Close() error {
+	return nil
+}

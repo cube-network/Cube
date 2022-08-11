@@ -235,9 +235,6 @@ type BlockChain struct {
 	lockFutureAttessCache              sync.RWMutex
 	lockRecentAttessCache              sync.RWMutex
 	lockCasperFFGHistoryCache          sync.RWMutex
-
-	// TODO IBC
-	Cosmosapp *crosschain.CosmosApp
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -1420,12 +1417,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
-		// TODO notify crosschain new header event
-		log.Debug("make new crosschain header", block.Header().Number.Uint64())
-
-		if bc.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-			bc.Cosmosapp.MakeHeader(block.Header(), state)
-		}
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
@@ -1441,10 +1432,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// event here.
 		if emitHeadEvent {
 			println("ChainHeadEvent ", block.Header().Number.Uint64())
+			crosschain.GetCrossChain().EventHeader(block.Header())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
-		println("ChainSideEvent ", block.Header().Number.Uint64())
+		println("writeBlockWithState send ChainSideEvent ", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
@@ -1727,20 +1719,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 
 		// Process block using the parent state as reference point
 		substart := time.Now()
-		// if bc.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-		// TODO crosschain cosmosapp
-		blockContext := NewEVMBlockContext(block.Header(), bc, &block.Header().Coinbase)
-		bc.Cosmosapp.OnBlockBegin(bc.chainConfig, blockContext, statedb, block.Header(), bc.vmConfig)
-		// }
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
-		}
-		var cosmos_state *state.StateDB = nil
-		if bc.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-			cosmos_state = bc.Cosmosapp.OnBlockEnd(statedb, block.Header())
 		}
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
@@ -1776,9 +1759,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		log.Info("metric", "method", "validateBlock", "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(),
 			"cost", time.Since(substart)-(statedb.AccountHashes+statedb.StorageHashes-triehash))
 
-		if bc.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-			bc.Cosmosapp.CommitIBC(cosmos_state)
-		}
 		// Write the block to the chain and get the status.
 		substart = time.Now()
 		status, err := bc.writeBlockWithState(block, receipts, logs, statedb, false)
@@ -2133,6 +2113,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 	if len(oldChain) > 0 {
 		for i := len(oldChain) - 1; i >= 0; i-- {
+			println("reorg chainsideevent...")
 			bc.chainSideFeed.Send(ChainSideEvent{Block: oldChain[i]})
 		}
 	}

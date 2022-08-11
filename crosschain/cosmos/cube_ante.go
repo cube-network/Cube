@@ -1,4 +1,4 @@
-package crosschain
+package cosmos
 
 import (
 	sdk "github.com/cosmos/cosmos-sdk/types"

@@ -8,6 +8,7 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
+type BlockFn func(height int64) *ct.LightBlock
 type HistoricalInfo interface {
 	GetLightBlock(block_height int64) *ct.LightBlock
 }
@@ -15,13 +16,13 @@ type HistoricalInfo interface {
 // for core/02-client
 // keeper of the staking store
 type CubeStakingKeeper struct {
-	Stub      int
-	Hisorical HistoricalInfo
+	Stub    int
+	BlockFn BlockFn
 }
 
 // todo: to be implemented
 func (c CubeStakingKeeper) GetHistoricalInfo(ctx sdk.Context, height int64) (stakingtypes.HistoricalInfo, bool) {
-	lb := c.Hisorical.GetLightBlock(height)
+	lb := c.BlockFn(height)
 	return stakingtypes.HistoricalInfo{Header: *lb.Header.ToProto()}, true
 }
 

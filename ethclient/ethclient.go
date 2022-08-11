@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math/big"
 
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -571,14 +570,6 @@ func (ec *Client) GetLastFinalizedBlockInfo(ctx context.Context) (types.StatusBl
 	return bi, nil
 }
 
-func (ec *Client) CosmosABCIInfo(ctx context.Context) (*tt.ResultABCIInfo, error) {
-	q := &tt.ResultABCIInfo{}
-	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosABCIInfo")
-	if err != nil {
-		return q, err
-	}
-	return q, nil
-}
 func (ec *Client) CosmosABCIQuery(ctx context.Context, path string, data bytes.HexBytes, opts tc.ABCIQueryOptions) (*tt.ResultABCIQuery, error) {
 	q := &tt.ResultABCIQuery{}
 	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosABCIQuery", path, data, opts)
@@ -611,15 +602,6 @@ func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) ([]byte, 
 	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosLightBlock", height)
 	if err != nil {
 		return nil, err
-	}
-	return q, nil
-}
-
-func (ec *Client) CosmosBalances(ctx context.Context, account common.Address) (*sdk.Coins, error) {
-	q := &sdk.Coins{}
-	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosBalances", account)
-	if err != nil {
-		return q, err
 	}
 	return q, nil
 }

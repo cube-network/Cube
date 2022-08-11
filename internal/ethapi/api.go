@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/crosschain"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
@@ -1073,7 +1074,8 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	if err != nil {
 		return nil, err
 	}
-	evm.Crosschain = b.CrossChain()
+	evm.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(nil, state)
+	defer crosschain.GetCrossChain().FreeExecutor(evm.Context.Crosschain)
 	evm.SimulateMode = true
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)

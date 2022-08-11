@@ -1,9 +1,6 @@
-package crosschain
+package cosmos
 
 import (
-	"math/big"
-	"sync"
-
 	"github.com/cosmos/cosmos-sdk/baseapp"
 	"github.com/cosmos/cosmos-sdk/codec"
 	sdk "github.com/cosmos/cosmos-sdk/types"
@@ -40,16 +37,16 @@ import (
 	ibctransfertypes "github.com/cosmos/ibc-go/v4/modules/apps/transfer/types"
 	ibc "github.com/cosmos/ibc-go/v4/modules/core"
 	clienttypes "github.com/cosmos/ibc-go/v4/modules/core/02-client/types"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/contracts/system"
+	"github.com/ethereum/go-ethereum/crosschain/cosmos/expectedkeepers"
+	cubeparams "github.com/ethereum/go-ethereum/params"
 	abci "github.com/tendermint/tendermint/abci/types"
+	dbm "github.com/tendermint/tm-db"
 
 	porttypes "github.com/cosmos/ibc-go/v4/modules/core/05-port/types"
 	ibchost "github.com/cosmos/ibc-go/v4/modules/core/24-host"
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
-	"github.com/ethereum/go-ethereum/crosschain/expectedkeepers"
-	"github.com/ethereum/go-ethereum/log"
 
 	tl "github.com/tendermint/tendermint/libs/log"
 )
@@ -87,8 +84,7 @@ var (
 
 type CosmosApp struct {
 	*baseapp.BaseApp
-	// db           dbm.DB
-	db           *IBCStateDB
+	blockFn      expectedkeepers.BlockFn
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
@@ -119,36 +115,26 @@ type CosmosApp struct {
 	//ICAAuthKeeper       icaauthkeeper.Keeper
 
 	anteHandler *CubeAnteHandler
-
-	cc                  *CosmosChain
-	bapp_mu             sync.Mutex
-	is_start_crosschain bool
-	is_duplicate_block  bool
-	header              *types.Header
 }
 
+// datadir string, chainID *big.Int, ethdb ethdb.Database, header *types.Header,
 // TODO level db/mpt wrapper
-func NewCosmosApp(datadir string, chainID *big.Int, ethdb ethdb.Database, header *types.Header, skipUpgradeHeights map[int64]bool) *CosmosApp {
-	log.Debug("new cosmos app...")
-
-	// TODO make db
-	// db, _ := sdk.NewLevelDB("application", datadir)
-	// db := NewIBCStateDB("application", datadir)
-	db := NewIBCStateDB(ethdb)
-	codec := MakeEncodingConfig()
-	cc := MakeCosmosChain(chainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
+func NewCosmosApp(
+	datadir string,
+	db dbm.DB,
+	config *cubeparams.ChainConfig,
+	codec EncodingConfig,
+	blockFn expectedkeepers.BlockFn) *CosmosApp {
 
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
-	// bApp.SetCommitMultiStoreTracer(traceStore)
 	bApp.SetVersion(version.Version)
 	bApp.SetInterfaceRegistry(codec.InterfaceRegistry)
 
-	app := &CosmosApp{BaseApp: bApp, codec: codec, cc: cc}
-	app.db = db
+	app := &CosmosApp{BaseApp: bApp, codec: codec, blockFn: blockFn}
 
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
-
+	skipUpgradeHeights := map[int64]bool{}
 	app.setupSDKModule(skipUpgradeHeights, datadir)
 
 	// IBC Keepers
@@ -236,7 +222,7 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
 	// SDK module keepers
-	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1, Hisorical: app.cc}
+	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1, BlockFn: app.blockFn}
 
 	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
 	// authkeeper.NewAccountKeeper(
@@ -244,10 +230,10 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	// )
 
 	// todo:
-	feecollectorAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
-	feeibcAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
-	transferAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
-	mintAcc, _ := sdk.AccAddressFromHex(ModuleAccount)
+	feecollectorAcc, _ := sdk.AccAddressFromHex(system.CrossChainCosmosModuleAccount)
+	feeibcAcc, _ := sdk.AccAddressFromHex(system.CrossChainCosmosModuleAccount)
+	transferAcc, _ := sdk.AccAddressFromHex(system.CrossChainCosmosModuleAccount)
+	mintAcc, _ := sdk.AccAddressFromHex(system.CrossChainCosmosModuleAccount)
 	moduleAccs := map[string]sdk.AccAddress{
 		"fee_collector": feecollectorAcc,
 		"feeibc":        feeibcAcc,

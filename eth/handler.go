@@ -554,7 +554,7 @@ func (h *handler) BroadcastBlockAndHeader(blockAndHeader *core.BlockAndCosmosHea
 func (h *handler) BroadcastCosmosHeader(header *core.CosmosHeader, propagate bool) {
 	hash := header.Hash
 	peers := h.peers.peersWithoutBlock(hash)
-	log.Info("Broadcast BlockAndHeader", "peers", len(peers), "number", header.CosmosHeader.Height, "hash", hash)
+	log.Info("Broadcast CosmosHeader", "peers", len(peers), "number", header.CosmosHeader.Height, "hash", hash)
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {

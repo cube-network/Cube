@@ -691,9 +691,9 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			cosmosHeader := w.chain.Cosmosapp.GetSignedHeader(block.NumberU64(), block.Hash())
+			cosmosHeader := w.chain.Cosmosapp.GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
 			if cosmosHeader != nil {
-				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
+				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
 				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
 					block,
 					cosmosHeader,

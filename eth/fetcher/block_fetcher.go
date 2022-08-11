@@ -758,7 +758,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		if f.queueChangeHook != nil {
 			f.queueChangeHook(hash, true)
 		}
-		log.Debug("Queued delivered header or block", "peer", peer, "number", number, "hash", hash, "queued", f.queue.Size())
+		log.Debug("Queued delivered header or block", "number", number, "hash", hash, "queued", f.queue.Size(), "peer", peer)
 	}
 }
 
@@ -803,7 +803,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 	log.Info("metric", "method", "importBlocks", "peer", peer, "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
 
 	// Run the import on a new thread
-	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
+	log.Debug("Importing propagated block", "number", block.Number(), "hash", hash, "peer", peer)
 	go func() {
 		defer func() { f.done <- hash }()
 

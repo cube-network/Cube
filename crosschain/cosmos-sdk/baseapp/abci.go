@@ -158,7 +158,7 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 	// Initialize the DeliverTx state. If this is the first block, it should
 	// already be initialized in InitChain. Otherwise app.deliverState will be
 	// nil, since it is reset on Commit.
-	println("=============BeginBlock", req.Header.Height)
+	//println("BeginBlock", req.Header.Height)
 	if req.Header.Height > 1 || app.deliverState == nil {
 		app.setDeliverState(req.Header)
 	} else {

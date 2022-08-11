@@ -58,7 +58,7 @@ func (h *testEthHandler) PeerInfo(enode.ID) interface{}        { panic("not used
 func (h *testEthHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	switch packet := packet.(type) {
 	case *eth.NewBlockPacket:
-		h.blockBroadcasts.Send(packet.BlockAndHeader.Block)
+		h.blockBroadcasts.Send(packet.Block)
 		return nil
 
 	case *eth.NewPooledTransactionHashesPacket:
@@ -647,9 +647,7 @@ func testBroadcastBlock(t *testing.T, peers, bcasts int) {
 	}
 	// Initiate a block propagation across the peers
 	time.Sleep(100 * time.Millisecond)
-	source.handler.BroadcastBlock(&core.BlockAndCosmosHeader{
-		Block: source.chain.CurrentBlock(),
-	}, true)
+	source.handler.BroadcastBlock(source.chain.CurrentBlock(), true)
 
 	// Iterate through all the sinks and ensure the correct number got the block
 	done := make(chan struct{}, peers)
@@ -732,9 +730,7 @@ func testBroadcastMalformedBlock(t *testing.T, protocol uint) {
 	// Try to broadcast all malformations and ensure they all get discarded
 	for _, header := range []*types.Header{malformedUncles, malformedTransactions, malformedEverything} {
 		block := types.NewBlockWithHeader(header).WithBody(head.Transactions(), head.Uncles())
-		if err := src.SendNewBlock(&core.BlockAndCosmosHeader{
-			Block: block,
-		}, big.NewInt(131136)); err != nil {
+		if err := src.SendNewBlock(block, big.NewInt(131136)); err != nil {
 			t.Fatalf("failed to broadcast block: %v", err)
 		}
 		select {

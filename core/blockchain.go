@@ -1417,11 +1417,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		status = SideStatTy
 	}
-	// TODO notify crosschain new header event
-	if fromMiner {
-		//bc.Cosmosapp.MakeHeader(block.Header(), state)
-		bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
-	}
+	//// TODO notify crosschain new header event
+	//if fromMiner {
+	//	//bc.Cosmosapp.MakeHeader(block.Header(), state)
+	//	bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
+	//}
 
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)

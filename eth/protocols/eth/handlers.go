@@ -276,11 +276,14 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 
 func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
 	// Retrieve and decode the propagated block
+	log.Info("handleNewBlockAndHeader")
 	ann := new(NewBlockAndHeaderPacket)
 	if err := msg.Decode(ann); err != nil {
+		log.Info("handleNewBlockAndHeader failed", "err", err)
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 	if err := ann.sanityCheck(); err != nil {
+		log.Info("handleNewBlockAndHeader", "err", err)
 		return err
 	}
 

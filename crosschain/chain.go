@@ -113,8 +113,15 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 
 	app.cc.valsMgr.initGenesisValidators(evm, init_block_height)
 
-	hdr := app.cc.makeCosmosSignedHeader(app.header, common.Hash{})
-	//hdr := app.cc.makeCosmosSignedHeader(app.db.header, common.Hash{})
+	//hdr := app.cc.makeCosmosSignedHeader(app.header, common.Hash{})
+	hdr := app.cc.getSignedHeader(app.header.Number.Uint64(), app.header.Hash())
+	if hdr == nil {
+		if bytes.Equal(evm.Context.Coinbase.Bytes(), app.cc.cubeAddr.Bytes()) {
+			hdr = app.cc.makeCosmosSignedHeader(app.header, common.Hash{})
+		} else {
+			panic("getSignedHeader failed")
+		}
+	}
 	app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 }
 
@@ -140,29 +147,24 @@ func (app *CosmosApp) OnBlockBegin(config *params.ChainConfig, blockContext vm.B
 	app.is_duplicate_block = app.IsDuplicateBlock(statedb, header.Number.Int64())
 	state_root := app.GetLastStateRoot(statedb)
 	app.is_genesis_init = app.db.SetEVM(config, blockContext, state_root, cfg)
-	log.Info("OnBlockBegin", "number", header.Number.Int64(), "genesisInit", app.is_genesis_init, "duplicatBlock", app.is_duplicate_block, "stateroot ", state_root.Hex(), "ts", time.Now().UTC().String())
 
 	if !app.is_genesis_init {
 		// app.InitGenesis(app.db.evm)
+		log.Info("OnBlockBegin not run", "number", header.Number.Int64())
 		return
 	} else {
 		app.Load()
 		//var hdr *ct.SignedHeader
-		//if fromMine {
-		//	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
-		//	hdr = app.cc.makeCosmosSignedHeader(header, app_hash)
-		//} else {
 		hdr := app.cc.getSignedHeader(header.Number.Uint64(), header.Hash())
 		if hdr == nil {
 			if bytes.Equal(blockContext.Coinbase.Bytes(), app.cc.cubeAddr.Bytes()) {
 				app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
-				// todo: should broadcast this header
 				hdr = app.cc.makeCosmosSignedHeader(header, app_hash)
 			} else {
-				log.Error("getSignedHeader failed")
-				return
+				panic("getSignedHeader failed")
 			}
 		}
+		log.Info("OnBlockBegin", "number", header.Number.Int64(), "genesisInit", app.is_genesis_init, "duplicatBlock", app.is_duplicate_block, "stateroot ", state_root.Hex(), "ts", time.Now().UTC().String())
 		app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto().Header})
 	}
 }
@@ -206,22 +208,21 @@ func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB) *state.StateDB {
 //	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
 //	return app.cc.GetLightBlock(h.Number.Int64()).Header
 //}
+//
+//func (app *CosmosApp) MakeSignedHeader(h *et.Header, statedb *state.StateDB) *ct.SignedHeader {
+//	if !app.is_genesis_init {
+//		return nil
+//	}
+//	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
+//	return app.cc.makeCosmosSignedHeader(h, app_hash)
+//}
+//
+//func (app *CosmosApp) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
+//	return app.cc.getSignedHeader(height, hash)
+//}
 
-func (app *CosmosApp) MakeSignedHeader(h *et.Header, statedb *state.StateDB) *ct.SignedHeader {
-	if !app.is_genesis_init {
-		return nil
-	}
-	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
-	header := app.cc.makeCosmosSignedHeader(h, app_hash)
-	return header
-}
-
-func (app *CosmosApp) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
-	if !app.is_genesis_init {
-		return nil
-	}
-	header := app.cc.getSignedHeader(height, hash)
-	return header
+func (app *CosmosApp) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
+	return app.cc.getSignedHeaderWithSealHash(height, sealHash, hash)
 }
 
 func (app *CosmosApp) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
@@ -241,21 +242,23 @@ func (app *CosmosApp) SetCubeAddress(addr common.Address) {
 // validator index,pubkey
 
 type CosmosChain struct {
-	ChainID       string
-	light_block   map[int64]*ct.LightBlock         // cache only for demo, write/read db instead later
-	signed_header map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
+	ChainID      string
+	light_block  map[int64]*ct.LightBlock         // cache only for demo, write/read db instead later
+	signedHeader map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
 	// light_block    *lru.ARCCache
 	//valsMgr     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
 	valsMgr *ValidatorsMgr
 	//priv_addr_idx  uint32
-	priv_validator *privval.FilePV // use ed2559 for demo, secp256k1 support later;
-	cubeAddr       common.Address
+	privValidator *privval.FilePV // use ed2559 for demo, secp256k1 support later;
+	cubeAddr      common.Address
 
 	blockID           ct.BlockID // load best block height later
 	best_block_height uint64
 
 	getHeaderByNumber  GetHeaderByNumber
 	cube_cosmos_header map[string][]byte
+	latestSignedHeight uint64
+	latestSignedHash   common.Hash
 }
 
 // priv_validator_addr: chaos.validator
@@ -265,12 +268,12 @@ func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_sta
 	// TODO chainID
 	c.ChainID = "ibc-1"
 	c.light_block = make(map[int64]*ct.LightBlock)
-	c.signed_header = make(map[common.Hash]*ct.SignedHeader)
-	c.priv_validator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
-	c.priv_validator.Save()
+	c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
+	c.privValidator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
+	c.privValidator.Save()
 
-	pubkey, _ := c.priv_validator.GetPubKey()
-	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.priv_validator.GetAddress().String())
+	pubkey, _ := c.privValidator.GetPubKey()
+	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.privValidator.GetAddress().String())
 
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
 	c.valsMgr = &ValidatorsMgr{}
@@ -289,12 +292,12 @@ func (c *CosmosChain) SetGetHeaderFn(getHeaderFn GetHeaderByNumber) {
 
 func (c *CosmosChain) String() string {
 	return fmt.Sprintf(
-		"Cosmos{\n ChainID:%v \n len(light_block):%v \n priv_validator:%v \n blockID:%v}",
+		"Cosmos{\n ChainID:%v \n len(light_block):%v \n privValidator:%v \n blockID:%v}",
 		c.ChainID,
 		len(c.light_block),
 		//len(c.valsMgr),
 		//c.priv_addr_idx,
-		c.priv_validator,
+		c.privValidator,
 		c.blockID,
 	)
 }
@@ -311,7 +314,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 	log.Info("makeCosmosSignedHeader", "height", h.Number, "hash", h.Hash())
 	// TODO find_cosmos_parent_header(h.parent_hash) {return c.cube_cosmos_header[parent_hash]}
 	// todo: cannot use header to update validators as validators are only updated every Epoch length to reset votes and checkpoint. see more info from chaos.Prepare()
-	pubkey, _ := c.priv_validator.GetPubKey()
+	pubkey, _ := c.privValidator.GetPubKey()
 	addr := pubkey.Address()
 	//c.valsMgr.updateValidators(h, h.Number.Int64())
 
@@ -347,12 +350,14 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header, app_hash common.Hash)
 	c.voteSignedHeader(signedHeader)
 	// store header
 	c.storeSignedHeader(h.Hash(), signedHeader)
+	c.latestSignedHeight = h.Number.Uint64()
+	c.latestSignedHash = h.Hash()
 
 	return signedHeader
 }
 
 func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
-	pubkey, _ := c.priv_validator.GetPubKey()
+	pubkey, _ := c.privValidator.GetPubKey()
 	addr := pubkey.Address()
 	idx, val := c.valsMgr.Validators.GetByAddress(addr)
 	if val == nil {
@@ -369,7 +374,7 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 		ValidatorIndex:   idx,
 	}
 	v := vote.ToProto()
-	c.priv_validator.SignVote(c.ChainID, v)
+	c.privValidator.SignVote(c.ChainID, v)
 
 	cc := ct.CommitSig{}
 	cc.BlockIDFlag = ct.BlockIDFlagCommit
@@ -427,12 +432,12 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 }
 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
-	c.signed_header[hash] = header
+	c.signedHeader[hash] = header
 	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
 }
 
 //func (c *CosmosChain) verifySignature(validators *ct.ValidatorSet) error {
-//	addr := c.priv_validator.GetAddress()
+//	addr := c.privValidator.GetAddress()
 //	idx, val := validators.GetByAddress(addr)
 //	if val == nil {
 //		panic("not a validator")
@@ -454,7 +459,25 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 
 func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
 	log.Info("getSignedHeader", "number", height, "hash", hash)
-	return c.signed_header[hash]
+	//if height == c.latestSignedHeight {
+	//	c.signedHeader[hash] = c.signedHeader[c.latestSignedHash]
+	//}
+	return c.signedHeader[hash]
+}
+
+func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
+	log.Info("getSignedHeaderWithSealHash", "number", height, "sealHash", sealHash, "hash", hash)
+	header := c.signedHeader[sealHash]
+	if header == nil && height == c.latestSignedHeight {
+		header = c.signedHeader[c.latestSignedHash]
+		if header != nil {
+			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
+		} else {
+			log.Info("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
+		}
+	}
+	c.signedHeader[hash] = header
+	return header
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {

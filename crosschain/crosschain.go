@@ -14,7 +14,7 @@ import (
 )
 
 type CrossChain interface {
-	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, header *types.Header)
+	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, header *types.Header)
 
 	APIs() []rpc.API
 

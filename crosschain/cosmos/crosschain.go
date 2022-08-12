@@ -2,7 +2,10 @@ package cosmos
 
 import (
 	"container/list"
+	"encoding/hex"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -22,6 +25,7 @@ type Cosmos struct {
 
 	codec        EncodingConfig
 	blockContext vm.BlockContext
+	statefn      cccommon.StateFn
 
 	querymu       sync.Mutex
 	queryExecutor *Executor
@@ -41,6 +45,7 @@ func (c *Cosmos) Init(datadir string,
 	sdb state.Database,
 	config *params.ChainConfig,
 	blockContext vm.BlockContext,
+	statefn cccommon.StateFn,
 	header *types.Header) {
 
 	c.callmu.Lock()
@@ -52,6 +57,7 @@ func (c *Cosmos) Init(datadir string,
 		c.sdb = sdb
 		c.config = config
 		c.blockContext = blockContext
+		c.statefn = statefn
 		c.header = header
 
 		c.codec = MakeEncodingConfig()
@@ -62,7 +68,7 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header)
+		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, true)
 		c.chain = MakeCosmosChain(config.ChainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
 	})
 
@@ -88,17 +94,18 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	}
 
 	var exector *Executor
-	if c.callExectors.Len() > 0 {
-		// TODO max list len
-		elem := c.callExectors.Front()
-		exector = elem.Value.(*Executor)
-		c.callExectors.Remove(elem)
-	} else {
-		exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header)
-	}
+	// if c.callExectors.Len() > 0 {
+	// 	// TODO max list len
+	// 	elem := c.callExectors.Front()
+	// 	exector = elem.Value.(*Executor)
+	// 	c.callExectors.Remove(elem)
+	// } else {
+	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, false)
+	// }
+	fmt.Printf("new exec %p \n", exector)
 	exector.BeginBlock(header, statedb)
 	c.newExecutorCounter++
-	println("newExecutorCounter ", c.newExecutorCounter)
+	println("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64(), " ts ", time.Now().UTC().String())
 	return exector
 }
 
@@ -113,9 +120,10 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 		return
 	}
 
-	c.callExectors.PushFront(exec)
+	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
 	println("freeExecutorCounter ", c.freeExecutorCounter)
+	fmt.Printf("free exec %p \n", exec)
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain) {
@@ -125,7 +133,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	if exec == nil {
 		return
 	}
-
+	fmt.Printf("seal exec %p \n", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header) {
 		return
@@ -142,9 +150,19 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		return
 	}
 
-	c.chain.MakeLightBlock(header)
+	app_hash := header.Extra[32:64]
+	println("event header ", header.Root.Hex(), " ", hex.EncodeToString(app_hash))
 
-	statedb, err := state.New(header.Root, c.sdb, nil)
+	c.chain.MakeLightBlockAndSign(header)
+
+	var statedb *state.StateDB
+	var err error
+	if c.statefn != nil {
+		statedb, err = c.statefn(header.Root)
+	} else {
+		statedb, err = state.New(header.Root, c.sdb, nil)
+	}
+
 	if err != nil {
 		panic("cosmos event header state root not found")
 	}
@@ -159,10 +177,3 @@ func (c *Cosmos) SignHeader(header *types.Header) *cccommon.CrossChainSignature 
 func (c *Cosmos) VoteHeader(header *types.Header, signature *cccommon.CrossChainSignature) {
 	// TODO
 }
-
-// func (app *CosmosApp) MakeHeader(h *cubetypes.Header) *tenderminttypes.Header {
-// 	app_hash := h.Extra[32:64]
-// 	app.cc.MakeLightBlockAndSign(h, common.BytesToHash(app_hash))
-// 	println("header ", app.cc.GetLightBlock(h.Number.Int64()).Header.AppHash.String(), " ", time.Now().UTC().String())
-// 	return app.cc.GetLightBlock(h.Number.Int64()).Header
-// }

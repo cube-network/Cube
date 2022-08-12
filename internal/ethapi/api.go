@@ -1074,7 +1074,7 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	if err != nil {
 		return nil, err
 	}
-	evm.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(nil, state)
+	evm.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, state)
 	defer crosschain.GetCrossChain().FreeExecutor(evm.Context.Crosschain)
 	evm.SimulateMode = true
 	// Wait for the context to be done and cancel the evm. Even if the

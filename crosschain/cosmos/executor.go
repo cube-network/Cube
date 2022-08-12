@@ -20,7 +20,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/expectedkeepers"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/gogo/protobuf/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -52,14 +51,15 @@ var (
 type Executor struct {
 	app *CosmosApp
 
+	queryMode bool
+
 	db           *CosmosStateDB
 	blockContext vm.BlockContext
 	config       *params.ChainConfig
 	codec        EncodingConfig
 	header       *types.Header
 	statedb      *state.StateDB
-
-	is_start_crosschain bool
+	// is_start_crosschain bool
 }
 
 func makeContext(blockContext vm.BlockContext, config *params.ChainConfig, header *types.Header, statedb *state.StateDB) *vm.EVM {
@@ -73,7 +73,7 @@ func makeCosmosHeader(cubeheader *cubetypes.Header, config *params.ChainConfig) 
 	empty_hash := common.Hash{}
 	header := &tenderminttypes.Header{
 		Version:            version.Consensus{Block: 11, App: 0},
-		ChainID:            config.ChainID.String(),
+		ChainID:            "ibc-1", //config.ChainID.String(),
 		Height:             cubeheader.Number.Int64(),
 		Time:               time.Unix(int64(cubeheader.Time), 0),
 		LastCommitHash:     empty_hash[:],
@@ -97,12 +97,14 @@ func NewCosmosExecutor(datadir string,
 	blockFn expectedkeepers.BlockFn,
 	blockContext vm.BlockContext,
 	statedb *state.StateDB,
-	header *types.Header) *Executor {
+	header *types.Header,
+	queryMode bool) *Executor {
 
 	db := NewCosmosStateDB(makeContext(blockContext, config, header, statedb))
 	app := NewCosmosApp(datadir, db, config, codec, blockFn)
 
 	executor := &Executor{app: app}
+	executor.queryMode = queryMode
 	executor.db = db
 	executor.blockContext = blockContext
 	executor.config = config
@@ -127,17 +129,24 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
+	println("begin block height ", header.Number.Int64(), " root ", header.Root.Hex())
+
 	c.header = header
 	c.statedb = statedb
 
-	ctx := makeContext(c.blockContext, c.config, header, statedb)
-	c.db.SetContext(ctx)
-	println("begin block height", header.Number.Int64(), " ts ", time.Now().UTC().String())
+	fmt.Printf("executor endblock statedb %p\n", c.statedb)
 
-	if header.Number.Cmp(c.config.CrosschainCosmosBlock) == 0 {
-		c.InitGenesis(ctx)
+	ctx := makeContext(c.blockContext, c.config, c.header, c.statedb)
+	c.db.SetContext(ctx)
+
+	if c.queryMode {
+		c.Load(header.Number.Int64())
 	} else {
-		c.Load()
+		if header.Number.Cmp(c.config.CrosschainCosmosBlock) == 0 {
+			c.InitGenesis(ctx)
+		} else {
+			c.Load(header.Number.Int64() - 1)
+		}
 	}
 
 	hdr := makeCosmosHeader(header, c.config)
@@ -154,15 +163,19 @@ func (c *Executor) EndBlock() {
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
+	root := c.statedb.IntermediateRoot(true)
 
-	println("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " state root ", " ts ", time.Now().UTC().String())
+	fmt.Printf("executor endblock statedb %s %p\n", root.Hex(), c.statedb)
+	println("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
+	statedb.SetNonce(system.CrossChainCosmosContract, statedb.GetNonce(system.CrossChainCosmosContract)+1)
 	app_hash_last := statedb.GetState(system.CrossChainCosmosContract, state_app_hash_cur)
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_last, app_hash_last)
-
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_cur, app_hash)
+
+	println("setstate ", app_hash_last.Hex(), " ", app_hash.Hex())
 
 	cn := common.BigToHash(big.NewInt(block_number))
 	statedb.SetState(system.CrossChainCosmosContract, state_block_number, cn)
@@ -195,17 +208,16 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	c.app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: c.config.ChainID.String(), InitialHeight: init_block_height})
 	c.app.mm.InitGenesis(c.app.GetContextForDeliverTx([]byte{}), c.codec.Marshaler, genesisState)
 
-	c.is_start_crosschain = true
+	// c.is_start_crosschain = true
 }
 
 // TODO get cube block header instead
-func (c *Executor) Load() {
-	init_block_height := c.header.Number.Int64() - 1
-	if !c.is_start_crosschain {
-		println("load version... ", init_block_height)
-		c.app.LoadVersion2(init_block_height)
-		c.is_start_crosschain = true
-	}
+func (c *Executor) Load(init_block_height int64) {
+	// if !c.is_start_crosschain {
+	println("load version... ", init_block_height)
+	c.app.LoadVersion2(init_block_height)
+	// c.is_start_crosschain = true
+	// }
 }
 
 func rcvPacketQuery(channelID string, seq int) []string {
@@ -256,7 +268,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 			eventMsgName := sdk.MsgTypeURL(msg)
 			println("process tx ", eventMsgName)
 			if err != nil {
-				log.Info("eventMsgName ", eventMsgName, "run tx err ", err.Error())
+				fmt.Println("process tx fail, eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted
 			}
 
@@ -323,7 +335,6 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 			}
 		}
 	}
-
 	return data, nil
 }
 

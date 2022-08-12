@@ -137,7 +137,8 @@ func (cms Store) GetStoreType() types.StoreType {
 // Write calls Write on each underlying store.
 func (cms Store) Write() {
 	cms.db.Write()
-	for _, store := range cms.stores {
+	for k, store := range cms.stores {
+		fmt.Printf("deliver state write %s store %p \n", k.Name(), store)
 		store.Write()
 	}
 }

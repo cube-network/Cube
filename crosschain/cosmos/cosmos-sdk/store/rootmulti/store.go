@@ -2,6 +2,7 @@ package rootmulti
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
@@ -946,13 +947,14 @@ func commitStores(version int64, storeMap map[types.StoreKey]types.CommitKVStore
 	storeInfos := make([]types.StoreInfo, 0, len(storeMap))
 
 	for key, store := range storeMap {
+		println("commit ", key.Name())
 		commitID := store.Commit()
 
 		if store.GetStoreType() == types.StoreTypeTransient {
 			continue
 		}
 
-		// println("save version commit ", " version ", commitID.Version, " hash ", hex.EncodeToString(commitID.Hash), " key ", key.Name())
+		println("save version commit ", " version ", commitID.Version, " hash ", hex.EncodeToString(commitID.Hash), " key ", key.Name())
 
 		si := types.StoreInfo{}
 		si.Name = key.Name()

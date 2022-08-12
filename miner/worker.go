@@ -889,7 +889,6 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 		// Start executing the transaction
 		w.current.state.Prepare(tx.Hash(), w.current.tcount)
-
 		logs, err := w.commitTransaction(tx, coinbase)
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
@@ -1049,7 +1048,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		w.current.state = w.current.state.Copy()
 		w.current.crosschain = crosschain.GetCrossChain().NewExecutor(header, w.current.state)
 		w.commit(uncles, nil, false, tstart)
-		crosschain.GetCrossChain().Seal(w.current.crosschain)
 		w.current.state = current_state
 	}
 
@@ -1073,7 +1071,6 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-
 	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
@@ -1088,12 +1085,12 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 		}
 	}
 	w.commit(uncles, w.fullTaskHook, true, tstart)
-	crosschain.GetCrossChain().Seal(w.current.crosschain)
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	crosschain.GetCrossChain().Seal(w.current.crosschain)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.

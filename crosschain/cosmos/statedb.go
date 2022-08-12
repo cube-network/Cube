@@ -1,8 +1,9 @@
 package cosmos
 
 import (
-	"bytes"
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -15,8 +16,9 @@ import (
 // call contract
 
 type CosmosStateDB struct {
-	mu  sync.Mutex
-	evm *vm.EVM
+	mu      sync.Mutex
+	evm     *vm.EVM
+	counter int64
 }
 
 func NewCosmosStateDB(evm *vm.EVM) *CosmosStateDB {
@@ -31,6 +33,7 @@ func (csdb *CosmosStateDB) SetContext(evm *vm.EVM) bool {
 	defer csdb.mu.Unlock()
 
 	csdb.evm = evm
+	csdb.counter = 0
 
 	return true
 }
@@ -50,10 +53,10 @@ func (csdb *CosmosStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -72,13 +75,14 @@ func (csdb *CosmosStateDB) Has(key []byte) (bool, error) {
 		println("Failed to Has, err", err.Error())
 		return false, err
 	}
-	// println("store. has ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
+	// println("store. has ", csdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
 
 	return is_exist, nil
 }
 
 func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
-	// println("store. set ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	csdb.counter++
+	fmt.Printf("csdb statedb %p\n", csdb.evm.StateDB)
 	csdb.mu.Lock()
 	defer csdb.mu.Unlock()
 
@@ -104,6 +108,7 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 		println("Failed to Set, err", err.Error())
 		return err
 	}
+	println("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 
 	return nil
 }
@@ -205,33 +210,36 @@ func (csdb *CosmosStateDB) NewCosmosStateIterator(is_reverse bool, start []byte,
 		println("Failed to Get, err", err.Error())
 		return nil, err
 	}
-	// 10, 9, 8
-	if len(keys) > 0 && len(vals) > 0 {
-		// for i := 0; i < len(keys); i++ {
-		// 	println("keys ", i, " ", hex.EncodeToString(keys[i]))
-		// }
-		si, ei := 0, len(keys)-1
-		for i := 0; i < len(keys); i++ {
-			cmp := bytes.Compare(keys[i], end)
-			if cmp >= 0 {
-				si = i
-			} else {
-				break
-			}
-		}
-		for i := 0; i < len(keys); i++ {
-			cmp := bytes.Compare(keys[i], start)
-			if cmp >= 0 {
-				ei = i
-			} else {
-				break
-			}
-		}
-		// println("len keys ", len(keys), " ", si, " ei ", ei)
-		keys = keys[si:ei]
-		vals = vals[si:ei]
-		// println(len(keys), " ")
-	}
+	// // 10, 9, 8
+	// if len(keys) > 0 && len(vals) > 0 {
+	// 	// for i := 0; i < len(keys); i++ {
+	// 	// 	println("keys ", i, " ", hex.EncodeToString(keys[i]))
+	// 	// }
+	// 	si, ei := 0, len(keys)-1
+	// 	for i := 0; i < len(keys); i++ {
+	// 		cmp := bytes.Compare(keys[i], end)
+	// 		if cmp >= 0 {
+	// 			si = i
+	// 		} else {
+	// 			break
+	// 		}
+	// 	}
+	// 	for i := 0; i < len(keys); i++ {
+	// 		cmp := bytes.Compare(keys[i], start)
+	// 		if cmp >= 0 {
+	// 			ei = i
+	// 		} else {
+	// 			break
+	// 		}
+	// 	}
+	// 	// println("len keys ", len(keys), " ", si, " ei ", ei)
+	// 	if si == ei {
+	// 		si = ei + 1
+	// 	}
+	// 	keys = keys[ei:si]
+	// 	vals = vals[ei:si]
+	// 	// println(len(keys), " ")
+	// }
 	if !is_reverse {
 		for i, j := 0, len(keys)-1; i < j; i, j = i+1, j-1 {
 			keys[i], keys[j] = keys[j], keys[i]

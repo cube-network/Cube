@@ -58,13 +58,16 @@ var (
 	blockBroadcastDropMeter = metrics.NewRegisteredMeter("eth/fetcher/block/broadcasts/drop", nil)
 	blockBroadcastDOSMeter  = metrics.NewRegisteredMeter("eth/fetcher/block/broadcasts/dos", nil)
 
-	headerFetchMeter = metrics.NewRegisteredMeter("eth/fetcher/block/headers", nil)
-	bodyFetchMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/bodies", nil)
+	headerFetchMeter     = metrics.NewRegisteredMeter("eth/fetcher/block/headers", nil)
+	twoHeadersFetchMeter = metrics.NewRegisteredMeter("eth/fetcher/block/twoHeaders", nil)
+	bodyFetchMeter       = metrics.NewRegisteredMeter("eth/fetcher/block/bodies", nil)
 
 	headerFilterInMeter  = metrics.NewRegisteredMeter("eth/fetcher/block/filter/headers/in", nil)
 	headerFilterOutMeter = metrics.NewRegisteredMeter("eth/fetcher/block/filter/headers/out", nil)
-	bodyFilterInMeter    = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/in", nil)
-	bodyFilterOutMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/out", nil)
+	//twoHeadersFilterInMeter  = metrics.NewRegisteredMeter("eth/fetcher/block/filter/twoHeaders/in", nil)
+	//twoHeadersFilterOutMeter = metrics.NewRegisteredMeter("eth/fetcher/block/filter/twoHeaders/out", nil)
+	bodyFilterInMeter  = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/in", nil)
+	bodyFilterOutMeter = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/out", nil)
 )
 
 var errTerminated = errors.New("terminated")
@@ -77,6 +80,8 @@ type blockRetrievalFn func(common.Hash) *types.Block
 
 // headerRequesterFn is a callback type for sending a header retrieval request.
 type headerRequesterFn func(common.Hash) error
+
+type twoHeadersRequesterFn func(common.Hash) error
 
 // bodyRequesterFn is a callback type for sending a body retrieval request.
 type bodyRequesterFn func([]common.Hash) error
@@ -115,8 +120,9 @@ type blockAnnounce struct {
 
 	origin string // Identifier of the peer originating the notification
 
-	fetchHeader headerRequesterFn // Fetcher function to retrieve the header of an announced block
-	fetchBodies bodyRequesterFn   // Fetcher function to retrieve the body of an announced block
+	fetchHeader     headerRequesterFn // Fetcher function to retrieve the header of an announced block
+	fetchTwoHeaders twoHeadersRequesterFn
+	fetchBodies     bodyRequesterFn // Fetcher function to retrieve the body of an announced block
 }
 
 // headerFilterTask represents a batch of headers needing fetcher filtering.
@@ -125,6 +131,13 @@ type headerFilterTask struct {
 	headers []*types.Header // Collection of headers to filter
 	time    time.Time       // Arrival time of the headers
 }
+
+//// twoHeadersFilterTask represents a batch of headers needing fetcher filtering.
+//type twoHeadersFilterTask struct {
+//	peer    string                      // The source peer of block headers
+//	headers []*core.CubeAndCosmosHeader // Collection of headers to filter
+//	time    time.Time                   // Arrival time of the headers
+//}
 
 // bodyFilterTask represents a batch of block bodies (transactions and uncles)
 // needing fetcher filtering.
@@ -169,7 +182,8 @@ type BlockFetcher struct {
 	inject chan *blockOrHeaderInject
 
 	headerFilter chan chan *headerFilterTask
-	bodyFilter   chan chan *bodyFilterTask
+	//twoHeadersFilter chan chan *twoHeadersFilterTask
+	bodyFilter chan chan *bodyFilterTask
 
 	done chan common.Hash
 	quit chan struct{}
@@ -269,6 +283,24 @@ func (f *BlockFetcher) Notify(peer string, hash common.Hash, number uint64, time
 	}
 }
 
+func (f *BlockFetcher) NotifyTwoHeaders(peer string, hash common.Hash, number uint64, time time.Time,
+	twoHeadersFetcher twoHeadersRequesterFn, bodyFetcher bodyRequesterFn) error {
+	block := &blockAnnounce{
+		hash:            hash,
+		number:          number,
+		time:            time,
+		origin:          peer,
+		fetchTwoHeaders: twoHeadersFetcher,
+		fetchBodies:     bodyFetcher,
+	}
+	select {
+	case f.notify <- block:
+		return nil
+	case <-f.quit:
+		return errTerminated
+	}
+}
+
 // Enqueue tries to fill gaps the fetcher's future import queue.
 func (f *BlockFetcher) Enqueue(peer string, block *types.Block) error {
 	op := &blockOrHeaderInject{
@@ -310,6 +342,32 @@ func (f *BlockFetcher) FilterHeaders(peer string, headers []*types.Header, time 
 		return nil
 	}
 }
+
+//func (f *BlockFetcher) FilterTwoHeaders(peer string, headers []*core.CubeAndCosmosHeader, time time.Time) []*core.CubeAndCosmosHeader {
+//	log.Trace("Filtering headers", "peer", peer, "headers", len(headers))
+//
+//	// Send the filter channel to the fetcher
+//	filter := make(chan *twoHeadersFilterTask)
+//
+//	select {
+//	case f.twoHeadersFilter <- filter:
+//	case <-f.quit:
+//		return nil
+//	}
+//	// Request the filtering of the header list
+//	select {
+//	case filter <- &twoHeadersFilterTask{peer: peer, headers: headers, time: time}:
+//	case <-f.quit:
+//		return nil
+//	}
+//	// Retrieve the headers remaining after filtering
+//	select {
+//	case task := <-filter:
+//		return task.headers
+//	case <-f.quit:
+//		return nil
+//	}
+//}
 
 // FilterBodies extracts all the block bodies that were explicitly requested by
 // the fetcher, returning those that should be handled differently.
@@ -474,14 +532,15 @@ func (f *BlockFetcher) loop() {
 				log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
 
 				// Create a closure of the fetch and schedule in on a new thread
-				fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
+				//fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
+				fetchTwoHeaders, hashes := f.fetching[hashes[0]].fetchTwoHeaders, hashes
 				go func() {
 					if f.fetchingHook != nil {
 						f.fetchingHook(hashes)
 					}
 					for _, hash := range hashes {
-						headerFetchMeter.Mark(1)
-						fetchHeader(hash) // Suboptimal, but protocol doesn't allow batch header retrievals
+						twoHeadersFetchMeter.Mark(1)
+						fetchTwoHeaders(hash) // Suboptimal, but protocol doesn't allow batch header retrievals
 					}
 				}()
 			}
@@ -608,6 +667,98 @@ func (f *BlockFetcher) loop() {
 					f.enqueue(announce.origin, nil, block)
 				}
 			}
+		//case filter := <-f.twoHeadersFilter:
+		//	// Headers arrived from a remote peer. Extract those that were explicitly
+		//	// requested by the fetcher, and return everything else so it's delivered
+		//	// to other parts of the system.
+		//	var task *twoHeadersFilterTask
+		//	select {
+		//	case task = <-filter:
+		//	case <-f.quit:
+		//		return
+		//	}
+		//	twoHeadersFilterInMeter.Mark(int64(len(task.headers)))
+		//
+		//	// Split the batch of headers into unknown ones (to return to the caller),
+		//	// known incomplete ones (requiring body retrievals) and completed blocks.
+		//	unknown, incomplete, complete, lightHeaders := []*core.CubeAndCosmosHeader{}, []*blockAnnounce{}, []*types.Block{}, []*blockAnnounce{}
+		//	for _, twoHeaders := range task.headers {
+		//		header := twoHeaders.Header
+		//		hash := header.Hash()
+		//
+		//		// Filter fetcher-requested headers from other synchronisation algorithms
+		//		if announce := f.fetching[hash]; announce != nil && announce.origin == task.peer && f.fetched[hash] == nil && f.completing[hash] == nil && f.queued[hash] == nil {
+		//			// If the delivered header does not match the promised number, drop the announcer
+		//			if header.Number.Uint64() != announce.number {
+		//				log.Trace("Invalid block number fetched", "peer", announce.origin, "hash", header.Hash(), "announced", announce.number, "provided", header.Number)
+		//				f.dropPeer(announce.origin)
+		//				f.forgetHash(hash)
+		//				continue
+		//			}
+		//			// Collect all headers only if we are running in light
+		//			// mode and the headers are not imported by other means.
+		//			if f.light {
+		//				if f.getHeader(hash) == nil {
+		//					announce.header = header
+		//					lightHeaders = append(lightHeaders, announce)
+		//				}
+		//				f.forgetHash(hash)
+		//				continue
+		//			}
+		//			// Only keep if not imported by other means
+		//			if f.getBlock(hash) == nil {
+		//				announce.header = header
+		//				announce.time = task.time
+		//
+		//				// If the block is empty (header only), short circuit into the final import queue
+		//				if header.TxHash == types.EmptyRootHash && header.UncleHash == types.EmptyUncleHash {
+		//					log.Trace("Block empty, skipping body retrieval", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
+		//
+		//					block := types.NewBlockWithHeader(header)
+		//					block.ReceivedAt = task.time
+		//
+		//					complete = append(complete, block)
+		//					f.completing[hash] = announce
+		//					continue
+		//				}
+		//				// Otherwise add to the list of blocks needing completion
+		//				incomplete = append(incomplete, announce)
+		//			} else {
+		//				log.Trace("Block already imported, discarding header", "peer", announce.origin, "number", header.Number, "hash", header.Hash())
+		//				f.forgetHash(hash)
+		//			}
+		//		} else {
+		//			// BlockFetcher doesn't know about it, add to the return list
+		//			unknown = append(unknown, twoHeaders)
+		//		}
+		//	}
+		//	twoHeadersFilterOutMeter.Mark(int64(len(unknown)))
+		//	select {
+		//	case filter <- &twoHeadersFilterTask{headers: unknown, time: task.time}:
+		//	case <-f.quit:
+		//		return
+		//	}
+		//	// Schedule the retrieved headers for body completion
+		//	for _, announce := range incomplete {
+		//		hash := announce.header.Hash()
+		//		if _, ok := f.completing[hash]; ok {
+		//			continue
+		//		}
+		//		f.fetched[hash] = append(f.fetched[hash], announce)
+		//		if len(f.fetched) == 1 {
+		//			f.rescheduleComplete(completeTimer)
+		//		}
+		//	}
+		//	// Schedule the header for light fetcher import
+		//	for _, announce := range lightHeaders {
+		//		f.enqueue(announce.origin, announce.header, nil)
+		//	}
+		//	// Schedule the header-only blocks for import
+		//	for _, block := range complete {
+		//		if announce := f.completing[block.Hash()]; announce != nil {
+		//			f.enqueue(announce.origin, nil, block)
+		//		}
+		//	}
 
 		case filter := <-f.bodyFilter:
 			// Block bodies arrived, extract any explicitly requested blocks, return the rest

@@ -19,7 +19,9 @@ package eth
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/trie"
+	ct "github.com/tendermint/tendermint/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -72,6 +74,111 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 			break
 		}
 		headers = append(headers, origin)
+		bytes += estHeaderSize
+
+		// Advance to the next header of the query
+		switch {
+		case hashMode && query.Reverse:
+			// Hash based traversal towards the genesis block
+			ancestor := query.Skip + 1
+			if ancestor == 0 {
+				unknown = true
+			} else {
+				query.Origin.Hash, query.Origin.Number = backend.Chain().GetAncestor(query.Origin.Hash, query.Origin.Number, ancestor, &maxNonCanonical)
+				unknown = (query.Origin.Hash == common.Hash{})
+			}
+		case hashMode && !query.Reverse:
+			// Hash based traversal towards the leaf block
+			var (
+				current = origin.Number.Uint64()
+				next    = current + query.Skip + 1
+			)
+			if next <= current {
+				infos, _ := json.MarshalIndent(peer.Peer.Info(), "", "  ")
+				peer.Log().Warn("GetBlockHeaders skip overflow attack", "current", current, "skip", query.Skip, "next", next, "attacker", infos)
+				unknown = true
+			} else {
+				if header := backend.Chain().GetHeaderByNumber(next); header != nil {
+					nextHash := header.Hash()
+					expOldHash, _ := backend.Chain().GetAncestor(nextHash, next, query.Skip+1, &maxNonCanonical)
+					if expOldHash == query.Origin.Hash {
+						query.Origin.Hash, query.Origin.Number = nextHash, next
+					} else {
+						unknown = true
+					}
+				} else {
+					unknown = true
+				}
+			}
+		case query.Reverse:
+			// Number based traversal towards the genesis block
+			if query.Origin.Number >= query.Skip+1 {
+				query.Origin.Number -= query.Skip + 1
+			} else {
+				unknown = true
+			}
+
+		case !query.Reverse:
+			// Number based traversal towards the leaf block
+			query.Origin.Number += query.Skip + 1
+		}
+	}
+	return headers
+}
+
+func handleGetCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the complex header query
+	var query GetCubeAndCosmosHeadersPacket66
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	response := answerGetCubeAndCosmosHeadersQuery(backend, query.GetCubeAndCosmosHeadersPacket, peer)
+	return peer.ReplyCubeAndCosmosHeaders(query.RequestId, response)
+}
+
+func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmosHeadersPacket, peer *Peer) []*core.CubeAndCosmosHeader {
+	hashMode := query.Origin.Hash != (common.Hash{})
+	first := true
+	maxNonCanonical := uint64(100)
+
+	// Gather headers until the fetch or network limits is reached
+	var (
+		bytes common.StorageSize
+		//headers []*types.Header
+		headers []*core.CubeAndCosmosHeader
+		unknown bool
+		lookups int
+	)
+	for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit &&
+		len(headers) < maxHeadersServe && lookups < 2*maxHeadersServe {
+		lookups++
+		// Retrieve the next header satisfying the query
+		var origin *types.Header
+		if hashMode {
+			if first {
+				first = false
+				origin = backend.Chain().GetHeaderByHash(query.Origin.Hash)
+				if origin != nil {
+					query.Origin.Number = origin.Number.Uint64()
+				}
+			} else {
+				origin = backend.Chain().GetHeader(query.Origin.Hash, query.Origin.Number)
+			}
+		} else {
+			origin = backend.Chain().GetHeaderByNumber(query.Origin.Number)
+		}
+		if origin == nil {
+			break
+		}
+		var signedHeader *ct.SignedHeader
+		if backend.Chain().Cosmosapp != nil {
+			signedHeader = backend.Chain().Cosmosapp.GetSignedHeader(origin.Number.Uint64(), origin.Hash())
+		}
+		h := &core.CubeAndCosmosHeader{
+			Header:       origin,
+			CosmosHeader: signedHeader,
+		}
+		headers = append(headers, h)
 		bytes += estHeaderSize
 
 		// Advance to the next header of the query
@@ -322,6 +429,17 @@ func handleNewCosmosHeader(backend Backend, msg Decoder, peer *Peer) error {
 	peer.markCosmosHeader(ann.Header.Hash)
 
 	return backend.Handle(peer, ann)
+}
+
+func handleNewCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	res := new(CubeAndCosmosHeadersPacket66)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	requestTracker.Fulfil(peer.id, peer.version, CubeAndCosmosHeadersMsg, res.RequestId)
+
+	return backend.Handle(peer, &res.CubeAndCosmosHeadersPacket)
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {

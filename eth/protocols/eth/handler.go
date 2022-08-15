@@ -18,6 +18,7 @@ package eth
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"time"
 
@@ -38,6 +39,9 @@ const (
 
 	// estHeaderSize is the approximate size of an RLP encoded block header.
 	estHeaderSize = 500
+
+	// todo: the approximate size of an RLP encoded cube header and cosmos header.
+	estTwoHeadersSize = 1000
 
 	// maxHeadersServe is the maximum number of block headers to serve. This number
 	// is there to limit the number of disk lookups.
@@ -188,6 +192,8 @@ var eth66 = map[uint64]msgHandler{
 	PooledTransactionsMsg:         handlePooledTransactions66,
 	NewBlockAndHeaderMsg:          handleNewBlockAndHeader,
 	NewCosmosHeaderMsg:            handleNewCosmosHeader,
+	GetCubeAndCosmosHeadersMsg:    handleGetCubeAndCosmosHeaders66,
+	CubeAndCosmosHeadersMsg:       handleNewCubeAndCosmosHeaders66,
 }
 
 // handleMessage is invoked whenever an inbound message is received from a remote
@@ -196,6 +202,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := peer.rw.ReadMsg()
 	if err != nil {
+		log.Error("eth handleMessage failed", "err", err)
 		return err
 	}
 	if msg.Size > maxMessageSize {

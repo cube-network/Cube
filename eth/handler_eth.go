@@ -93,6 +93,9 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	case *eth.NewBlockAndHeaderPacket:
 		return h.handleBlockAndHeaderBroadcast(peer, packet.BlockAndHeader, packet.TD)
 
+	case *eth.CubeAndCosmosHeadersPacket:
+		return h.handleTwoHeaders(peer, *packet)
+
 	case *eth.NewPooledTransactionHashesPacket:
 		return h.txFetcher.Notify(peer.ID(), *packet)
 
@@ -163,6 +166,75 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 	return nil
 }
 
+// handleHeaders is invoked from a peer's message handler when it transmits a batch
+// of headers for the local node to process.
+func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCosmosHeader) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+	// If no headers were received, but we're expencting a checkpoint header, consider it that
+	if len(headers) == 0 && p.syncDrop != nil {
+		// Stop the timer either way, decide later to drop or not
+		p.syncDrop.Stop()
+		p.syncDrop = nil
+
+		// If we're doing a fast (or snap) sync, we must enforce the checkpoint block to avoid
+		// eclipse attacks. Unsynced nodes are welcome to connect after we're done
+		// joining the network
+		if atomic.LoadUint32(&h.fastSync) == 1 {
+			peer.Log().Warn("Dropping unsynced node during sync", "addr", peer.RemoteAddr(), "type", peer.Name())
+			return errors.New("unsynced node cannot serve sync")
+		}
+	}
+	// Filter out any explicitly requested headers, deliver the rest to the downloader
+	//var chs []*types.Header
+	chs := make([]*types.Header, len(headers))
+	for _, th := range headers {
+		chs = append(chs, th.Header)
+		// todo: verify cosmos header
+		if h.chain.Cosmosapp != nil {
+			if err := h.chain.Cosmosapp.HandleHeader(th.Header, th.CosmosHeader); err != nil {
+				return err
+			}
+		}
+	}
+	filter := len(headers) == 1
+	if filter {
+		// If it's a potential sync progress check, validate the content and advertised chain weight
+		th := headers[0]
+		if p.syncDrop != nil && th.Header.Number.Uint64() == h.checkpointNumber {
+			// Disable the sync drop timer
+			p.syncDrop.Stop()
+			p.syncDrop = nil
+
+			// Validate the header and either drop the peer or continue
+			if th.Header.Hash() != h.checkpointHash {
+				return errors.New("checkpoint hash mismatch")
+			}
+			return nil
+		}
+		// Otherwise if it's a whitelisted block, validate against the set
+		if want, ok := h.whitelist[th.Header.Number.Uint64()]; ok {
+			if hash := th.Header.Hash(); want != hash {
+				peer.Log().Info("Whitelist mismatch, dropping peer", "number", th.Header.Number.Uint64(), "hash", hash, "want", want)
+				return errors.New("whitelist block mismatch")
+			}
+			peer.Log().Debug("Whitelist block verified", "number", th.Header.Number.Uint64(), "hash", want)
+		}
+
+		// Irrelevant of the fork checks, send the header to the fetcher just in case
+		chs = h.blockFetcher.FilterHeaders(peer.ID(), chs, time.Now())
+	}
+	if len(chs) > 0 || !filter {
+		err := h.downloader.DeliverHeaders(peer.ID(), chs)
+		if err != nil {
+			log.Debug("Failed to deliver headers", "err", err)
+		}
+	}
+	return nil
+}
+
 // handleBodies is invoked from a peer's message handler when it transmits a batch
 // of block bodies for the local node to process.
 func (h *ethHandler) handleBodies(peer *eth.Peer, txs [][]*types.Transaction, uncles [][]*types.Header) error {
@@ -195,7 +267,8 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		}
 	}
 	for i := 0; i < len(unknownHashes); i++ {
-		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+		//h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+		h.blockFetcher.NotifyTwoHeaders(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneTwoHeaders, peer.RequestBodies)
 	}
 	return nil
 }
@@ -203,7 +276,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
-	log.Info("handleBlockBroadcast", "number", block.NumberU64(), "hash", block.Hash())
+	log.Info("handleBlockBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
@@ -227,10 +300,10 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeader *core.BlockAndCosmosHeader, td *big.Int) error {
 	block := blockAndHeader.Block
-	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash())
+	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
 	// todo: deal with cosmos header
-	if h.chain.Cosmosapp != nil && blockAndHeader.CosmosHeader != nil {
+	if h.chain.Cosmosapp != nil {
 		err := h.chain.Cosmosapp.HandleHeader(block.Header(), blockAndHeader.CosmosHeader)
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)

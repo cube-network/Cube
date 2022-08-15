@@ -124,6 +124,7 @@ type CosmosApp struct {
 	is_start_crosschain bool
 	is_duplicate_block  bool
 	header              *types.Header
+	genesisInitedHeight int64
 }
 
 // TODO level db/mpt wrapper

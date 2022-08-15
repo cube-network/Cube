@@ -44,7 +44,7 @@ var ProtocolVersions = []uint{ETH66}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-var protocolLengths = map[uint]uint64{ETH66: 17}
+var protocolLengths = map[uint]uint64{ETH66: 24}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
@@ -62,11 +62,13 @@ const (
 	NodeDataMsg                   = 0x0e
 	GetReceiptsMsg                = 0x0f
 	ReceiptsMsg                   = 0x10
-	NewPooledTransactionHashesMsg = 0x08
-	GetPooledTransactionsMsg      = 0x09
-	PooledTransactionsMsg         = 0x0a
-	NewBlockAndHeaderMsg          = 0x0b
-	NewCosmosHeaderMsg            = 0x0c
+	NewPooledTransactionHashesMsg = 0x11
+	GetPooledTransactionsMsg      = 0x12
+	PooledTransactionsMsg         = 0x13
+	NewBlockAndHeaderMsg          = 0x14
+	NewCosmosHeaderMsg            = 0x15
+	GetCubeAndCosmosHeadersMsg    = 0x16
+	CubeAndCosmosHeadersMsg       = 0x17
 )
 
 var (
@@ -127,10 +129,22 @@ type GetBlockHeadersPacket struct {
 	Reverse bool         // Query direction (false = rising towards latest, true = falling towards genesis)
 }
 
+type GetCubeAndCosmosHeadersPacket struct {
+	Origin  HashOrNumber // Block from which to retrieve headers
+	Amount  uint64       // Maximum number of headers to retrieve
+	Skip    uint64       // Blocks to skip between consecutive headers
+	Reverse bool         // Query direction (false = rising towards latest, true = falling towards genesis)
+}
+
 // GetBlockHeadersPacket66 represents a block header query over eth/66
 type GetBlockHeadersPacket66 struct {
 	RequestId uint64
 	*GetBlockHeadersPacket
+}
+
+type GetCubeAndCosmosHeadersPacket66 struct {
+	RequestId uint64
+	*GetCubeAndCosmosHeadersPacket
 }
 
 // HashOrNumber is a combined field for specifying an origin block.
@@ -176,6 +190,13 @@ type BlockHeadersPacket []*types.Header
 type BlockHeadersPacket66 struct {
 	RequestId uint64
 	BlockHeadersPacket
+}
+
+type CubeAndCosmosHeadersPacket []*core.CubeAndCosmosHeader
+
+type CubeAndCosmosHeadersPacket66 struct {
+	RequestId uint64
+	CubeAndCosmosHeadersPacket
 }
 
 // NewBlockPacket is the network packet for the block propagation message.
@@ -381,8 +402,14 @@ func (*TransactionsPacket) Kind() byte   { return TransactionsMsg }
 func (*GetBlockHeadersPacket) Name() string { return "GetBlockHeaders" }
 func (*GetBlockHeadersPacket) Kind() byte   { return GetBlockHeadersMsg }
 
+func (*GetCubeAndCosmosHeadersPacket) Name() string { return "GetCubeAndCosmosHeadersPacket" }
+func (*GetCubeAndCosmosHeadersPacket) Kind() byte   { return GetCubeAndCosmosHeadersMsg }
+
 func (*BlockHeadersPacket) Name() string { return "BlockHeaders" }
 func (*BlockHeadersPacket) Kind() byte   { return BlockHeadersMsg }
+
+func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
+func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }
 
 func (*GetBlockBodiesPacket) Name() string { return "GetBlockBodies" }
 func (*GetBlockBodiesPacket) Kind() byte   { return GetBlockBodiesMsg }
@@ -398,6 +425,9 @@ func (*NewBlockAndHeaderPacket) Kind() byte   { return NewBlockAndHeaderMsg }
 
 func (*NewCosmosHeaderPacket) Name() string { return "NewCosmosHeader" }
 func (*NewCosmosHeaderPacket) Kind() byte   { return NewCosmosHeaderMsg }
+
+//func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
+//func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }
 
 func (*GetNodeDataPacket) Name() string { return "GetNodeData" }
 func (*GetNodeDataPacket) Kind() byte   { return GetNodeDataMsg }

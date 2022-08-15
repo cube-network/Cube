@@ -3,6 +3,7 @@ package crosschain
 import (
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -110,6 +111,7 @@ func (app *CosmosApp) InitGenesis(evm *vm.EVM) {
 
 	app.is_start_crosschain = true
 	app.is_genesis_init = true
+	app.genesisInitedHeight = init_block_height
 
 	app.cc.valsMgr.initGenesisValidators(evm, init_block_height)
 
@@ -216,17 +218,23 @@ func (app *CosmosApp) OnBlockEnd(statedb *state.StateDB) *state.StateDB {
 //	app_hash := statedb.GetState(vm.CrossChainContractAddr, state_app_hash_cur)
 //	return app.cc.makeCosmosSignedHeader(h, app_hash)
 //}
-//
-//func (app *CosmosApp) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
-//	return app.cc.getSignedHeader(height, hash)
-//}
+
+func (app *CosmosApp) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
+	return app.cc.getSignedHeader(height, hash)
+}
 
 func (app *CosmosApp) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
-	return app.cc.getSignedHeaderWithSealHash(height, sealHash, hash)
+	if app.genesisInitedHeight > 0 && int64(height) >= app.genesisInitedHeight {
+		return app.cc.getSignedHeaderWithSealHash(height, sealHash, hash)
+	}
+	return nil
 }
 
 func (app *CosmosApp) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
-	if !app.is_genesis_init {
+	if header == nil {
+		if app.genesisInitedHeight > 0 && h.Number.Int64() > app.genesisInitedHeight {
+			return errors.New("missing cosmos header")
+		}
 		return nil
 	}
 
@@ -459,9 +467,6 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 
 func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
 	log.Info("getSignedHeader", "number", height, "hash", hash)
-	//if height == c.latestSignedHeight {
-	//	c.signedHeader[hash] = c.signedHeader[c.latestSignedHash]
-	//}
 	return c.signedHeader[hash]
 }
 

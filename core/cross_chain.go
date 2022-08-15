@@ -15,3 +15,8 @@ type CosmosHeader struct {
 	Hash         common.Hash
 	CosmosHeader *ct.SignedHeader
 }
+
+type CubeAndCosmosHeader struct {
+	Header       *types.Header
+	CosmosHeader *ct.SignedHeader
+}

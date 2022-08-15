@@ -290,6 +290,7 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *Peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
+	log.Info("SendNewBlock", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr())
 	p.knownBlocks.Add(block.Hash())
 	return p2p.Send(p.rw, NewBlockMsg, &NewBlockPacket{
 		Block: block,
@@ -315,7 +316,7 @@ func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td 
 	block := blockHeader.Block
 	p.knownBlocks.Add(block.Hash())
 	p.knownCosmosHeaders.Add(block.Hash())
-	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash())
+	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr(), "id", p.ID())
 	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
 		BlockAndHeader: blockHeader,
 		TD:             td,
@@ -367,6 +368,13 @@ func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
 	})
 }
 
+func (p *Peer) ReplyCubeAndCosmosHeaders(id uint64, headers []*core.CubeAndCosmosHeader) error {
+	return p2p.Send(p.rw, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
+		RequestId:                  id,
+		CubeAndCosmosHeadersPacket: headers,
+	})
+}
+
 // ReplyBlockBodiesRLP is the eth/66 version of SendBlockBodiesRLP.
 func (p *Peer) ReplyBlockBodiesRLP(id uint64, bodies []rlp.RawValue) error {
 	// Not packed into BlockBodiesPacket to avoid RLP decoding
@@ -410,6 +418,22 @@ func (p *Peer) RequestOneHeader(hash common.Hash) error {
 	})
 }
 
+func (p *Peer) RequestOneTwoHeaders(hash common.Hash) error {
+	p.Log().Debug("RequestOneTwoHeaders", "hash", hash)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+		RequestId: id,
+		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
+			Origin:  HashOrNumber{Hash: hash},
+			Amount:  uint64(1),
+			Skip:    uint64(0),
+			Reverse: false,
+		},
+	})
+}
+
 // RequestHeadersByHash fetches a batch of blocks' headers corresponding to the
 // specified header query, based on the hash of an origin block.
 func (p *Peer) RequestHeadersByHash(origin common.Hash, amount int, skip int, reverse bool) error {
@@ -428,6 +452,22 @@ func (p *Peer) RequestHeadersByHash(origin common.Hash, amount int, skip int, re
 	})
 }
 
+func (p *Peer) RequestTwoHeadersByHash(origin common.Hash, amount int, skip int, reverse bool) error {
+	p.Log().Debug("RequestTwoHeadersByHash", "count", amount, "fromhash", origin, "skip", skip, "reverse", reverse, "id", p.ID())
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+		RequestId: id,
+		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
+			Origin:  HashOrNumber{Hash: origin},
+			Amount:  uint64(amount),
+			Skip:    uint64(skip),
+			Reverse: reverse,
+		},
+	})
+}
+
 // RequestHeadersByNumber fetches a batch of blocks' headers corresponding to the
 // specified header query, based on the number of an origin block.
 func (p *Peer) RequestHeadersByNumber(origin uint64, amount int, skip int, reverse bool) error {
@@ -438,6 +478,22 @@ func (p *Peer) RequestHeadersByNumber(origin uint64, amount int, skip int, rever
 	return p2p.Send(p.rw, GetBlockHeadersMsg, &GetBlockHeadersPacket66{
 		RequestId: id,
 		GetBlockHeadersPacket: &GetBlockHeadersPacket{
+			Origin:  HashOrNumber{Number: origin},
+			Amount:  uint64(amount),
+			Skip:    uint64(skip),
+			Reverse: reverse,
+		},
+	})
+}
+
+func (p *Peer) RequestTwoHeadersByNumber(origin uint64, amount int, skip int, reverse bool) error {
+	p.Log().Debug("RequestTwoHeadersByNumber", "count", amount, "fromnum", origin, "skip", skip, "reverse", reverse)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+		RequestId: id,
+		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
 			Origin:  HashOrNumber{Number: origin},
 			Amount:  uint64(amount),
 			Skip:    uint64(skip),

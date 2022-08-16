@@ -134,8 +134,6 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 	c.header = header
 	c.statedb = statedb
 
-	fmt.Printf("executor endblock statedb %p\n", c.statedb)
-
 	ctx := makeContext(c.blockContext, c.config, c.header, c.statedb)
 	c.db.SetContext(ctx)
 
@@ -163,9 +161,7 @@ func (c *Executor) EndBlock() {
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
-	root := c.statedb.IntermediateRoot(true)
 
-	fmt.Printf("executor endblock statedb %s %p\n", root.Hex(), c.statedb)
 	println("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
 }
 

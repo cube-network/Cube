@@ -364,8 +364,8 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 // newWorkLoop is a standalone goroutine to submit new mining work upon received events.
 func (w *worker) newWorkLoop(recommit time.Duration) {
 	defer w.wg.Done()
-	factor := time.Second
-	recommit += factor
+	// factor := time.Second
+	// recommit += factor
 	var (
 		interrupt   *int32
 		minRecommit = recommit // minimal resubmit interval specified by user.
@@ -1090,6 +1090,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	println("worker commit...")
 	crosschain.GetCrossChain().Seal(w.current.crosschain)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)

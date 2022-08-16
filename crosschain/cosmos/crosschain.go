@@ -26,6 +26,7 @@ type Cosmos struct {
 	codec        EncodingConfig
 	blockContext vm.BlockContext
 	statefn      cccommon.StateFn
+	headerfn     cccommon.GetHeaderByNumberFn
 
 	querymu       sync.Mutex
 	queryExecutor *Executor
@@ -46,6 +47,7 @@ func (c *Cosmos) Init(datadir string,
 	config *params.ChainConfig,
 	blockContext vm.BlockContext,
 	statefn cccommon.StateFn,
+	headerfn cccommon.GetHeaderByNumberFn,
 	header *types.Header) {
 
 	c.callmu.Lock()
@@ -58,6 +60,7 @@ func (c *Cosmos) Init(datadir string,
 		c.config = config
 		c.blockContext = blockContext
 		c.statefn = statefn
+		c.headerfn = headerfn
 		c.header = header
 
 		c.codec = MakeEncodingConfig()
@@ -69,7 +72,7 @@ func (c *Cosmos) Init(datadir string,
 			panic("cosmos init state root not found")
 		}
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, true)
-		c.chain = MakeCosmosChain(config.ChainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json")
+		c.chain = MakeCosmosChain(config.ChainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json", headerfn)
 	})
 
 }

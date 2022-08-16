@@ -107,7 +107,6 @@ func (st *Store) GetImmutable(version int64) (*Store, error) {
 func (st *Store) Commit() types.CommitID {
 	defer telemetry.MeasureSince(time.Now(), "store", "iavl", "commit")
 
-	fmt.Printf("store commit %p tree %p\n", st, st.tree)
 	hash, version, err := st.tree.SaveVersion()
 	if err != nil {
 		panic(err)
@@ -116,7 +115,6 @@ func (st *Store) Commit() types.CommitID {
 	// TODO
 	try_del_version := version - 128
 	if st.tree.VersionExists(try_del_version) {
-		println("del iavl version ", try_del_version)
 		err := st.tree.DeleteVersion(try_del_version)
 		if err != nil {
 			panic(err)
@@ -184,7 +182,6 @@ func (st *Store) Set(key, value []byte) {
 	types.AssertValidKey(key)
 	types.AssertValidValue(value)
 	st.tree.Set(key, value)
-	fmt.Printf("store set iavl %p, tree %p %s \n", st, st.tree, string(key))
 }
 
 // Implements types.KVStore.

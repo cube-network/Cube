@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cubetypes "github.com/ethereum/go-ethereum/core/types"
+	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -17,8 +18,9 @@ import (
 // validator index,pubkey
 
 type CosmosChain struct {
-	ChainID     string
-	light_block map[int64]*tenderminttypes.LightBlock // cache only for demo, write/read db instead later
+	ChainID string
+	// TODO lock
+	light_block map[int64]map[string]*tenderminttypes.LightBlock // cache only for demo, write/read db instead later
 	// light_block    *lru.ARCCache
 	validators     []*tenderminttypes.Validator // fixed for demo; full validator set, fixed validator set for demo,
 	priv_addr_idx  uint32
@@ -27,16 +29,19 @@ type CosmosChain struct {
 	blockID           tenderminttypes.BlockID // load best block height later
 	best_block_height uint64
 
-	cube_cosmos_header map[string][]byte
+	cube_cosmos_header map[int64]map[string]string
+	headerfn           cccommon.GetHeaderByNumberFn
 }
 
 // priv_validator_addr: chaos.validator
-func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_state_file string) *CosmosChain {
+func MakeCosmosChain(chainID string, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
 	// TODO chainID
 	c.ChainID = "ibc-1"
-	c.light_block = make(map[int64]*tenderminttypes.LightBlock)
+	c.headerfn = headerfn
+	c.light_block = make(map[int64]map[string]*tenderminttypes.LightBlock)
+	c.cube_cosmos_header = make(map[int64]map[string]string)
 	c.priv_validator = privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.priv_validator.Save()
 	// TODO load validator set
@@ -144,6 +149,12 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *cubetypes.Header) *tenderminttype
 	cc.Timestamp = v.Timestamp
 	cc.Signature = v.Signature
 
+	_, ok := c.cube_cosmos_header[light_block.Height]
+	if !ok {
+		c.cube_cosmos_header[light_block.Height] = make(map[string]string)
+	}
+	c.cube_cosmos_header[light_block.Height][h.Hash().Hex()] = light_block.Hash().String()
+	println("make header mapping ", h.Hash().Hex(), " ==> ", light_block.Hash().String(), " height ", light_block.Height)
 	c.Vote(light_block.Height, cc, light_block)
 
 	return light_block
@@ -160,18 +171,29 @@ func (c *CosmosChain) MakeLightBlockAndSign(h *cubetypes.Header) *tenderminttype
 
 func (c *CosmosChain) SetLightBlock(light_block *tenderminttypes.LightBlock) {
 	if len(c.light_block) > 1024 {
-		delete(c.light_block, light_block.Header.Height-100)
+		delete(c.light_block, light_block.Header.Height-1024)
+		delete(c.cube_cosmos_header, light_block.Header.Height-1024)
 	}
-	c.light_block[light_block.Height] = light_block
+	_, ok := c.light_block[light_block.Height]
+	if !ok {
+		c.light_block[light_block.Height] = make(map[string]*tenderminttypes.LightBlock)
+	}
+	println("set header ", light_block.Hash().String(), " height ", light_block.Height)
+	c.light_block[light_block.Height][light_block.Hash().String()] = light_block
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *tenderminttypes.LightBlock {
-	// TODO block_height is finalized??
-	// get cube header
-	// get cosmos light block by cube header.hash
+	h := c.headerfn(uint64(block_height))
+	hs := h.Hash().Hex()
 
-	// TODO
-	light_block, ok := c.light_block[block_height]
+	if _, ok := c.cube_cosmos_header[block_height][hs]; !ok {
+		return nil
+	}
+
+	cs := c.cube_cosmos_header[block_height][hs]
+
+	println("get header ", block_height, " cube hash ", hs, " cosmos hs ", cs)
+	light_block, ok := c.light_block[block_height][cs]
 	if ok {
 		if c.IsLightBlockValid(light_block) {
 			return light_block

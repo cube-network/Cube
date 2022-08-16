@@ -144,7 +144,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 		return nil, err
 	}
 	// TODO
-	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, state.NewDatabase(chainDb), leth.chainConfig, core.NewEVMBlockContext(leth.blockchain.CurrentHeader(), leth.blockchain, nil), nil, leth.blockchain.CurrentHeader())
+	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, state.NewDatabase(chainDb), leth.chainConfig, core.NewEVMBlockContext(leth.blockchain.CurrentHeader(), leth.blockchain, nil), nil, leth.blockchain.GetHeaderByNumber, leth.blockchain.CurrentHeader())
 
 	leth.chainReader = leth.blockchain
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)

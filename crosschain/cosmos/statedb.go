@@ -1,9 +1,7 @@
 package cosmos
 
 import (
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 
@@ -53,10 +51,10 @@ func (csdb *CosmosStateDB) Get(key []byte) ([]byte, error) {
 	}
 
 	if is_exist {
-		println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
+		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ")
 		return val, nil
 	} else {
-		println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
+		// println("store. get ", csdb.counter, " batch counter ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val ( nil ")
 
 		return nil, nil
 	}
@@ -81,10 +79,9 @@ func (csdb *CosmosStateDB) Has(key []byte) (bool, error) {
 }
 
 func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
-	csdb.counter++
-	fmt.Printf("csdb statedb %p\n", csdb.evm.StateDB)
 	csdb.mu.Lock()
 	defer csdb.mu.Unlock()
+	csdb.counter++
 
 	if csdb.evm == nil {
 		return errors.New("IBCStateDB not init")
@@ -108,7 +105,7 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 		println("Failed to Set, err", err.Error())
 		return err
 	}
-	println("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// println("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 
 	return nil
 }

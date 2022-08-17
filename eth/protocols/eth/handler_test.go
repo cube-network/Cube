@@ -17,7 +17,6 @@
 package eth
 
 import (
-	ct "github.com/tendermint/tendermint/types"
 	"math"
 	"math/big"
 	"math/rand"
@@ -436,7 +435,7 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		for _, hash := range tt.expect {
 			tmp := &core.CubeAndCosmosHeader{
 				Header:       backend.chain.GetBlockByHash(hash).Header(),
-				CosmosHeader: &ct.SignedHeader{},
+				CosmosHeader: &core.CosmosHeaderForP2P{},
 			}
 			headers = append(headers, tmp)
 		}

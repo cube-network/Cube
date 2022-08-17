@@ -189,12 +189,16 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 	}
 	// Filter out any explicitly requested headers, deliver the rest to the downloader
 	//var chs []*types.Header
+	log.Info("handleTwoHeaders", "count", len(headers))
 	chs := make([]*types.Header, len(headers))
-	for _, th := range headers {
-		chs = append(chs, th.Header)
+	for i, th := range headers {
+		log.Info("handleTwoHeaders", "index", i, "count", len(chs))
+		//chs = append(chs, th.Header)
+		chs[i] = th.Header
 		// todo: verify cosmos header
 		if h.chain.Cosmosapp != nil {
-			if err := h.chain.Cosmosapp.HandleHeader(th.Header, th.CosmosHeader); err != nil {
+			sh := core.SignedHeaderFromCosmosHeader(th.CosmosHeader)
+			if err := h.chain.Cosmosapp.HandleHeader(th.Header, sh); err != nil {
 				return err
 			}
 		}
@@ -226,6 +230,7 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
 		chs = h.blockFetcher.FilterHeaders(peer.ID(), chs, time.Now())
 	}
+	log.Info("handleTwoHeaders after filter", "count", len(chs))
 	if len(chs) > 0 || !filter {
 		err := h.downloader.DeliverHeaders(peer.ID(), chs)
 		if err != nil {
@@ -304,7 +309,8 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 
 	// todo: deal with cosmos header
 	if h.chain.Cosmosapp != nil {
-		err := h.chain.Cosmosapp.HandleHeader(block.Header(), blockAndHeader.CosmosHeader)
+		sh := core.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
+		err := h.chain.Cosmosapp.HandleHeader(block.Header(), sh)
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
 			return err

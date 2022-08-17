@@ -25,7 +25,6 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
@@ -381,8 +380,8 @@ func (s *Suite) sendNextBlock(isEth66 bool) error {
 	// create new block announcement
 	nextBlock := s.fullChain.blocks[s.chain.Len()]
 	blockAnnouncement := &NewBlock{
-		BlockAndHeader: &core.BlockAndCosmosHeader{Block: nextBlock},
-		TD:             s.fullChain.TotalDifficultyAt(s.chain.Len()),
+		Block: nextBlock,
+		TD:    s.fullChain.TotalDifficultyAt(s.chain.Len()),
 	}
 	// send announcement and wait for node to request the header
 	if err = s.testAnnounce(sendConn, recvConn, blockAnnouncement); err != nil {
@@ -487,8 +486,8 @@ func (s *Suite) oldAnnounce(isEth66 bool) error {
 	}
 	// create old block announcement
 	oldBlockAnnounce := &NewBlock{
-		BlockAndHeader: &core.BlockAndCosmosHeader{CosmosHeader: nil, Block: s.chain.blocks[len(s.chain.blocks)/2]},
-		TD:             s.chain.blocks[len(s.chain.blocks)/2].Difficulty(),
+		Block: s.chain.blocks[len(s.chain.blocks)/2],
+		TD:    s.chain.blocks[len(s.chain.blocks)/2].Difficulty(),
 	}
 	if err := sendConn.Write(oldBlockAnnounce); err != nil {
 		return fmt.Errorf("could not write to connection: %v", err)
@@ -496,14 +495,14 @@ func (s *Suite) oldAnnounce(isEth66 bool) error {
 	// wait to see if the announcement is propagated
 	switch msg := receiveConn.readAndServe(s.chain, time.Second*8).(type) {
 	case *NewBlock:
-		block := (*msg).BlockAndHeader
-		if block.Block.Hash() == oldBlockAnnounce.BlockAndHeader.Block.Hash() {
+		block := (*msg).Block
+		if block.Hash() == oldBlockAnnounce.Block.Hash() {
 			return fmt.Errorf("unexpected: block propagated: %s", pretty.Sdump(msg))
 		}
 	case *NewBlockHashes:
 		hashes := *msg
 		for _, hash := range hashes {
-			if hash.Hash == oldBlockAnnounce.BlockAndHeader.Block.Hash() {
+			if hash.Hash == oldBlockAnnounce.Block.Hash() {
 				return fmt.Errorf("unexpected: block announced: %s", pretty.Sdump(msg))
 			}
 		}

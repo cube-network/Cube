@@ -696,7 +696,7 @@ func (w *worker) resultLoop() {
 				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
 				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
 					block,
-					cosmosHeader,
+					core.CosmosHeaderFromSignedHeader(cosmosHeader),
 				}})
 			} else {
 				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())

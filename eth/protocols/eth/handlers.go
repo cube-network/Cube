@@ -140,6 +140,7 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 	hashMode := query.Origin.Hash != (common.Hash{})
 	first := true
 	maxNonCanonical := uint64(100)
+	log.Info("answer GetCubeAndCosmosHeaders", "count", query.Amount, "fromhash", query.Origin, "skip", query.Skip, "reverse", query.Reverse, "id", peer.ID())
 
 	// Gather headers until the fetch or network limits is reached
 	var (
@@ -176,10 +177,15 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 		}
 		h := &core.CubeAndCosmosHeader{
 			Header:       origin,
-			CosmosHeader: signedHeader,
+			CosmosHeader: core.CosmosHeaderFromSignedHeader(signedHeader),
 		}
 		headers = append(headers, h)
-		bytes += estHeaderSize
+		// todo:
+		if signedHeader == nil {
+			bytes += estHeaderSize
+		} else {
+			bytes += estHeaderSize * 2
+		}
 
 		// Advance to the next header of the query
 		switch {
@@ -227,6 +233,9 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 			// Number based traversal towards the leaf block
 			query.Origin.Number += query.Skip + 1
 		}
+	}
+	if len(headers) != int(query.Amount) {
+		log.Error("answer GetCubeAndCosmosHeaders error", "required", query.Amount, "given", len(headers))
 	}
 	return headers
 }
@@ -438,6 +447,7 @@ func handleNewCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) e
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 	requestTracker.Fulfil(peer.id, peer.version, CubeAndCosmosHeadersMsg, res.RequestId)
+	log.Info("handle CubeAndCosmosHeadersPacket66", "peer", peer.id)
 
 	return backend.Handle(peer, &res.CubeAndCosmosHeadersPacket)
 }

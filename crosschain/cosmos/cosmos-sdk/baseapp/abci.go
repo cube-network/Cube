@@ -158,11 +158,9 @@ func (app *BaseApp) BeginBlock(req abci.RequestBeginBlock) (res abci.ResponseBeg
 	// Initialize the DeliverTx state. If this is the first block, it should
 	// already be initialized in InitChain. Otherwise app.deliverState will be
 	// nil, since it is reset on Commit.
-	if app.deliverState == nil {
-		println("new deliver state with header!")
+	if /*req.Header.Height > 1 || */ app.deliverState == nil {
 		app.setDeliverState(req.Header)
 	} else {
-		println("exist deliver state!")
 		// In the first block, app.deliverState.ctx will already be initialized
 		// by InitChain. Context is now updated with Header information.
 		app.deliverState.ctx = app.deliverState.ctx.
@@ -311,6 +309,14 @@ func (app *BaseApp) Commit() (res abci.ResponseCommit) {
 	println("write done wait commit")
 	commitID := app.cms.Commit()
 	app.logger.Info("commit synced", "commit", fmt.Sprintf("%X", commitID))
+	println("============commit synced ", header.Height, fmt.Sprintf("%X", commitID))
+
+	//app.deliverState.ms.IteratorCache(func(key, value []byte, isDirty bool) bool {
+	//	if isDirty {
+	//		fmt.Println(hex.EncodeToString(key), hex.EncodeToString(value))
+	//	}
+	//	return true
+	//})
 
 	// Reset the Check state to the latest committed.
 	//

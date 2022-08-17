@@ -51,6 +51,8 @@ var (
 type Executor struct {
 	app *CosmosApp
 
+	coinbase  common.Address
+	chain     *CosmosChain
 	queryMode bool
 
 	db           *CosmosStateDB
@@ -98,6 +100,8 @@ func NewCosmosExecutor(datadir string,
 	blockContext vm.BlockContext,
 	statedb *state.StateDB,
 	header *types.Header,
+	coinbase common.Address,
+	chain *CosmosChain,
 	queryMode bool) *Executor {
 
 	db := NewCosmosStateDB(makeContext(blockContext, config, header, statedb))
@@ -111,6 +115,8 @@ func NewCosmosExecutor(datadir string,
 	executor.codec = codec
 	executor.header = header
 	executor.statedb = statedb
+	executor.coinbase = coinbase
+	executor.chain = chain
 	return executor
 }
 
@@ -162,6 +168,8 @@ func (c *Executor) EndBlock() {
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
+	c.chain.makeCosmosSignedHeader(c.header)
+
 	println("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
 }
 
@@ -194,6 +202,11 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	erc20code, _ := hex.DecodeString(ERC20FactoryCode)
 	evm.StateDB.SetCode(system.ERC20FactoryContract, erc20code)
 
+	// Addr2Pk
+	evm.StateDB.CreateAccount(system.AddrToPubkeyMapContract)
+	code, _ = hex.DecodeString(AddrToPubkeyMapCode)
+	evm.StateDB.SetCode(system.AddrToPubkeyMapContract, code)
+
 	// crosschain
 	c.app.LoadVersion2(0)
 	var genesisState GenesisState
@@ -203,6 +216,10 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 
 	c.app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: c.config.ChainID.String(), InitialHeight: init_block_height})
 	c.app.mm.InitGenesis(c.app.GetContextForDeliverTx([]byte{}), c.codec.Marshaler, genesisState)
+
+	// if c.coinbase == evm.Context.Coinbase {
+	c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
+	// }
 
 	// c.is_start_crosschain = true
 }

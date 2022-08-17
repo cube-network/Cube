@@ -18,6 +18,7 @@ package eth
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 
@@ -201,8 +202,25 @@ func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {
 	defer ps.lock.RUnlock()
 
 	list := make([]*ethPeer, 0, len(ps.peers))
+	fmt.Println("total peers", len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.KnownBlock(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+// peersWithoutCosmosHeader retrieves a list of peers that do not have a given cosmos-header in
+// their set of known hashes so it might be propagated to them.
+func (ps *peerSet) peersWithoutCosmosHeader(hash common.Hash) []*ethPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*ethPeer, 0, len(ps.peers))
+	fmt.Println("total peers", len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.KnownCosmosHeader(hash) {
 			list = append(list, p)
 		}
 	}

@@ -26,7 +26,7 @@ func (c *Cosmos) CosmosABCIQuery(path string, data bytes.HexBytes, opts tc.ABCIQ
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, c.queryExecutor.header) {
+	if !IsEnable(c.config, c.queryExecutor.header.Number) {
 		return nil, errors.New("Not Support")
 	}
 
@@ -44,7 +44,7 @@ func (c *Cosmos) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTx
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, c.queryExecutor.header) {
+	if !IsEnable(c.config, c.queryExecutor.header.Number) {
 		return nil, errors.New("Not Support")
 	}
 
@@ -70,7 +70,7 @@ func (c *Cosmos) CosmosValidators(height *int64, page, perPage *int) (*tt.Result
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, c.queryExecutor.header) {
+	if !IsEnable(c.config, c.queryExecutor.header.Number) {
 		return nil, errors.New("Not Support")
 	}
 
@@ -88,7 +88,7 @@ func (c *Cosmos) CosmosLightBlock(height *int64) ([]byte, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, c.queryExecutor.header) {
+	if !IsEnable(c.config, c.queryExecutor.header.Number) {
 		return nil, errors.New("Not Support")
 	}
 

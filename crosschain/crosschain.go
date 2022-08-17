@@ -3,6 +3,7 @@ package crosschain
 import (
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -11,10 +12,12 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	ct "github.com/tendermint/tendermint/types"
 )
 
 type CrossChain interface {
 	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, header *types.Header)
+	SetCoidbase(addr common.Address)
 
 	APIs() []rpc.API
 
@@ -23,8 +26,11 @@ type CrossChain interface {
 	Seal(exec vm.CrossChain)
 
 	EventHeader(header *types.Header)
-	SignHeader(header *types.Header) *cccommon.CrossChainSignature
-	VoteHeader(header *types.Header, signature *cccommon.CrossChainSignature)
+
+	// TODO remove cosmos info
+	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
+	GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader
+	HandleHeader(h *types.Header, header *ct.SignedHeader) error
 }
 
 var cc CrossChain

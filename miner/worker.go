@@ -685,19 +685,34 @@ func (w *worker) resultLoop() {
 				}
 				logs = append(logs, receipt.Logs...)
 			}
-			crosschain.GetCrossChain().FreeExecutor(task.crosschain)
+
 			// Commit block and state to database.
-			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true)
+			_, err := w.chain.WriteBlockWithState(block, receipts, logs, task.state, true, true)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
+			}
+			if len(block.Transactions()) > 0 {
+				log.Info("2 ================applyTransaction Proposer", "number", block.Number(), "hash", hash, "receipt", block.ReceiptHash())
 			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+			// TODO Make New Header
+			cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
+			if cosmosHeader != nil {
+				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
+				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
+					block,
+					core.CosmosHeaderFromSignedHeader(cosmosHeader),
+				}})
+			} else {
+				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+				w.mux.Post(core.NewMinedBlockEvent{block})
+			}
 
+			crosschain.GetCrossChain().FreeExecutor(task.crosschain)
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
@@ -803,7 +818,7 @@ func (w *worker) updateSnapshot() {
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
 	println("ApplyTransaction ", tx.Hash().Hex())
-
+	// todo: will change header.GasUsed
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, w.current.crosschain)
 	if err != nil {
 		w.current.state.RevertToSnapshot(snap)
@@ -811,6 +826,11 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	}
 	w.current.txs = append(w.current.txs, tx)
 	w.current.receipts = append(w.current.receipts, receipt)
+
+	var receiptsTypes types.Receipts
+	receiptsTypes = w.current.receipts
+	receiptSha := types.DeriveSha(receiptsTypes, trie.NewStackTrie(nil))
+	log.Info("1 ================applyTransaction Proposer", "number", w.current.header.Number, "hash", w.current.header.Hash(), "receipt", receiptSha)
 
 	return receipt.Logs, nil
 }
@@ -831,7 +851,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-
+	log.Info("commitTransactions", "number", w.current.header.Number, "hash", w.current.header.Hash())
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -1084,6 +1104,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			return
 		}
 	}
+	log.Info("commitNewWork before commit", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 

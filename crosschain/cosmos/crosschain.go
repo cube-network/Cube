@@ -2,18 +2,22 @@ package cosmos
 
 import (
 	"container/list"
-	"encoding/hex"
+	"errors"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	ct "github.com/tendermint/tendermint/types"
 )
 
 type Cosmos struct {
@@ -22,6 +26,8 @@ type Cosmos struct {
 	sdb     state.Database
 	config  *params.ChainConfig
 	header  *types.Header
+
+	coinbase common.Address
 
 	codec        EncodingConfig
 	blockContext vm.BlockContext
@@ -71,10 +77,13 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, true)
-		c.chain = MakeCosmosChain(config.ChainID.String(), datadir+"priv_validator_key.json", datadir+"priv_validator_state.json", headerfn)
+		c.chain = MakeCosmosChain(config, datadir+"priv_validator_key.json", datadir+"priv_validator_state.json", headerfn)
+		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
+}
 
+func (c *Cosmos) SetCoidbase(addr common.Address) {
+	c.coinbase = addr
 }
 
 func (c *Cosmos) APIs() []rpc.API {
@@ -84,15 +93,15 @@ func (c *Cosmos) APIs() []rpc.API {
 	return APIs(c)
 }
 
-func IsEnable(config *params.ChainConfig, header *types.Header) bool {
-	return config.IsCrosschainCosmos(header.Number)
+func IsEnable(config *params.ChainConfig, block_height *big.Int) bool {
+	return config.IsCrosschainCosmos(block_height)
 }
 
 func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.CrossChain {
 	c.callmu.Lock()
 	defer c.callmu.Unlock()
 
-	if !IsEnable(c.config, header) {
+	if !IsEnable(c.config, header.Number) {
 		return nil
 	}
 
@@ -103,7 +112,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// 	exector = elem.Value.(*Executor)
 	// 	c.callExectors.Remove(elem)
 	// } else {
-	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, false)
+	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, c.coinbase, c.chain, false)
 	// }
 	fmt.Printf("new exec %p \n", exector)
 	exector.BeginBlock(header, statedb)
@@ -119,7 +128,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 		return
 	}
 	executor := exec.(*Executor)
-	if executor == nil || !IsEnable(c.config, executor.header) {
+	if executor == nil || !IsEnable(c.config, executor.header.Number) {
 		return
 	}
 
@@ -138,7 +147,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	}
 	fmt.Printf("seal exec %p \n", exec)
 	executor := exec.(*Executor)
-	if executor == nil || !IsEnable(c.config, executor.header) {
+	if executor == nil || !IsEnable(c.config, executor.header.Number) {
 		return
 	}
 
@@ -149,14 +158,9 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, header) {
+	if !IsEnable(c.config, header.Number) {
 		return
 	}
-
-	app_hash := header.Extra[32:64]
-	println("event header ", header.Root.Hex(), " ", hex.EncodeToString(app_hash))
-
-	c.chain.MakeLightBlockAndSign(header)
 
 	var statedb *state.StateDB
 	var err error
@@ -172,11 +176,39 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	c.queryExecutor.BeginBlock(header, statedb)
 }
 
-func (c *Cosmos) SignHeader(header *types.Header) *cccommon.CrossChainSignature {
-	// TODO
-	return nil
+func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		return nil
+	}
+	return c.chain.getSignedHeader(height, hash)
 }
 
-func (c *Cosmos) VoteHeader(header *types.Header, signature *cccommon.CrossChainSignature) {
-	// TODO
+func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		return nil
+	}
+
+	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
+
+}
+
+func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	if !IsEnable(c.config, h.Number) {
+		return nil
+	}
+
+	if header == nil {
+		return errors.New("missing cosmos header")
+	}
+
+	return c.chain.handleSignedHeader(h, header)
 }

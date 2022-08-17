@@ -20,6 +20,7 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/ethereum/go-ethereum/log"
 	"io"
 	"math/big"
 	"reflect"
@@ -205,6 +206,7 @@ func NewBlock(header *Header, txs []*Transaction, uncles []*Header, receipts []*
 		b.header.ReceiptHash = EmptyRootHash
 	} else {
 		b.header.ReceiptHash = DeriveSha(Receipts(receipts), hasher)
+		log.Info("===========ReceiptHash", "number", b.Number(), "hash", b.Hash(), "receipt", b.header.ReceiptHash)
 		b.header.Bloom = CreateBloom(receipts)
 	}
 

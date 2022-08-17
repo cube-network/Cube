@@ -235,6 +235,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
 			return nil, err
 		}
+
+		// todo: update validators for CosmosApp
+
 	}
 
 	// Permit the downloader to use the trie cache allowance during fast sync
@@ -567,6 +570,8 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
+		crosschain.GetCrossChain().SetCoidbase(eb)
+
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)

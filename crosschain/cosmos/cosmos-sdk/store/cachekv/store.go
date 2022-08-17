@@ -2,6 +2,7 @@ package cachekv
 
 import (
 	"bytes"
+	"github.com/status-im/keycard-go/hexutils"
 	"io"
 	"sort"
 	"sync"
@@ -70,6 +71,30 @@ func (store *Store) Get(key []byte) (value []byte) {
 	return value
 }
 
+//func (store *Store) IteratorCache(isdirty bool, cb func(key string, value []byte, isDirty bool, isDelete bool, sKey types.StoreKey) bool, sKey types.StoreKey) bool {
+//	if cb == nil {
+//		return true
+//	}
+//	store.mtx.Lock()
+//	defer store.mtx.Unlock()
+//
+//	if isdirty {
+//		for key, v := range store.dirty {
+//			if !cb(key, v.value, true, v.deleted, sKey) {
+//				return false
+//			}
+//		}
+//	} else {
+//		for key, v := range store.readList {
+//			if !cb(key, v, false, false, sKey) {
+//				return false
+//			}
+//		}
+//	}
+//
+//	return true
+//}
+
 // Set implements types.KVStore.
 func (store *Store) Set(key []byte, value []byte) {
 	store.mtx.Lock()
@@ -107,10 +132,17 @@ func (store *Store) Write() {
 	// Not the best, but probably not a bottleneck depending.
 	keys := make([]string, 0, len(store.cache))
 
+	if len(store.cache) > 0 {
+		println("===============Write Store Start")
+	}
 	for key, dbValue := range store.cache {
 		if dbValue.dirty {
 			keys = append(keys, key)
+			println("===============Write Store: ", key, ",", hexutils.BytesToHex(dbValue.value))
 		}
+	}
+	if len(store.cache) > 0 {
+		println("===============Write Store End")
 	}
 
 	sort.Strings(keys)

@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -100,9 +101,26 @@ type MsgReadWriter interface {
 func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 	size, r, err := rlp.EncodeToReader(data)
 	if err != nil {
+		if msgcode == 0x07 {
+			log.Info("Send new block failed")
+		}
 		return err
 	}
-	return w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
+	if msgcode == 0x07 {
+		log.Info("Send new block succeed")
+	}
+	if msgcode == 0x16 {
+		log.Error("Send GetCubeAndCosmosHeadersMsg", "size", uint32(size))
+	}
+	err = w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
+	if err != nil {
+		if msgcode == 0x16 {
+			log.Error("Send GetCubeAndCosmosHeadersMsg failed", "err", err)
+		}
+		log.Error("Send message failed", "code", msgcode, "err", err)
+	}
+	log.Info("send message", "code", msgcode)
+	return err
 }
 
 // SendItems writes an RLP with the given code and data elements.
@@ -183,6 +201,9 @@ func (p *MsgPipeRW) WriteMsg(msg Msg) error {
 	if atomic.LoadInt32(p.closed) == 0 {
 		consumed := make(chan struct{}, 1)
 		msg.Payload = &eofSignal{msg.Payload, msg.Size, consumed}
+		if msg.Code == 0x16 {
+			log.Info("write GetCubeAndCosmosHeadersMsg")
+		}
 		select {
 		case p.w <- msg:
 			if msg.Size > 0 {
@@ -304,6 +325,9 @@ func (ev *msgEventer) ReadMsg() (Msg, error) {
 func (ev *msgEventer) WriteMsg(msg Msg) error {
 	err := ev.MsgReadWriter.WriteMsg(msg)
 	if err != nil {
+		if msg.Code == 0x16 {
+			log.Info("write GetCubeAndCosmosHeadersMsg failed", "err", err)
+		}
 		return err
 	}
 	ev.feed.Send(&PeerEvent{

@@ -9,7 +9,7 @@ contract ERC20Factory {
     string[] private _tokens;
 
     function createERC20(string memory _name, string memory _symbol) internal {
-//        require(address(_created[name]) == address(0), "ERC20: token already exists");
+        //        require(address(_created[name]) == address(0), "ERC20: token already exists");
         _created[_name] = new IBCERC20(_name, _symbol);
         _tokens.push(_name);
         _count++;
@@ -96,7 +96,7 @@ contract ERC20Factory {
         _created[name].decreaseAllowance(spender, 1000);
         return true;
     }
-    
+
     function destroyCoin(string memory name) public returns (bool) {
         if(address(_created[name]) == address(0)) {
             return true;
@@ -104,7 +104,7 @@ contract ERC20Factory {
         require(_created[name].totalSupply() == 0, "ERC20: total supply is not zero");
         delete _created[name];
         _count--;
-//        _tokens.pop(name);    // todo: delete element from _tokens
+        //        _tokens.pop(name);    // todo: delete element from _tokens
 
         return true;
     }

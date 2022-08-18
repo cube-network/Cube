@@ -109,6 +109,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
 	c.blockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 	signatures := make([]ct.CommitSig, c.valsMgr.Validators.Size())
+	for i := 0; i < len(signatures); i++ {
+		signatures[i].BlockIDFlag = ct.BlockIDFlagAbsent
+	}
 
 	commit := &ct.Commit{Height: header.Height, Round: 1, BlockID: c.blockID, Signatures: signatures}
 	signedHeader := &ct.SignedHeader{Header: header, Commit: commit}
@@ -246,3 +249,5 @@ func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 	_, validators := c.valsMgr.getValidators(h)
 	return &ct.LightBlock{SignedHeader: header, ValidatorSet: validators}
 }
+
+// TODO voting power check

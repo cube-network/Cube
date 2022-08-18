@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
+	"github.com/tendermint/tendermint/types"
 	ct "github.com/tendermint/tendermint/types"
 )
 
@@ -148,6 +149,26 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 	}
 	v := vote.ToProto()
 	c.privValidator.SignVote(c.ChainID, v)
+	{
+		height, round := vote.Height, vote.Round
+
+		signBytes := types.VoteSignBytes(c.ChainID, v)
+
+		// It passed the checks. Sign the vote
+		sig, err := c.privValidator.Key.PrivKey.Sign(signBytes)
+		if err != nil {
+			log.Debug("sign error! ", err.Error())
+			panic("unexpected sign error ")
+		}
+		c.privValidator.LastSignState.Height = height
+		c.privValidator.LastSignState.Round = round
+		c.privValidator.LastSignState.Step = 3 /*step*/
+		c.privValidator.LastSignState.Signature = sig
+		c.privValidator.LastSignState.SignBytes = signBytes
+		c.privValidator.LastSignState.Save()
+
+		v.Signature = sig
+	}
 
 	cc := ct.CommitSig{}
 	cc.BlockIDFlag = ct.BlockIDFlagCommit

@@ -3,7 +3,6 @@ package cosmos
 import (
 	"container/list"
 	"errors"
-	"fmt"
 	"math/big"
 	"sync"
 
@@ -114,10 +113,13 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// } else {
 	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, c.coinbase, c.chain, false)
 	// }
-	fmt.Printf("new exec %p \n", exector)
-	exector.BeginBlock(header, statedb)
+
 	c.newExecutorCounter++
+	log.Debug("new exec %p \n", exector)
 	log.Debug("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64())
+
+	exector.BeginBlock(header, statedb)
+
 	return exector
 }
 
@@ -135,7 +137,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
 	log.Debug("freeExecutorCounter ", c.freeExecutorCounter)
-	fmt.Printf("free exec %p \n", exec)
+	log.Debug("free exec %p \n", exec)
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain) {
@@ -145,7 +147,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	if exec == nil {
 		return
 	}
-	fmt.Printf("seal exec %p \n", exec)
+	log.Debug("seal exec %p \n", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
 		return
@@ -173,7 +175,8 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	}
 
 	if err != nil {
-		panic("cosmos event header state root not found")
+		log.Warn("cosmos event header state root not found, maybe reorg...")
+		return
 	}
 	c.queryExecutor.BeginBlock(header, statedb)
 }

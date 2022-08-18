@@ -124,7 +124,7 @@ func SetState(ctx sdk.Context, key []byte, val []byte, prefix string) ([]byte, e
 	}
 
 	method := "set"
-	_, err := callContract(ctx, system.IBCStateContract, method, key, val, ctx.EVM().Context.BlockNumber.Uint64(), prefix)
+	_, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key, val, ctx.EVM().Context.BlockNumber.Uint64(), prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -133,11 +133,11 @@ func SetState(ctx sdk.Context, key []byte, val []byte, prefix string) ([]byte, e
 
 func GetRoot(ctx sdk.Context, prefix string) ([][]byte, [][]byte, error) {
 	method := "getroot"
-	result, err := callContract(ctx, system.IBCStateContract, method, prefix)
+	result, err := callContract(ctx, system.CrossChainCosmosStateContract, method, prefix)
 	if err != nil {
 		return nil, nil, err
 	}
-	ret, err := system.ABIUnpack(system.IBCStateContract, method, result)
+	ret, err := system.ABIUnpack(system.CrossChainCosmosStateContract, method, result)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -158,11 +158,11 @@ func GetRoot(ctx sdk.Context, prefix string) ([][]byte, [][]byte, error) {
 
 func GetState(ctx sdk.Context, key []byte) (bool, []byte, error) {
 	method := "get"
-	result, err := callContract(ctx, system.IBCStateContract, method, key)
+	result, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key)
 	if err != nil {
 		return false, nil, err
 	}
-	ret, err := system.ABIUnpack(system.IBCStateContract, method, result)
+	ret, err := system.ABIUnpack(system.CrossChainCosmosStateContract, method, result)
 	if err != nil {
 		return false, nil, err
 	}
@@ -186,7 +186,7 @@ func GetState(ctx sdk.Context, key []byte) (bool, []byte, error) {
 
 func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
 	method := "del"
-	_, err := callContract(ctx, system.IBCStateContract, method, key)
+	_, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
 
 func ClearState(ctx sdk.Context, block_number uint64) ([]byte, error) {
 	method := "clear"
-	_, err := callContract(ctx, system.IBCStateContract, method, block_number)
+	_, err := callContract(ctx, system.CrossChainCosmosStateContract, method, block_number)
 	if err != nil {
 		return nil, err
 	}

@@ -51,9 +51,9 @@ func (mdb *IBCStateDB) SetEVM(config *params.ChainConfig, blockContext vm.BlockC
 	if state_root.Hex() == empty_state_root.Hex() {
 		// todo: state_root
 		println("init statedb with code/account")
-		statedb.CreateAccount(system.IBCStateContract)
+		statedb.CreateAccount(system.CrossChainCosmosStateContract)
 		code, _ := hex.DecodeString(StateContractCode)
-		statedb.SetCode(system.IBCStateContract, code)
+		statedb.SetCode(system.CrossChainCosmosStateContract, code)
 
 		return false
 	}

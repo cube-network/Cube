@@ -30,8 +30,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
-	ct "github.com/tendermint/tendermint/types"
 	"github.com/ethereum/go-ethereum/trie"
+	ct "github.com/tendermint/tendermint/types"
 )
 
 const (
@@ -204,10 +204,10 @@ type BlockFetcher struct {
 	queued map[common.Hash]*blockOrHeaderInject // Set of already queued blocks (to dedup imports)
 
 	// Callbacks
-	getHeader               HeaderRetrievalFn           // Retrieves a header from the local chain
-	getBlock                blockRetrievalFn            // Retrieves a block from the local chain
-	verifyHeader            headerVerifierFn            // Checks if a block's headers have a valid proof of work
-	broadcastBlock          blockBroadcasterFn          // Broadcasts a block to connected peers
+	getHeader               HeaderRetrievalFn  // Retrieves a header from the local chain
+	getBlock                blockRetrievalFn   // Retrieves a block from the local chain
+	verifyHeader            headerVerifierFn   // Checks if a block's headers have a valid proof of work
+	broadcastBlock          blockBroadcasterFn // Broadcasts a block to connected peers
 	getCosmosHeader         cosmosHeaderRetrievalFn
 	broadcastBlockAndHeader blockAndHeaderBroadcasterFn // Broadcasts a block and a cosmos header to connected peers
 	chainHeight             chainHeightFn               // Retrieves the current chain's height
@@ -225,7 +225,7 @@ type BlockFetcher struct {
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, broadcastBlockAndHeader blockAndHeaderBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
+func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, getCosmosHeader cosmosHeaderRetrievalFn, broadcastBlockAndHeader blockAndHeaderBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
 	return &BlockFetcher{
 		light:                   light,
 		notify:                  make(chan *blockAnnounce),

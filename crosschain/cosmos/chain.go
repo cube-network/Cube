@@ -1,7 +1,7 @@
 package cosmos
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -58,6 +58,7 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 
 	c.getHeaderByNumber = headerfn
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
+	//c.valsMgr = &ValidatorsMgr{}
 	c.valsMgr = &ValidatorsMgr{config: c.config, getHeaderByNumber: headerfn}
 
 	// TODO load best block
@@ -114,6 +115,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	signedHeader := &ct.SignedHeader{Header: header, Commit: commit}
 
 	c.voteSignedHeader(signedHeader)
+
+	//signedHeader := &ct.SignedHeader{Header: header, Commit: nil}
+
 	// store header
 	c.storeSignedHeader(h.Hash(), signedHeader)
 	c.latestSignedHeight = h.Number.Uint64()
@@ -156,43 +160,86 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) error {
 	log.Info("handleSignedHeader", "height", h.Number, "hash", h.Hash())
 
-	if err := header.ValidateBasic(c.ChainID); err != nil {
-		return err
+	if header.Header == nil {
+		return errors.New("missing header")
+	}
+	if header.Commit == nil {
+		return errors.New("missing commit")
 	}
 
-	// check state_root
-	var app_hash common.Hash
-	copy(app_hash[:], h.Extra[32:64])
+	//// check state_root
+	//var app_hash common.Hash
+	//copy(app_hash[:], h.Extra[32:64])
+	//
+	//// check validators
+	//_, vals := c.valsMgr.getValidators(h)
+	//if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
+	//	return fmt.Errorf("Verify validatorsHash failed. number=%f hash=%s\n", h.Number, h.Hash())
+	//}
+	//// check proposer
+	//proposer := c.valsMgr.getValidator(h.Coinbase)
+	//if !bytes.Equal(proposer.Address, header.ProposerAddress) {
+	//	return fmt.Errorf("Verify proposer failed. number=%f hash=%s\n", h.Number, h.Hash())
+	//}
 
-	// check validators
-	_, vals := c.valsMgr.getValidators(h)
-	if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
-		return fmt.Errorf("Verify validatorsHash failed. number=%f hash=%s\n", h.Number, h.Hash())
+	if err := header.Header.ValidateBasic(); err != nil {
+		return fmt.Errorf("invalid header: %w", err)
 	}
-	// check proposer
-	proposer := c.valsMgr.getValidator(h.Coinbase)
-	if !bytes.Equal(proposer.Address, header.ProposerAddress) {
-		return fmt.Errorf("Verify proposer failed. number=%f hash=%s\n", h.Number, h.Hash())
+	for _, sig := range header.Commit.Signatures {
+		if len(sig.Signature) > 0 {
+			if err := sig.ValidateBasic(); err != nil {
+				return fmt.Errorf("invalid commit: %w", err)
+			}
+		}
 	}
-
-	// TODO 2/3 signature
-	// check votes
-	sigs := header.Commit.Signatures
-	if len(sigs) < 1 {
-		return fmt.Errorf("Commit signatures are wrong. number=%f hash=%s\n", h.Number, h.Hash())
+	if header.ChainID != c.ChainID {
+		return fmt.Errorf("header belongs to another chain %q, not %q", header.ChainID, c.ChainID)
 	}
 
-	//voteSet := ct.CommitToVoteSet(c.ChainID, header.Commit, vals)
-	// check proposer's signature
-	idx, val := vals.GetByAddress(proposer.Address)
-	vote := header.Commit.GetByIndex(idx) //voteSet.GetByIndex(idx)
-	if err := vote.Verify(c.ChainID, val.PubKey); err != nil {
-		return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
-	}
+	//// Make sure the header is consistent with the commit.
+	//if header.Commit.Height != header.Height {
+	//	return fmt.Errorf("header and commit height mismatch: %d vs %d", header.Height, header.Commit.Height)
+	//}
+	//if hhash, chash := header.Header.Hash(), header.Commit.BlockID.Hash; !bytes.Equal(hhash, chash) {
+	//	return fmt.Errorf("commit signs block %X, header is block %X", chash, hhash)
+	//}
+	//if err := header.ValidateBasic(c.ChainID); err != nil {
+	//	return err
+	//}
+
+	// todo:need to be verified
+	//// check state_root
+	//var stateRoot common.Hash
+	//copy(stateRoot[:], h.Extra[:32])
+	//
+	//// check validators
+	//_, vals := c.valsMgr.getValidators(h)
+	//if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
+	//	return fmt.Errorf("Verify validatorsHash failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
+	//}
+
+	//// check proposer
+	//proposer := c.valsMgr.getValidator(h.Coinbase)
+	//if !bytes.Equal(proposer.Address, header.ProposerAddress) {
+	//	return fmt.Errorf("Verify proposer failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
+	//}
+
+	//// todo: check votes
+	//sigs := header.Commit.Signatures
+	//if len(sigs) < 1 {
+	//	return fmt.Errorf("Commit signatures are wrong. number=%f hash=%s\n", h.Number, h.Hash())
+	//}
+	//
+	////voteSet := ct.CommitToVoteSet(c.ChainID, header.Commit, vals)
+	//// check proposer's signature
+	//idx, val := c.valsMgr.Validators.GetByAddress(proposer.Address)
+	//vote := header.Commit.GetByIndex(idx) //voteSet.GetByIndex(idx)
+	//if err := vote.Verify(c.ChainID, val.PubKey); err != nil {
+	//	return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
+	//}
 
 	// todo: check other signatures
 
-	// TODO merge signature, not replace header
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
 

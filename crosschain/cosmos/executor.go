@@ -3,6 +3,7 @@ package cosmos
 import (
 	"encoding/hex"
 	"fmt"
+
 	"math/big"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/expectedkeepers"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/gogo/protobuf/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -135,7 +137,7 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
-	println("begin block height ", header.Number.Int64(), " root ", header.Root.Hex())
+	log.Debug("begin block height ", header.Number.Int64(), " root ", header.Root.Hex())
 
 	c.header = header
 	c.statedb = statedb
@@ -170,7 +172,7 @@ func (c *Executor) EndBlock() {
 
 	c.chain.makeCosmosSignedHeader(c.header)
 
-	println("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
+	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
@@ -179,7 +181,7 @@ func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_numb
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_last, app_hash_last)
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_cur, app_hash)
 
-	println("setstate ", app_hash_last.Hex(), " ", app_hash.Hex())
+	log.Debug("setstate ", app_hash_last.Hex(), " ", app_hash.Hex())
 
 	cn := common.BigToHash(big.NewInt(block_number))
 	statedb.SetState(system.CrossChainCosmosContract, state_block_number, cn)
@@ -190,7 +192,7 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	c.SetState(evm.StateDB, common.Hash{}, init_block_height)
 
 	// cosmos state contract
-	println("init statedb with code/account")
+	log.Debug("init statedb with code/account")
 	evm.StateDB.CreateAccount(system.CrossChainCosmosStateContract)
 	code, _ := hex.DecodeString(StateContractCode)
 	evm.StateDB.SetCode(system.CrossChainCosmosStateContract, code)
@@ -227,7 +229,7 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 // TODO get cube block header instead
 func (c *Executor) Load(init_block_height int64) {
 	// if !c.is_start_crosschain {
-	println("load version... ", init_block_height)
+	log.Debug("load version... ", init_block_height)
 	c.app.LoadVersion2(init_block_height)
 	// c.is_start_crosschain = true
 	// }
@@ -279,7 +281,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 		if handler := c.app.MsgServiceRouter().Handler(msg); handler != nil {
 			msgResult, err := handler(c.app.GetContextForTx(evm.SimulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
-			println("process tx ", eventMsgName)
+			log.Debug("process tx ", eventMsgName)
 			if err != nil {
 				fmt.Println("process tx fail, eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted
@@ -336,7 +338,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 				keys := rcvPacketQuery(srcchan, s)
 				key := keys[0] + "/" + keys[1]
 				c.db.Set([]byte(key)[:], rdtxd[:])
-				println("write pkt ", key)
+				log.Debug("write pkt ", key)
 			}
 			dstchan, okdstchan := attributes[chant.AttributeKeyDstChannel]
 			if okdstchan && event.Type == waTag {
@@ -344,7 +346,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 				keys := ackPacketQuery(dstchan, s)
 				key := keys[0] + "/" + keys[1]
 				c.db.Set([]byte(key)[:], rdtxd[:])
-				println("write pkt ", key)
+				log.Debug("write pkt ", key)
 			}
 		}
 	}

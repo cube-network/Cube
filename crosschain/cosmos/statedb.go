@@ -8,6 +8,7 @@ import (
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
+	"github.com/ethereum/go-ethereum/log"
 	dbm "github.com/tendermint/tm-db"
 )
 
@@ -46,7 +47,7 @@ func (csdb *CosmosStateDB) Get(key []byte) ([]byte, error) {
 	ctx := sdk.Context{}.WithEvm(csdb.evm)
 	is_exist, val, err := systemcontract.GetState(ctx, key)
 	if err != nil {
-		println("Failed to Get, err", err.Error())
+		log.Debug("Failed to Get, err", err.Error())
 		return nil, err
 	}
 
@@ -70,7 +71,7 @@ func (csdb *CosmosStateDB) Has(key []byte) (bool, error) {
 	ctx := sdk.Context{}.WithEvm(csdb.evm)
 	is_exist, _, err := systemcontract.GetState(ctx, key)
 	if err != nil {
-		println("Failed to Has, err", err.Error())
+		log.Debug("Failed to Has, err", err.Error())
 		return false, err
 	}
 	// println("store. has ", csdb.counter, " key (", len(key), ")", string(key), " is exist ", is_exist)
@@ -102,7 +103,7 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 	ctx := sdk.Context{}.WithEvm(csdb.evm)
 	_, err := systemcontract.SetState(ctx, key, val, prefix)
 	if err != nil {
-		println("Failed to Set, err", err.Error())
+		log.Debug("Failed to Set, err", err.Error())
 		return err
 	}
 	// println("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
@@ -124,7 +125,7 @@ func (csdb *CosmosStateDB) Delete(key []byte) error {
 	ctx := sdk.Context{}.WithEvm(csdb.evm)
 	_, err := systemcontract.DelState(ctx, key)
 	if err != nil {
-		println("Failed to Del, err", err.Error())
+		log.Debug("Failed to Del, err", err.Error())
 		return err
 	}
 
@@ -204,7 +205,7 @@ func (csdb *CosmosStateDB) NewCosmosStateIterator(is_reverse bool, start []byte,
 	ctx := sdk.Context{}.WithEvm(csdb.evm)
 	keys, vals, err := systemcontract.GetRoot(ctx, dictkey)
 	if err != nil {
-		println("Failed to Get, err", err.Error())
+		log.Debug("Failed to Get, err", err.Error())
 		return nil, err
 	}
 	// // 10, 9, 8

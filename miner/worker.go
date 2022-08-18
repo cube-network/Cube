@@ -387,7 +387,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.exitCh:
 			return
 		}
-		println("recommit... ", recommit)
+		log.Debug("recommit... ", recommit)
 		timer.Reset(recommit)
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
@@ -405,13 +405,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	for {
 		select {
 		case <-w.startCh:
-			println("start  send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("start  send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			println("chainHeadCh send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("chainHeadCh send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
@@ -421,12 +421,12 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
-				println("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
+				log.Debug("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
 					continue
 				}
-				println("\n\ntimer send newWorkCh....", time.Now().UTC().String())
+				log.Debug("\n\ntimer send newWorkCh....", time.Now().UTC().String())
 				commit(true, commitInterruptResubmit)
 			}
 
@@ -481,11 +481,11 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			println(" recv newWorkCh....", time.Now().UTC().String())
+			log.Debug(" recv newWorkCh....", time.Now().UTC().String())
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
-			println(" recv chainSideCh....", time.Now().UTC().String())
+			log.Debug(" recv chainSideCh....", time.Now().UTC().String())
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
@@ -520,13 +520,13 @@ func (w *worker) mainLoop() {
 						uncles = append(uncles, uncle.Header())
 						return false
 					})
-					println("child chainch commit...")
+					log.Debug("child chainch commit...")
 					// w.commit(uncles, nil, true, start)
 				}
 			}
 
 		case ev := <-w.txsCh:
-			println(" recv txsCh.... ", len(ev.Txs), time.Now().UTC().String())
+			log.Debug(" recv txsCh.... ", len(ev.Txs), time.Now().UTC().String())
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -548,7 +548,7 @@ func (w *worker) mainLoop() {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
-				println("recv txsCh commitTransactions...")
+				log.Debug("recv txsCh commitTransactions...")
 				w.commitTransactions(txset, coinbase, nil)
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -560,12 +560,12 @@ func (w *worker) mainLoop() {
 				// submit mining work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					println("recv txsCh commitnetwork unexpected...")
+					log.Debug("recv txsCh commitnetwork unexpected...")
 					w.commitNewWork(nil, true, time.Now().Unix())
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
-			println("txsch txs size ", atomic.LoadInt32(&w.newTxs))
+			log.Debug("txsch txs size ", atomic.LoadInt32(&w.newTxs))
 
 		// System stopped
 		case <-w.exitCh:
@@ -599,7 +599,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
-			println("worker commit recv taskCh... ", time.Now().UTC().String())
+			log.Debug("worker commit recv taskCh... ", time.Now().UTC().String())
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -638,7 +638,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
-			println("worker resultLoop resultCh... ", time.Now().UTC().String())
+			log.Debug("worker resultLoop resultCh... ", time.Now().UTC().String())
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -817,7 +817,7 @@ func (w *worker) updateSnapshot() {
 
 func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Address) ([]*types.Log, error) {
 	snap := w.current.state.Snapshot()
-	println("ApplyTransaction ", tx.Hash().Hex())
+	log.Debug("ApplyTransaction ", tx.Hash().Hex())
 	// todo: will change header.GasUsed
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &coinbase, w.current.gasPool, w.current.state, w.current.header, tx, &w.current.header.GasUsed, *w.chain.GetVMConfig(), w.current.accessFilter, w.current.crosschain)
 	if err != nil {
@@ -970,7 +970,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	println("worker commitNewWork...", time.Now().UTC().String())
+	log.Debug("worker commitNewWork...", time.Now().UTC().String())
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 
@@ -1091,7 +1091,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-	println("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
+	log.Debug("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
@@ -1111,7 +1111,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
-	println("worker commit...")
+	log.Debug("worker commit...")
 	crosschain.GetCrossChain().Seal(w.current.crosschain)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
@@ -1129,7 +1129,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), crosschain: w.current.crosschain}:
-			println("worker commit send taskCh... ", time.Now().UTC().String())
+			log.Debug("worker commit send taskCh... ", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,

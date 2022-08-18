@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -15,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	ct "github.com/tendermint/tendermint/types"
@@ -117,7 +117,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	fmt.Printf("new exec %p \n", exector)
 	exector.BeginBlock(header, statedb)
 	c.newExecutorCounter++
-	println("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64(), " ts ", time.Now().UTC().String())
+	log.Debug("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64())
 	return exector
 }
 
@@ -134,7 +134,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
-	println("freeExecutorCounter ", c.freeExecutorCounter)
+	log.Debug("freeExecutorCounter ", c.freeExecutorCounter)
 	fmt.Printf("free exec %p \n", exec)
 }
 
@@ -162,7 +162,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		return
 	}
 
-	println("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex())
+	log.Info("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex())
 
 	var statedb *state.StateDB
 	var err error

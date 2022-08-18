@@ -288,7 +288,6 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 // CallCode differs from Call in the sense that it executes the given address'
 // code with the caller as context.
 func (evm *EVM) CallCode(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
-	println("call code ", addr.Hex(), " caller  ", caller.Address().Hex())
 	if evm.Config.NoRecursion && evm.depth > 0 {
 		return nil, gas, nil
 	}

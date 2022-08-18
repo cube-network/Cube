@@ -1405,7 +1405,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
-			println("reorg... currentBLock ", block.Header().Number.Int64())
+			log.Debug("reorg... currentBLock ")
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
@@ -1437,12 +1437,12 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
-			println("ChainHeadEvent ", block.Header().Number.Uint64())
+			log.Debug("ChainHeadEvent ", block.Header().Number.Uint64())
 			crosschain.GetCrossChain().EventHeader(block.Header())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
-		println("writeBlockWithState send ChainSideEvent ", block.Header().Number.Uint64())
+		log.Debug("writeBlockWithState send ChainSideEvent ", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
@@ -1963,7 +1963,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 // blocks and inserts them to be part of the new canonical chain and accumulates
 // potential missing transactions and post an event about them.
 func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
-	println("reorg ....")
+	log.Debug("reorg ....")
 	var (
 		newChain    types.Blocks
 		oldChain    types.Blocks
@@ -2121,7 +2121,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 	if len(oldChain) > 0 {
 		for i := len(oldChain) - 1; i >= 0; i-- {
-			println("reorg chainsideevent...")
+			log.Debug("reorg chainsideevent...")
 			bc.chainSideFeed.Send(ChainSideEvent{Block: oldChain[i]})
 		}
 	}

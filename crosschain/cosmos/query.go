@@ -3,6 +3,8 @@ package cosmos
 import (
 	"errors"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	"github.com/ethereum/go-ethereum/rpc"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
@@ -51,10 +53,10 @@ func (c *Cosmos) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTx
 	key := events[0] + "/" + events[1]
 	data, err := c.queryExecutor.db.Get([]byte(key)[:])
 	if err != nil {
-		println("tx seach packet fail ", key, " ", err.Error())
+		log.Debug("tx seach packet fail ", key, " ", err.Error())
 		return nil, err
 	}
-	println("tx seach packet success ", key)
+	log.Debug("tx seach packet success ", key)
 
 	var rdt abci.ResponseDeliverTx
 	rdt.Unmarshal(data)

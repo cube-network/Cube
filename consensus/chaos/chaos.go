@@ -863,7 +863,7 @@ func (c *Chaos) Authorize(validator common.Address, signFn ValidatorFn, signTxFn
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Chaos) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	println("chaos seal... ", time.Now().UTC().String())
+	log.Debug("chaos seal... ")
 	header := block.Header()
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
@@ -917,18 +917,18 @@ func (c *Chaos) Seal(chain consensus.ChainHeaderReader, block *types.Block, resu
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
 
-	println("chaos delay... ", common.PrettyDuration(delay), " ", time.Now().UTC().String())
+	log.Debug("chaos delay... ", common.PrettyDuration(delay))
 	go func() {
 		select {
 		case <-stop:
 			return
 		case <-time.After(delay):
-			println("chaos after delay... ", time.Now().UTC().String())
+			log.Debug("chaos after delay... ")
 		}
 
 		select {
 		case results <- block.WithSeal(header):
-			println("chaos send chaos taskCh...", time.Now().UTC().String())
+			log.Debug("chaos send chaos taskCh...")
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", SealHash(header))
 		}

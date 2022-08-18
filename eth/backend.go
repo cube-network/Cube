@@ -203,6 +203,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	log.Debug("make cos mos app")
 	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, eth.blockchain.StateCache(), chainConfig, core.NewEVMBlockContext(eth.blockchain.CurrentBlock().Header(), eth.blockchain, nil), eth.blockchain.StateAt, eth.blockchain.GetHeaderByNumber, eth.blockchain.CurrentBlock().Header())
+	crosschain.GetCrossChain().SetGetHeaderFn(eth.blockchain.GetHeaderByNumber)
 
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
@@ -235,6 +236,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			log.Error("Init RewardsUpdatePeroid failed in Chaos", "err", err)
 			return nil, err
 		}
+
+		// todo: update validators for CosmosApp
+
 	}
 
 	// Permit the downloader to use the trie cache allowance during fast sync
@@ -567,6 +571,8 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
+		crosschain.GetCrossChain().SetCubeAddress(eb)
+
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)

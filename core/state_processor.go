@@ -149,6 +149,11 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 		commonTxs = append(commonTxs, tx)
+
+		var receiptsTypes types.Receipts
+		receiptsTypes = receipts
+		receiptSha := types.DeriveSha(receiptsTypes, trie.NewStackTrie(nil))
+		log.Info("================applyTransaction Validator 2", "number", blockNumber, "hash", header.Hash(), "txIndex", i, "receipt", receiptSha)
 	}
 	bloomWg.Wait()
 	returnErrBeforeWaitGroup = false
@@ -222,6 +227,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	if result.Failed() {
 		log.Debug("apply transaction with evm error", "txHash", tx.Hash().String(), "vmErr", result.Err)
 	}
+
+	//if len(receipt.Logs) > 0 {
+	//	log.Info("receipt info", "BlockNumber", receipt.BlockNumber.Int64(), "BlockHash", receipt.BlockHash, "Status", receipt.Status, "PostStatus", hexutils.BytesToHex(receipt.PostState), "CumulativeGasUsed", receipt.CumulativeGasUsed, "Logs", len(receipt.Logs))
+	//	reclog := receipt.Logs[0]
+	//	log.Info("receipt.Logs info", "Address", reclog.Address, "Data", hexutils.BytesToHex(reclog.Data), "Topics", len(reclog.Topics), "BlockNumber", reclog.BlockNumber, "TxHash", reclog.TxHash.Hex(), "TxIndex", reclog.TxIndex, "BlockHash", reclog.BlockHash, "Index", reclog.Index, "Removed", reclog.Removed)
+	//
+	//	log.Info("receipt other info", "Type", receipt.Type, "Bloom", receipt.Bloom.Big(), "TxHash", receipt.TxHash, "ContractAddress", receipt.ContractAddress.Hex(), "GasUsed", receipt.GasUsed, "TransactionIndex", receipt.TransactionIndex)
+	//}
 
 	return receipt, err
 }

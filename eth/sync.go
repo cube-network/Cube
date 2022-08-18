@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"github.com/ethereum/go-ethereum/core"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -256,6 +257,20 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		// scenario will most often crop up in private and hackathon networks with
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
+		//h.BroadcastBlock(&core.BlockAndCosmosHeader{
+		//	Block: head,
+		//}, false)
+		if h.chain.Cosmosapp != nil {
+			sh := h.chain.Cosmosapp.GetSignedHeader(head.NumberU64(), head.Hash())
+			if sh != nil {
+				bah := &core.BlockAndCosmosHeader{
+					CosmosHeader: core.CosmosHeaderFromSignedHeader(sh),
+					Block:        head,
+				}
+				h.BroadcastBlockAndHeader(bah, false)
+				return nil
+			}
+		}
 		h.BroadcastBlock(head, false)
 	}
 	return nil

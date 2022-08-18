@@ -199,6 +199,8 @@ func (p *Peer) Disconnect(reason DiscReason) {
 		p.testPipe.Close()
 	}
 
+	fmt.Println("================disconnect peer", "reason", reason)
+
 	select {
 	case p.disc <- reason:
 	case <-p.closed:
@@ -439,7 +441,7 @@ type protoRW struct {
 
 func (rw *protoRW) WriteMsg(msg Msg) (err error) {
 	if msg.Code >= rw.Length {
-		return newPeerError(errInvalidMsgCode, "not handled")
+		return newPeerError(errInvalidMsgCode, "not handled. code %d, length %d", msg.Code, rw.Length)
 	}
 	msg.meterCap = rw.cap()
 	msg.meterCode = msg.Code

@@ -913,6 +913,70 @@ const (
 			"type": "function"
 		  }
 	]`
+
+	AddrToPubkeyMapABI = `[
+    {
+      "inputs": [],
+      "name": "getAllValidators",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses_",
+          "type": "address[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "pubkeys_",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        }
+      ],
+      "name": "getValidator",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "pubkey",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "_pubkey",
+          "type": "string"
+        }
+      ],
+      "name": "registerValidator",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]`
 )
 
 // DevMappingPosition is the position of the state variable `devs`.
@@ -954,10 +1018,11 @@ var (
 	GenesisLockContract           = common.HexToAddress("0x000000000000000000000000000000000000F003")
 	AddressListContract           = common.HexToAddress("0x000000000000000000000000000000000000F004")
 	OnChainDaoContract            = common.HexToAddress("0x000000000000000000000000000000000000F005")
-	ERC20FactoryContract          = common.HexToAddress("0x000000000000000000000000000000000000F008")
+	ERC20FactoryContract    = common.HexToAddress("0x000000000000000000000000000000000000F008")
 	CrossChainCosmosContract      = common.HexToAddress("0x000000000000000000000000000000000000F009")
 	CrossChainCosmosStateContract = common.HexToAddress("0x000000000000000000000000000000000000F00A")
 	CrossChainCosmosModuleAccount = "000000000000000000000000000000000000F00B"
+	AddrToPubkeyMapContract = common.HexToAddress("0x000000000000000000000000000000000000F00A")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -976,6 +1041,7 @@ func init() {
 		ERC20FactoryContract:          ERC20FactoryABI,
 		CrossChainCosmosContract:      CrossChainCosmosABI,
 		CrossChainCosmosStateContract: CrossChainCosmosStateABI,
+		AddrToPubkeyMapContract: AddrToPubkeyMapABI,
 	} {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {
 			panic(err)

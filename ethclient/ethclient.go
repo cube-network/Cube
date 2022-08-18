@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math/big"
 
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -609,6 +610,15 @@ func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) ([]byte, 
 func (ec *Client) CosmosTxsSearch(ctx context.Context, page, limit int, events []string) (*tt.ResultTxSearch, error) {
 	q := &tt.ResultTxSearch{}
 	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosTxsSearch", page, limit, events)
+	if err != nil {
+		return q, err
+	}
+	return q, nil
+}
+
+func (ec *Client) CosmosBalances(ctx context.Context, account common.Address) (*sdk.Coins, error) {
+	q := &sdk.Coins{}
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosBalances", account)
 	if err != nil {
 		return q, err
 	}

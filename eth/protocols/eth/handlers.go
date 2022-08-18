@@ -19,12 +19,14 @@ package eth
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/trie"
+	ct "github.com/tendermint/tendermint/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
-	"github.com/ethereum/go-ethereum/trie"
 )
 
 // handleGetBlockHeaders66 is the eth/66 version of handleGetBlockHeaders
@@ -120,6 +122,120 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 			// Number based traversal towards the leaf block
 			query.Origin.Number += query.Skip + 1
 		}
+	}
+	return headers
+}
+
+func handleGetCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the complex header query
+	var query GetCubeAndCosmosHeadersPacket66
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	response := answerGetCubeAndCosmosHeadersQuery(backend, query.GetCubeAndCosmosHeadersPacket, peer)
+	return peer.ReplyCubeAndCosmosHeaders(query.RequestId, response)
+}
+
+func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmosHeadersPacket, peer *Peer) []*core.CubeAndCosmosHeader {
+	hashMode := query.Origin.Hash != (common.Hash{})
+	first := true
+	maxNonCanonical := uint64(100)
+	log.Info("answer GetCubeAndCosmosHeaders", "count", query.Amount, "fromhash", query.Origin, "skip", query.Skip, "reverse", query.Reverse, "id", peer.ID())
+
+	// Gather headers until the fetch or network limits is reached
+	var (
+		bytes common.StorageSize
+		//headers []*types.Header
+		headers []*core.CubeAndCosmosHeader
+		unknown bool
+		lookups int
+	)
+	for !unknown && len(headers) < int(query.Amount) && bytes < softResponseLimit &&
+		len(headers) < maxHeadersServe && lookups < 2*maxHeadersServe {
+		lookups++
+		// Retrieve the next header satisfying the query
+		var origin *types.Header
+		if hashMode {
+			if first {
+				first = false
+				origin = backend.Chain().GetHeaderByHash(query.Origin.Hash)
+				if origin != nil {
+					query.Origin.Number = origin.Number.Uint64()
+				}
+			} else {
+				origin = backend.Chain().GetHeader(query.Origin.Hash, query.Origin.Number)
+			}
+		} else {
+			origin = backend.Chain().GetHeaderByNumber(query.Origin.Number)
+		}
+		if origin == nil {
+			break
+		}
+		var signedHeader *ct.SignedHeader
+		if backend.Chain().Cosmosapp != nil {
+			signedHeader = backend.Chain().Cosmosapp.GetSignedHeader(origin.Number.Uint64(), origin.Hash())
+		}
+		h := &core.CubeAndCosmosHeader{
+			Header:       origin,
+			CosmosHeader: core.CosmosHeaderFromSignedHeader(signedHeader),
+		}
+		headers = append(headers, h)
+		// todo:
+		if signedHeader == nil {
+			bytes += estHeaderSize
+		} else {
+			bytes += estHeaderSize * 2
+		}
+
+		// Advance to the next header of the query
+		switch {
+		case hashMode && query.Reverse:
+			// Hash based traversal towards the genesis block
+			ancestor := query.Skip + 1
+			if ancestor == 0 {
+				unknown = true
+			} else {
+				query.Origin.Hash, query.Origin.Number = backend.Chain().GetAncestor(query.Origin.Hash, query.Origin.Number, ancestor, &maxNonCanonical)
+				unknown = (query.Origin.Hash == common.Hash{})
+			}
+		case hashMode && !query.Reverse:
+			// Hash based traversal towards the leaf block
+			var (
+				current = origin.Number.Uint64()
+				next    = current + query.Skip + 1
+			)
+			if next <= current {
+				infos, _ := json.MarshalIndent(peer.Peer.Info(), "", "  ")
+				peer.Log().Warn("GetBlockHeaders skip overflow attack", "current", current, "skip", query.Skip, "next", next, "attacker", infos)
+				unknown = true
+			} else {
+				if header := backend.Chain().GetHeaderByNumber(next); header != nil {
+					nextHash := header.Hash()
+					expOldHash, _ := backend.Chain().GetAncestor(nextHash, next, query.Skip+1, &maxNonCanonical)
+					if expOldHash == query.Origin.Hash {
+						query.Origin.Hash, query.Origin.Number = nextHash, next
+					} else {
+						unknown = true
+					}
+				} else {
+					unknown = true
+				}
+			}
+		case query.Reverse:
+			// Number based traversal towards the genesis block
+			if query.Origin.Number >= query.Skip+1 {
+				query.Origin.Number -= query.Skip + 1
+			} else {
+				unknown = true
+			}
+
+		case !query.Reverse:
+			// Number based traversal towards the leaf block
+			query.Origin.Number += query.Skip + 1
+		}
+	}
+	if len(headers) != int(query.Amount) {
+		log.Error("answer GetCubeAndCosmosHeaders error", "required", query.Amount, "given", len(headers))
 	}
 	return headers
 }
@@ -254,21 +370,86 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 	if err := ann.sanityCheck(); err != nil {
 		return err
 	}
-	if hash := types.CalcUncleHash(ann.Block.Uncles()); hash != ann.Block.UncleHash() {
-		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", ann.Block.UncleHash())
+
+	block := ann.Block
+	if hash := types.CalcUncleHash(block.Uncles()); hash != block.UncleHash() {
+		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", block.UncleHash())
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
 	}
-	if hash := types.DeriveSha(ann.Block.Transactions(), trie.NewStackTrie(nil)); hash != ann.Block.TxHash() {
-		log.Warn("Propagated block has invalid body", "have", hash, "exp", ann.Block.TxHash())
+	if hash := types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)); hash != block.TxHash() {
+		log.Warn("Propagated block has invalid body", "have", hash, "exp", block.TxHash())
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
 	}
-	ann.Block.ReceivedAt = msg.Time()
-	ann.Block.ReceivedFrom = peer
+
+	block.ReceivedAt = msg.Time()
+	block.ReceivedFrom = peer
 
 	// Mark the peer as owning the block
-	peer.markBlock(ann.Block.Hash())
+	peer.markBlock(block.Hash())
 
 	return backend.Handle(peer, ann)
+}
+
+func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	log.Info("handleNewBlockAndHeader")
+	ann := new(NewBlockAndHeaderPacket)
+	if err := msg.Decode(ann); err != nil {
+		log.Info("handleNewBlockAndHeader failed", "err", err)
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	if err := ann.sanityCheck(); err != nil {
+		log.Info("handleNewBlockAndHeader", "err", err)
+		return err
+	}
+
+	block := ann.BlockAndHeader.Block
+	if hash := types.CalcUncleHash(block.Uncles()); hash != block.UncleHash() {
+		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", block.UncleHash())
+		return nil // TODO(karalabe): return error eventually, but wait a few releases
+	}
+	if hash := types.DeriveSha(block.Transactions(), trie.NewStackTrie(nil)); hash != block.TxHash() {
+		log.Warn("Propagated block has invalid body", "have", hash, "exp", block.TxHash())
+		return nil // TODO(karalabe): return error eventually, but wait a few releases
+	}
+
+	block.ReceivedAt = msg.Time()
+	block.ReceivedFrom = peer
+
+	// Mark the peer as owning the block
+	peer.markBlock(block.Hash())
+
+	return backend.Handle(peer, ann)
+}
+
+func handleNewCosmosHeader(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	ann := new(NewCosmosHeaderPacket)
+	if err := msg.Decode(ann); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	if err := ann.sanityCheck(); err != nil {
+		return err
+	}
+
+	// todo: do some verification
+
+	// Mark the peer as owning the block
+	peer.markCosmosHeader(ann.Header.Hash)
+
+	return backend.Handle(peer, ann)
+}
+
+func handleNewCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	res := new(CubeAndCosmosHeadersPacket66)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	requestTracker.Fulfil(peer.id, peer.version, CubeAndCosmosHeadersMsg, res.RequestId)
+	log.Info("handle CubeAndCosmosHeadersPacket66", "peer", peer.id)
+
+	return backend.Handle(peer, &res.CubeAndCosmosHeadersPacket)
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {

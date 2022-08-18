@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"github.com/ethereum/go-ethereum/core"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -32,8 +33,22 @@ const (
 // blockPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
 type blockPropagation struct {
-	block *types.Block
+	block *types.Block //core.BlockAndCosmosHeader
 	td    *big.Int
+}
+
+// blockAndHeaderPropagation is a block propagation event, waiting for its turn in the
+// broadcast queue.
+type blockAndHeaderPropagation struct {
+	blockAndHeader *core.BlockAndCosmosHeader
+	td             *big.Int
+}
+
+// cosmosHeaderPropagation is a block propagation event, waiting for its turn in the
+// broadcast queue.
+type cosmosHeaderPropagation struct {
+	header *core.CosmosHeader
+	td     *big.Int
 }
 
 // broadcastBlocks is a write loop that multiplexes blocks and block accouncements
@@ -48,11 +63,23 @@ func (p *Peer) broadcastBlocks() {
 			}
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
+		case prop := <-p.queuedBlockAndHeaders:
+			if err := p.SendNewBlockAndHeader(prop.blockAndHeader, prop.td); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated block", "number", prop.blockAndHeader.Block.Number(), "hash", prop.blockAndHeader.Block.Hash(), "td", prop.td)
+
 		case block := <-p.queuedBlockAnns:
 			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+
+		case prop := <-p.queuedCosmosHeaders:
+			if err := p.SendNewCosmosHeader(prop.header); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated cosmos header", "number", prop.header.CosmosHeader.Height, "hash", prop.header.Hash, "td", prop.td)
 
 		case <-p.term:
 			return

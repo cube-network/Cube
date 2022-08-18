@@ -696,7 +696,17 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+			cosmosHeader := w.chain.Cosmosapp.GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
+			if cosmosHeader != nil {
+				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
+				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
+					block,
+					core.CosmosHeaderFromSignedHeader(cosmosHeader),
+				}})
+			} else {
+				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+				w.mux.Post(core.NewMinedBlockEvent{block})
+			}
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
@@ -812,6 +822,11 @@ func (w *worker) commitTransaction(tx *types.Transaction, coinbase common.Addres
 	w.current.txs = append(w.current.txs, tx)
 	w.current.receipts = append(w.current.receipts, receipt)
 
+	var receiptsTypes types.Receipts
+	receiptsTypes = w.current.receipts
+	receiptSha := types.DeriveSha(receiptsTypes, trie.NewStackTrie(nil))
+	log.Info("1 ================applyTransaction Proposer", "number", w.current.header.Number, "hash", w.current.header.Hash(), "receipt", receiptSha)
+
 	return receipt.Logs, nil
 }
 
@@ -831,7 +846,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 	}
 
 	var coalescedLogs []*types.Log
-
+	log.Info("commitTransactions", "number", w.current.header.Number, "hash", w.current.header.Hash())
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1

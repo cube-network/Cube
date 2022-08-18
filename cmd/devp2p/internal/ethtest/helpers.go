@@ -410,9 +410,9 @@ func (s *Suite) waitAnnounce(conn *Conn, blockAnnouncement *NewBlock) error {
 	for {
 		switch msg := conn.readAndServe(s.chain, timeout).(type) {
 		case *NewBlock:
-			if !reflect.DeepEqual(blockAnnouncement.Block.Header(), msg.Block.Header()) {
+			if !reflect.DeepEqual(blockAnnouncement.BlockAndHeader.Block.Header(), msg.BlockAndHeader.Block.Header()) {
 				return fmt.Errorf("wrong header in block announcement: \nexpected %v "+
-					"\ngot %v", blockAnnouncement.Block.Header(), msg.Block.Header())
+					"\ngot %v", blockAnnouncement.BlockAndHeader.Block.Header(), msg.BlockAndHeader.Block.Header())
 			}
 			if !reflect.DeepEqual(blockAnnouncement.TD, msg.TD) {
 				return fmt.Errorf("wrong TD in announcement: expected %v, got %v", blockAnnouncement.TD, msg.TD)
@@ -420,8 +420,8 @@ func (s *Suite) waitAnnounce(conn *Conn, blockAnnouncement *NewBlock) error {
 			return nil
 		case *NewBlockHashes:
 			hashes := *msg
-			if blockAnnouncement.Block.Hash() != hashes[0].Hash {
-				return fmt.Errorf("wrong block hash in announcement: expected %v, got %v", blockAnnouncement.Block.Hash(), hashes[0].Hash)
+			if blockAnnouncement.BlockAndHeader.Block.Hash() != hashes[0].Hash {
+				return fmt.Errorf("wrong block hash in announcement: expected %v, got %v", blockAnnouncement.BlockAndHeader.Block.Hash(), hashes[0].Hash)
 			}
 			return nil
 		case *NewPooledTransactionHashes:
@@ -495,8 +495,8 @@ func (s *Suite) oldAnnounce(isEth66 bool) error {
 	// wait to see if the announcement is propagated
 	switch msg := receiveConn.readAndServe(s.chain, time.Second*8).(type) {
 	case *NewBlock:
-		block := *msg
-		if block.Block.Hash() == oldBlockAnnounce.Block.Hash() {
+		block := (*msg).Block
+		if block.Hash() == oldBlockAnnounce.Block.Hash() {
 			return fmt.Errorf("unexpected: block propagated: %s", pretty.Sdump(msg))
 		}
 	case *NewBlockHashes:
@@ -736,13 +736,13 @@ func (s *Suite) hashAnnounce(isEth66 bool) error {
 		if len(nextBlockBody.Transactions) != 0 || len(nextBlockBody.Uncles) != 0 {
 			return fmt.Errorf("unexpected non-empty new block propagated: %s", pretty.Sdump(msg))
 		}
-		if msg.Block.Hash() != nextBlock.Hash() {
+		if msg.BlockAndHeader.Block.Hash() != nextBlock.Hash() {
 			return fmt.Errorf("mismatched hash of propagated new block: wanted %v, got %v",
-				nextBlock.Hash(), msg.Block.Hash())
+				nextBlock.Hash(), msg.BlockAndHeader.Block.Hash())
 		}
 		// check to make sure header matches header that was sent to the node
-		if !reflect.DeepEqual(nextBlock.Header(), msg.Block.Header()) {
-			return fmt.Errorf("incorrect header received: wanted %v, got %v", nextBlock.Header(), msg.Block.Header())
+		if !reflect.DeepEqual(nextBlock.Header(), msg.BlockAndHeader.Block.Header()) {
+			return fmt.Errorf("incorrect header received: wanted %v, got %v", nextBlock.Header(), msg.BlockAndHeader.Block.Header())
 		}
 	default:
 		return fmt.Errorf("unexpected: %s", pretty.Sdump(msg))

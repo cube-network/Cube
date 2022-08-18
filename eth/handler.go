@@ -18,6 +18,7 @@ package eth
 
 import (
 	"errors"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"math"
 	"math/big"
 	"sync"
@@ -225,7 +226,11 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return n, err
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	if crosschain.GetCrossChain() != nil {
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, crosschain.GetCrossChain().GetSignedHeader, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	} else {
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, nil, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	}
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)

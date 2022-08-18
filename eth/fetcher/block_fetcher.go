@@ -19,7 +19,6 @@ package fetcher
 
 import (
 	"errors"
-	"github.com/ethereum/go-ethereum/core"
 	"math/big"
 	"math/rand"
 	"time"
@@ -27,9 +26,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	ct "github.com/tendermint/tendermint/types"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -91,6 +92,8 @@ type headerVerifierFn func(header *types.Header) error
 
 // blockBroadcasterFn is a callback type for broadcasting a block to connected peers.
 type blockBroadcasterFn func(block *types.Block, propagate bool)
+
+type cosmosHeaderRetrievalFn func(height uint64, hash common.Hash) *ct.SignedHeader
 
 // blockAndHeaderBroadcasterFn is a callback type for broadcasting a block to connected peers.
 type blockAndHeaderBroadcasterFn func(blockAndHeader *core.BlockAndCosmosHeader, propagate bool)
@@ -205,6 +208,7 @@ type BlockFetcher struct {
 	getBlock                blockRetrievalFn            // Retrieves a block from the local chain
 	verifyHeader            headerVerifierFn            // Checks if a block's headers have a valid proof of work
 	broadcastBlock          blockBroadcasterFn          // Broadcasts a block to connected peers
+	getCosmosHeader         cosmosHeaderRetrievalFn
 	broadcastBlockAndHeader blockAndHeaderBroadcasterFn // Broadcasts a block and a cosmos header to connected peers
 	chainHeight             chainHeightFn               // Retrieves the current chain's height
 	insertHeaders           headersInsertFn             // Injects a batch of headers into the chain
@@ -242,6 +246,7 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		getBlock:                getBlock,
 		verifyHeader:            verifyHeader,
 		broadcastBlock:          broadcastBlock,
+		getCosmosHeader:         getCosmosHeader,
 		broadcastBlockAndHeader: broadcastBlockAndHeader,
 		chainHeight:             chainHeight,
 		insertHeaders:           insertHeaders,
@@ -973,7 +978,13 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			//go f.broadcastBlock(&core.BlockAndCosmosHeader{
 			//	Block: block,
 			//}, true)
-			go f.broadcastBlock(block, true)
+			sh := f.getCosmosHeader(block.NumberU64(), block.Header().Hash())
+			if sh != nil {
+				bsh := &core.BlockAndCosmosHeader{Block: block, CosmosHeader: core.CosmosHeaderFromSignedHeader(sh)}
+				go f.broadcastBlockAndHeader(bsh, true)
+			} else {
+				go f.broadcastBlock(block, true)
+			}
 
 		case consensus.ErrFutureBlock:
 			// Weird future block, don't fail, but neither propagate

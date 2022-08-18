@@ -197,9 +197,11 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 		//chs = append(chs, th.Header)
 		chs[i] = th.Header
 		// todo: verify cosmos header
-		sh := core.SignedHeaderFromCosmosHeader(th.CosmosHeader)
-		if err := crosschain.GetCrossChain().HandleHeader(th.Header, sh); err != nil {
-			return err
+		if crosschain.GetCrossChain() != nil {
+			sh := core.SignedHeaderFromCosmosHeader(th.CosmosHeader)
+			if err := crosschain.GetCrossChain().HandleHeader(th.Header, sh); err != nil {
+				return err
+			}
 		}
 	}
 	filter := len(headers) == 1
@@ -307,11 +309,13 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
 	// todo: deal with cosmos header
-	sh := core.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
-	err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
-	if err != nil {
-		log.Error("handle cosmos header failed", "err", err)
-		return err
+	if crosschain.GetCrossChain() != nil {
+		sh := core.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
+		err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
+		if err != nil {
+			log.Error("handle cosmos header failed", "err", err)
+			return err
+		}
 	}
 
 	// Schedule the block for import

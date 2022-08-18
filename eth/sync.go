@@ -17,11 +17,13 @@
 package eth
 
 import (
+	"github.com/ethereum/go-ethereum/crosschain"
 	"math/big"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -259,6 +261,17 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		//h.BroadcastBlock(&core.BlockAndCosmosHeader{
 		//	Block: head,
 		//}, false)
+		if crosschain.GetCrossChain() != nil {
+			sh := crosschain.GetCrossChain().GetSignedHeader(head.NumberU64(), head.Hash())
+			if sh != nil {
+				bah := &core.BlockAndCosmosHeader{
+					CosmosHeader: core.CosmosHeaderFromSignedHeader(sh),
+					Block:        head,
+				}
+				h.BroadcastBlockAndHeader(bah, false)
+				return nil
+			}
+		}
 		h.BroadcastBlock(head, false)
 	}
 	return nil

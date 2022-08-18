@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/trie"
+	ct "github.com/tendermint/tendermint/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -172,8 +173,10 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 		if origin == nil {
 			break
 		}
-
-		signedHeader := crosschain.GetCrossChain().GetSignedHeader(origin.Number.Uint64(), origin.Hash())
+		var signedHeader *ct.SignedHeader
+		if crosschain.GetCrossChain() != nil {
+			signedHeader = crosschain.GetCrossChain().GetSignedHeader(origin.Number.Uint64(), origin.Hash())
+		}
 		h := &core.CubeAndCosmosHeader{
 			Header:       origin,
 			CosmosHeader: core.CosmosHeaderFromSignedHeader(signedHeader),

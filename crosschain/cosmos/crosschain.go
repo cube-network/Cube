@@ -162,7 +162,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		return
 	}
 
-	log.Info("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex())
+	log.Info("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
 	var statedb *state.StateDB
 	var err error

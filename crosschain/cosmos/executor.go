@@ -159,7 +159,7 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 	c.app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto()})
 }
 
-func (c *Executor) EndBlock() {
+func (c *Executor) EndBlock(vals []common.Address) {
 	rc := c.app.BaseApp.Commit()
 	if c.header.Number.Int64() > 128 {
 		key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
@@ -170,7 +170,9 @@ func (c *Executor) EndBlock() {
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
-	c.chain.makeCosmosSignedHeader(c.header)
+	// todo: sign commit id and cube.header.number
+	c.chain.vote(vals, rc, c.header)
+	//c.chain.makeCosmosSignedHeader(c.header)
 
 	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
 }

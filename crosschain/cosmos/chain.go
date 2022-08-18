@@ -3,6 +3,7 @@ package cosmos
 import (
 	"errors"
 	"fmt"
+	"github.com/tendermint/tendermint/abci/types"
 	"sync"
 	"time"
 
@@ -58,7 +59,6 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 
 	c.getHeaderByNumber = headerfn
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
-	//c.valsMgr = &ValidatorsMgr{}
 	c.valsMgr = &ValidatorsMgr{config: c.config, getHeaderByNumber: headerfn}
 
 	// TODO load best block
@@ -69,7 +69,7 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	return c
 }
 
-func (c *CosmosChain) getAllValidators() {
+func (c *CosmosChain) vote(vals []common.Address, commitData types.ResponseCommit, header *et.Header) {
 
 }
 
@@ -84,6 +84,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	pubkey, _ := c.privValidator.GetPubKey()
 	addr := pubkey.Address()
 	//c.valsMgr.updateValidators(h, h.Number.Int64())
+
+	//lastpsh := ct.PartSetHeader{Total: 1, Hash: h.ParentHash}
+	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
 	// make header
 	header := &ct.Header{

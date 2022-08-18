@@ -23,14 +23,14 @@ type CrossChain interface {
 
 	NewExecutor(header *types.Header, statedb *state.StateDB) vm.CrossChain
 	FreeExecutor(exec vm.CrossChain)
-	Seal(exec vm.CrossChain)
+	Seal(exec vm.CrossChain, vals []common.Address)
 
 	EventHeader(header *types.Header)
 
 	// TODO remove cosmos info
 	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
 	GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, header *ct.SignedHeader) error
+	HandleHeader(h *types.Header, vals []common.Address, header *ct.SignedHeader) error
 }
 
 var cc CrossChain

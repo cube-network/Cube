@@ -199,7 +199,12 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 		// todo: verify cosmos header
 		if crosschain.GetCrossChain() != nil {
 			sh := core.SignedHeaderFromCosmosHeader(th.CosmosHeader)
-			if err := crosschain.GetCrossChain().HandleHeader(th.Header, sh); err != nil {
+			vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, th.Header)
+			if err != nil {
+				log.Error("get top validators failed", "err", err)
+				return err
+			}
+			if err := crosschain.GetCrossChain().HandleHeader(th.Header, vals, sh); err != nil {
 				return err
 			}
 		}
@@ -311,7 +316,12 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 	// todo: deal with cosmos header
 	if crosschain.GetCrossChain() != nil {
 		sh := core.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
-		err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
+		vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, block.Header())
+		if err != nil {
+			log.Error("get top validators failed", "err", err)
+			return err
+		}
+		err = crosschain.GetCrossChain().HandleHeader(block.Header(), vals, sh)
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
 			return err

@@ -138,7 +138,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	fmt.Printf("free exec %p \n", exec)
 }
 
-func (c *Cosmos) Seal(exec vm.CrossChain) {
+func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
 	c.callmu.Lock()
 	defer c.callmu.Unlock()
 
@@ -151,7 +151,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 		return
 	}
 
-	executor.EndBlock()
+	executor.EndBlock(vals)
 }
 
 func (c *Cosmos) EventHeader(header *types.Header) {
@@ -200,7 +200,7 @@ func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash
 
 }
 
-func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
+func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) error {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
@@ -211,6 +211,11 @@ func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
 	if header == nil {
 		return errors.New("missing cosmos header")
 	}
+
+	//_, err := c.validatorsfn(chain, h)
+	//if err != nil {
+	//	return err
+	//}
 
 	return c.chain.handleSignedHeader(h, header)
 }

@@ -2,6 +2,7 @@ package cachekv
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/status-im/keycard-go/hexutils"
 	"io"
 	"sort"
@@ -133,16 +134,16 @@ func (store *Store) Write() {
 	keys := make([]string, 0, len(store.cache))
 
 	if len(store.cache) > 0 {
-		println("===============Write Store Start")
+		fmt.Println("===============Write Store Start")
 	}
 	for key, dbValue := range store.cache {
 		if dbValue.dirty {
 			keys = append(keys, key)
-			println("===============Write Store: ", key, ",", hexutils.BytesToHex(dbValue.value))
+			fmt.Println("===============Write Store: ", key, ",", hexutils.BytesToHex(dbValue.value))
 		}
 	}
 	if len(store.cache) > 0 {
-		println("===============Write Store End")
+		fmt.Println("===============Write Store End")
 	}
 
 	sort.Strings(keys)

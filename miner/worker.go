@@ -1112,7 +1112,11 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	log.Debug("worker commit...")
-	crosschain.GetCrossChain().Seal(w.current.crosschain)
+	vals, err := w.chain.ChaosEngine.GetTopValidators(w.chain, w.current.header)
+	if err != nil {
+		return err
+	}
+	crosschain.GetCrossChain().Seal(w.current.crosschain, vals)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.

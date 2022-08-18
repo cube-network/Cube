@@ -30,8 +30,8 @@ type CosmosHeaderForP2P struct {
 	Version tmversion.Consensus `json:"version"`
 	ChainID string              `json:"chain_id"`
 	Height  uint64              `json:"height"`
-	Time    time.Time           `json:"time"`
-
+	// Time    time.Time           `json:"time"`
+	Time uint64 `json:"time"`
 	// prev block info
 	LastBlockID ct.BlockID `json:"last_block_id"`
 	// hashes of block data
@@ -51,19 +51,26 @@ type CosmosHeaderForP2P struct {
 	EvidenceHash    tmbytes.HexBytes `json:"evidence_hash"`    // evidence included in the block
 	ProposerAddress ct.Address       `json:"proposer_address"` // original proposer of the block
 
-	//BlockID    ct.BlockID     `json:"block_id"`
-	Signatures []ct.CommitSig `json:"signatures";rlp:"nil"`
+	Round      uint32         `json:"round"`
+	BlockID    ct.BlockID     `json:"block_id"`
+	Signatures []ct.CommitSig `json:"signatures"`
+	Sigtime    []uint64       `json:"sigtime"`
 }
 
 func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
 	if h == nil {
 		return nil
 	}
+	sigtime := make([]uint64, len(h.Commit.Signatures))
+	for i := 0; i < len(sigtime); i++ {
+		sigtime[i] = uint64(h.Commit.Signatures[i].Timestamp.Unix())
+	}
 	return &CosmosHeaderForP2P{
-		Version:            h.Version,
-		ChainID:            h.ChainID,
-		Height:             uint64(h.Height),
-		Time:               h.Time,
+		Version: h.Version,
+		ChainID: h.ChainID,
+		Height:  uint64(h.Height),
+		// Time:               h.Time,
+		Time:               uint64(h.Time.Unix()),
 		LastBlockID:        h.LastBlockID,
 		LastCommitHash:     h.LastCommitHash,
 		DataHash:           h.DataHash,
@@ -74,8 +81,10 @@ func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
 		LastResultsHash:    h.LastResultsHash,
 		EvidenceHash:       h.EvidenceHash,
 		ProposerAddress:    h.ProposerAddress,
-		//BlockID:            h.Commit.BlockID,
-		Signatures: h.Commit.Signatures,
+		Round:              uint32(h.Commit.Round),
+		BlockID:            h.Commit.BlockID,
+		Signatures:         h.Commit.Signatures,
+		Sigtime:            sigtime,
 	}
 }
 
@@ -84,10 +93,11 @@ func SignedHeaderFromCosmosHeader(h *CosmosHeaderForP2P) *ct.SignedHeader {
 		return nil
 	}
 	header := &ct.Header{
-		Version:            h.Version,
-		ChainID:            h.ChainID,
-		Height:             int64(h.Height),
-		Time:               h.Time,
+		Version: h.Version,
+		ChainID: h.ChainID,
+		Height:  int64(h.Height),
+		// Time:               h.Time,
+		Time:               time.Unix(int64(h.Time), 0),
 		LastBlockID:        h.LastBlockID,
 		LastCommitHash:     h.LastCommitHash,
 		DataHash:           h.DataHash,
@@ -99,12 +109,15 @@ func SignedHeaderFromCosmosHeader(h *CosmosHeaderForP2P) *ct.SignedHeader {
 		EvidenceHash:       h.EvidenceHash,
 		ProposerAddress:    h.ProposerAddress,
 	}
-	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
 	commit := &ct.Commit{
 		Height:     int64(h.Height),
-		Round:      int32(1),
-		BlockID:    ct.BlockID{Hash: header.Hash(), PartSetHeader: psh},
+		Round:      int32(h.Round),
+		BlockID:    h.BlockID,
 		Signatures: h.Signatures,
+	}
+	sigtime := h.Sigtime
+	for i := 0; i < len(sigtime); i++ {
+		commit.Signatures[i].Timestamp = time.Unix(int64(sigtime[i]), 0)
 	}
 	return &ct.SignedHeader{
 		Header: header,

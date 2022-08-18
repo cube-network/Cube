@@ -273,7 +273,16 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.signedHeader[hash] = header
+	// TODO update, not replace
+	if _, ok := c.signedHeader[hash]; !ok {
+		c.signedHeader[hash] = header
+	} else {
+		for i := 0; i < len(header.Commit.Signatures); i++ {
+			if header.Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
+				c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
+			}
+		}
+	}
 	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
 }
 

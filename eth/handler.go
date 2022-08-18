@@ -225,7 +225,11 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 		return n, err
 	}
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	if h.chain.Cosmosapp != nil {
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, h.chain.Cosmosapp.GetSignedHeader, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	} else {
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, nil, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+	}
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)

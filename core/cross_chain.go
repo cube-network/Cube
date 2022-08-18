@@ -51,8 +51,8 @@ type CosmosHeaderForP2P struct {
 	EvidenceHash    tmbytes.HexBytes `json:"evidence_hash"`    // evidence included in the block
 	ProposerAddress ct.Address       `json:"proposer_address"` // original proposer of the block
 
-	BlockID    ct.BlockID     `json:"block_id"`
-	Signatures []ct.CommitSig `json:"signatures"`
+	//BlockID    ct.BlockID     `json:"block_id"`
+	Signatures []ct.CommitSig `json:"signatures";rlp:"nil"`
 }
 
 func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
@@ -74,8 +74,8 @@ func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
 		LastResultsHash:    h.LastResultsHash,
 		EvidenceHash:       h.EvidenceHash,
 		ProposerAddress:    h.ProposerAddress,
-		BlockID:            h.Commit.BlockID,
-		Signatures:         h.Commit.Signatures,
+		//BlockID:            h.Commit.BlockID,
+		Signatures: h.Commit.Signatures,
 	}
 }
 
@@ -99,10 +99,11 @@ func SignedHeaderFromCosmosHeader(h *CosmosHeaderForP2P) *ct.SignedHeader {
 		EvidenceHash:       h.EvidenceHash,
 		ProposerAddress:    h.ProposerAddress,
 	}
+	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}
 	commit := &ct.Commit{
 		Height:     int64(h.Height),
-		Round:      int32(0),
-		BlockID:    h.BlockID,
+		Round:      int32(1),
+		BlockID:    ct.BlockID{Hash: header.Hash(), PartSetHeader: psh},
 		Signatures: h.Signatures,
 	}
 	return &ct.SignedHeader{

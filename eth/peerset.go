@@ -18,7 +18,6 @@ package eth
 
 import (
 	"errors"
-	"fmt"
 	"math/big"
 	"sync"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -202,7 +202,7 @@ func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {
 	defer ps.lock.RUnlock()
 
 	list := make([]*ethPeer, 0, len(ps.peers))
-	//fmt.Println("total peers", len(ps.peers))
+	log.Debug("peersWithoutBlock total peers", len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.KnownBlock(hash) {
 			list = append(list, p)
@@ -218,7 +218,7 @@ func (ps *peerSet) peersWithoutCosmosHeader(hash common.Hash) []*ethPeer {
 	defer ps.lock.RUnlock()
 
 	list := make([]*ethPeer, 0, len(ps.peers))
-	fmt.Println("total peers", len(ps.peers))
+	log.Debug("peersWithoutCosmosHeader total peers", len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.KnownCosmosHeader(hash) {
 			list = append(list, p)

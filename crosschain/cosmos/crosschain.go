@@ -77,7 +77,7 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.chain = MakeCosmosChain(config, datadir+"priv_validator_key.json", datadir+"priv_validator_state.json", headerfn)
+		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn)
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
@@ -161,6 +161,8 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	if !IsEnable(c.config, header.Number) {
 		return
 	}
+
+	println("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex())
 
 	var statedb *state.StateDB
 	var err error

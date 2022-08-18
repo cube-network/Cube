@@ -75,7 +75,7 @@ func makeCosmosHeader(cubeheader *cubetypes.Header, config *params.ChainConfig) 
 	empty_hash := common.Hash{}
 	header := &tenderminttypes.Header{
 		Version:            version.Consensus{Block: 11, App: 0},
-		ChainID:            "ibc-1", //config.ChainID.String(),
+		ChainID:            config.ChainID.String(),
 		Height:             cubeheader.Number.Int64(),
 		Time:               time.Unix(int64(cubeheader.Time), 0),
 		LastCommitHash:     empty_hash[:],

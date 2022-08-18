@@ -267,8 +267,8 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
 	c.config = config
-	// TODO chainID
-	c.ChainID = "ibc-1"
+	// c.ChainID = "ibc-1"
+	c.ChainID = config.ChainID.String()
 	c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
 	c.privValidator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.privValidator.Save()

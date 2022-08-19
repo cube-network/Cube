@@ -3,6 +3,7 @@ package cosmos
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -182,6 +183,11 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 }
 
 func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) error {
+	if h == nil || header == nil {
+		log.Warn("handleSignedHeader nil args")
+		return errors.New("invalid input")
+
+	}
 	log.Info("handleSignedHeader", "height", h.Number, "hash", h.Hash())
 
 	if header.Header == nil {
@@ -273,16 +279,28 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	// TODO update, not replace
-	if _, ok := c.signedHeader[hash]; !ok {
+
+	h := c.signedHeader[hash]
+	if h == nil {
+		log.Debug("new signed header")
 		c.signedHeader[hash] = header
 	} else {
+		log.Debug("update signed header")
 		for i := 0; i < len(header.Commit.Signatures); i++ {
 			if header.Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
 				c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
 			}
 		}
 	}
+
+	counter := 0
+	for i := 0; i < len(c.signedHeader[hash].Commit.Signatures); i++ {
+		if c.signedHeader[hash].Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
+			c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
+			counter++
+		}
+	}
+	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash(), " signed header ", strconv.Itoa(counter))
 	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
 }
 

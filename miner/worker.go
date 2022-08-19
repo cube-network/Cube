@@ -387,7 +387,7 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 		case <-w.exitCh:
 			return
 		}
-		log.Debug("recommit... ", recommit)
+		log.Debug("recommit... ", "time", recommit)
 		timer.Reset(recommit)
 		atomic.StoreInt32(&w.newTxs, 0)
 	}
@@ -405,13 +405,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	for {
 		select {
 		case <-w.startCh:
-			log.Debug("start  send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("start  send newWorkCh....", "time", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			log.Debug("chainHeadCh send newWorkCh....", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("chainHeadCh send newWorkCh....", "time", time.Now().UTC().String(), time.Now().UTC().String())
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
@@ -421,12 +421,12 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
-				log.Debug("timer txs size ", atomic.LoadInt32(&w.newTxs), " recommit ", recommit)
+				log.Debug("timer txs", "size", atomic.LoadInt32(&w.newTxs), "recommit", recommit)
 				if atomic.LoadInt32(&w.newTxs) == 0 {
 					timer.Reset(recommit)
 					continue
 				}
-				log.Debug("\n\ntimer send newWorkCh....", time.Now().UTC().String())
+				log.Debug("timer send newWorkCh....", "time", time.Now().UTC().String())
 				commit(true, commitInterruptResubmit)
 			}
 
@@ -481,11 +481,11 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			log.Debug(" recv newWorkCh....", time.Now().UTC().String())
+			log.Debug("recv newWorkCh....", "time", time.Now().UTC().String())
 			w.commitNewWork(req.interrupt, req.noempty, req.timestamp)
 
 		case ev := <-w.chainSideCh:
-			log.Debug(" recv chainSideCh....", time.Now().UTC().String())
+			log.Debug("recv chainSideCh....", "time", time.Now().UTC().String())
 			// Short circuit for duplicate side blocks
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
@@ -526,7 +526,7 @@ func (w *worker) mainLoop() {
 			}
 
 		case ev := <-w.txsCh:
-			log.Debug(" recv txsCh.... ", len(ev.Txs), time.Now().UTC().String())
+			log.Debug("recv txsCh....", "count", len(ev.Txs), "time", time.Now().UTC().String())
 			// Apply transactions to the pending state if we're not mining.
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -565,7 +565,7 @@ func (w *worker) mainLoop() {
 				}
 			}
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
-			log.Debug("txsch txs size ", atomic.LoadInt32(&w.newTxs))
+			log.Debug("txsch txs", "size", atomic.LoadInt32(&w.newTxs))
 
 		// System stopped
 		case <-w.exitCh:
@@ -599,7 +599,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
-			log.Debug("worker commit recv taskCh... ", time.Now().UTC().String())
+			log.Debug("worker commit recv taskCh...", "time", time.Now().UTC().String())
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -638,7 +638,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
-			log.Debug("worker resultLoop resultCh... ", time.Now().UTC().String())
+			log.Debug("worker resultLoop resultCh... ", "time", time.Now().UTC().String())
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -970,7 +970,7 @@ func (w *worker) commitTransactions(txs *types.TransactionsByPriceAndNonce, coin
 
 // commitNewWork generates several new sealing tasks based on the parent block.
 func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) {
-	log.Debug("worker commitNewWork...", time.Now().UTC().String())
+	log.Debug("worker commitNewWork...", "time", time.Now().UTC().String())
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 

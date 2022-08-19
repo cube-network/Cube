@@ -290,7 +290,11 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	log.Info("getSignedHeader", "number", height, "hash", hash)
-	return c.signedHeader[hash]
+	h := c.signedHeader[hash]
+	if h == nil {
+		log.Error("getSignedHeader failed")
+	}
+	return h
 }
 
 func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
@@ -303,7 +307,7 @@ func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common
 		if header != nil {
 			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
 		} else {
-			log.Info("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
+			log.Error("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
 		}
 	}
 	c.signedHeader[hash] = header

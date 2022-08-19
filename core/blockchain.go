@@ -1437,12 +1437,12 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
-			log.Debug("ChainHeadEvent ", block.Header().Number.Uint64())
+			log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
 			crosschain.GetCrossChain().EventHeader(block.Header())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
-		log.Debug("writeBlockWithState send ChainSideEvent ", block.Header().Number.Uint64())
+		log.Debug("writeBlockWithState send ChainSideEvent", "number", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 

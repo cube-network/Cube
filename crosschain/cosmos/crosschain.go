@@ -115,8 +115,8 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// }
 
 	c.newExecutorCounter++
-	log.Debug("new exec %p \n", exector)
-	log.Debug("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64())
+	log.Debug("new exec", "exector", exector)
+	log.Debug("newExecutorCounter ", "counter", c.newExecutorCounter, " block height ", header.Number.Int64())
 
 	exector.BeginBlock(header, statedb)
 
@@ -136,8 +136,8 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
-	log.Debug("freeExecutorCounter ", c.freeExecutorCounter)
-	log.Debug("free exec %p \n", exec)
+	log.Debug("freeExecutorCounter", "counter", c.freeExecutorCounter)
+	log.Debug("free exec", "executor", exec)
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain) {
@@ -147,7 +147,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	if exec == nil {
 		return
 	}
-	log.Debug("seal exec %p \n", exec)
+	log.Debug("seal exec", "executor", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
 		return

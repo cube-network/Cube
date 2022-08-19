@@ -137,8 +137,8 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
-	log.Debug("begin block height ", header.Number.Int64(), " root ", header.Root.Hex())
-	log.Debug("begin block  state root ", statedb.IntermediateRoot(true).Hex())
+	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex())
+	log.Debug("begin block", "stateRoot ", statedb.IntermediateRoot(true).Hex())
 
 	c.header = header
 	c.statedb = statedb
@@ -177,7 +177,10 @@ func (c *Executor) EndBlock() {
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
-	c.chain.makeCosmosSignedHeader(c.header)
+	sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
+	if sh == nil {
+		c.chain.makeCosmosSignedHeader(c.header)
+	}
 	log.Debug("end block done state root ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 
 	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]))
@@ -239,7 +242,7 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 // TODO get cube block header instead
 func (c *Executor) Load(init_block_height int64) {
 	// if !c.is_start_crosschain {
-	log.Debug("load version... ", init_block_height)
+	log.Debug("load version...", "height", init_block_height)
 	c.app.LoadVersion2(init_block_height)
 	// c.is_start_crosschain = true
 	// }

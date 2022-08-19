@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/ethereum/go-ethereum/log"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -59,6 +60,7 @@ type CosmosHeaderForP2P struct {
 
 func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
 	if h == nil {
+		log.Error("CosmosHeaderFromSignedHeader failed: CosmosHeaderForP2P is nil")
 		return nil
 	}
 	sigtime := make([]uint64, len(h.Commit.Signatures))
@@ -90,6 +92,7 @@ func CosmosHeaderFromSignedHeader(h *ct.SignedHeader) *CosmosHeaderForP2P {
 
 func SignedHeaderFromCosmosHeader(h *CosmosHeaderForP2P) *ct.SignedHeader {
 	if h == nil {
+		log.Error("SignedHeaderFromCosmosHeader failed: CosmosHeaderForP2P is nil")
 		return nil
 	}
 	header := &ct.Header{

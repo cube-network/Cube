@@ -82,7 +82,7 @@ func (c *Cosmos) Init(datadir string,
 	})
 }
 
-func (c *Cosmos) SetCoidbase(addr common.Address) {
+func (c *Cosmos) SetCoinbase(addr common.Address) {
 	c.coinbase = addr
 }
 
@@ -197,7 +197,6 @@ func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash
 	}
 
 	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
-
 }
 
 func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) error {

@@ -567,7 +567,7 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
-		crosschain.GetCrossChain().SetCoidbase(eb)
+		crosschain.GetCrossChain().SetCoinbase(eb)
 
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

@@ -97,7 +97,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// TODO
 	vmenv.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb)
 	defer crosschain.GetCrossChain().FreeExecutor(vmenv.Context.Crosschain)
-	defer crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
+	// defer crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
 
 	// preload from and to of txs
 	signer := types.MakeSigner(p.config, header.Number)
@@ -160,6 +160,8 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 	bloomWg.Wait()
 	returnErrBeforeWaitGroup = false
+
+	crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs); err != nil {

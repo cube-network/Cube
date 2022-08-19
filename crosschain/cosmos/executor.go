@@ -138,7 +138,6 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex())
-	log.Debug("begin block", "stateRoot ", statedb.IntermediateRoot(true).Hex())
 
 	c.header = header
 	c.statedb = statedb
@@ -158,20 +157,15 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 
 	hdr := makeCosmosHeader(header, c.config)
 	c.app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto()})
-	log.Debug("begin block done state root ", statedb.IntermediateRoot(true).Hex())
-	log.Debug("begin block done 2 state root ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 }
 
 func (c *Executor) EndBlock() {
-	log.Debug("end block  state root ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	rc := c.app.BaseApp.Commit()
 	// TODO hardfork cosmos block height
 	// if c.header.Number.Int64() > 128 {
 	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
 	// 	c.db.Delete([]byte(key))
 	// }
-
-	log.Debug("end block 2 state root ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
@@ -181,7 +175,8 @@ func (c *Executor) EndBlock() {
 	if sh == nil {
 		c.chain.makeCosmosSignedHeader(c.header)
 	}
-	log.Debug("end block done state root ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+
+	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
 
 	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]))
 }

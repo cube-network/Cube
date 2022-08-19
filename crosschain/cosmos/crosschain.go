@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"errors"
 	"math/big"
+	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -101,6 +102,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	defer c.callmu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
 		return nil
 	}
 
@@ -131,6 +133,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	}
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
@@ -150,6 +153,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	log.Debug("seal exec", "executor", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
@@ -161,6 +165,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
 		return
 	}
 
@@ -186,6 +191,7 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
 		return nil
 	}
 	return c.chain.getSignedHeader(height, hash)
@@ -196,6 +202,7 @@ func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
 		return nil
 	}
 
@@ -208,6 +215,7 @@ func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) error {
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, h.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(h.Number.Uint64(), 10))
 		return nil
 	}
 

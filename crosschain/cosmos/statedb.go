@@ -106,7 +106,7 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 		log.Debug("Failed to Set, err", err.Error())
 		return err
 	}
-	// println("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// log.Debug("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 
 	return nil
 }
@@ -149,6 +149,10 @@ func (csdb *CosmosStateDB) Close() error {
 }
 
 func (csdb *CosmosStateDB) NewBatch() dbm.Batch {
+	// csdb.mu.Lock()
+	// defer csdb.mu.Unlock()
+	// h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
+	// log.Debug("newbatch state root ", h)
 	return csdb
 }
 

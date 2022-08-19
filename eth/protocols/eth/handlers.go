@@ -173,6 +173,7 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 		if origin == nil {
 			break
 		}
+		log.Debug("query ori hash ", origin.Hash().Hex(), " number ", origin.Number.Uint64())
 		var signedHeader *ct.SignedHeader
 		if crosschain.GetCrossChain() != nil {
 			signedHeader = crosschain.GetCrossChain().GetSignedHeader(origin.Number.Uint64(), origin.Hash())

@@ -3,8 +3,8 @@ package cosmos
 import (
 	"container/list"
 	"errors"
-	"fmt"
 	"math/big"
+	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -102,6 +102,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	defer c.callmu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
 		return nil
 	}
 
@@ -114,10 +115,13 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// } else {
 	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, c.coinbase, c.chain, false)
 	// }
-	fmt.Printf("new exec %p \n", exector)
-	exector.BeginBlock(header, statedb)
+
 	c.newExecutorCounter++
-	log.Debug("newExecutorCounter ", c.newExecutorCounter, " block height ", header.Number.Int64())
+	log.Debug("new exec", "exector", exector)
+	log.Debug("newExecutorCounter ", "counter", c.newExecutorCounter, " block height ", header.Number.Int64())
+
+	exector.BeginBlock(header, statedb)
+
 	return exector
 }
 
@@ -129,13 +133,14 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	}
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
-	log.Debug("freeExecutorCounter ", c.freeExecutorCounter)
-	fmt.Printf("free exec %p \n", exec)
+	log.Debug("freeExecutorCounter", "counter", c.freeExecutorCounter)
+	log.Debug("free exec", "executor", exec)
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
@@ -145,9 +150,10 @@ func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
 	if exec == nil {
 		return
 	}
-	fmt.Printf("seal exec %p \n", exec)
+	log.Debug("seal exec", "executor", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
@@ -159,6 +165,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
 		return
 	}
 
@@ -173,7 +180,8 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	}
 
 	if err != nil {
-		panic("cosmos event header state root not found")
+		log.Warn("cosmos event header state root not found, maybe reorg...")
+		return
 	}
 	c.queryExecutor.BeginBlock(header, statedb)
 }
@@ -183,6 +191,7 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
 		return nil
 	}
 	return c.chain.getSignedHeader(height, hash)
@@ -193,6 +202,7 @@ func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
 		return nil
 	}
 
@@ -204,6 +214,7 @@ func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.Si
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, h.Number) {
+		log.Debug("cosmos not enable yet", strconv.FormatUint(h.Number.Uint64(), 10))
 		return nil
 	}
 

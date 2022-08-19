@@ -18,12 +18,13 @@ package eth
 
 import (
 	"errors"
-	"github.com/ethereum/go-ethereum/crosschain"
 	"math"
 	"math/big"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crosschain"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -575,7 +576,7 @@ func (h *handler) BroadcastCosmosHeader(header *core.CosmosHeader, propagate boo
 			log.Info("metric", "method", "BroadcastCosmosHeader", "peer", peer.ID(), "hash", hash.String(), "number", header.CosmosHeader.Height, "fullBlock", false)
 			peer.AsyncSendNewCosmosHeader(header)
 		}
-		log.Trace("Propagated cosmos header", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(header.CosmosHeader.Time)))
+		log.Trace("Propagated cosmos header", "hash", hash, "recipients", len(transfer))
 		return
 	}
 }

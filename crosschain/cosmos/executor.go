@@ -137,7 +137,7 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
-	log.Debug("begin block height ", header.Number.Int64(), " root ", header.Root.Hex())
+	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex())
 
 	c.header = header
 	c.statedb = statedb
@@ -161,10 +161,11 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 
 func (c *Executor) EndBlock(vals []common.Address) {
 	rc := c.app.BaseApp.Commit()
-	if c.header.Number.Int64() > 128 {
-		key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
-		c.db.Delete([]byte(key))
-	}
+	// TODO hardfork cosmos block height
+	// if c.header.Number.Int64() > 128 {
+	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
+	// 	c.db.Delete([]byte(key))
+	// }
 
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
@@ -172,9 +173,15 @@ func (c *Executor) EndBlock(vals []common.Address) {
 
 	// todo: sign commit id and cube.header.number
 	c.chain.vote(vals, rc, c.header)
-	//c.chain.makeCosmosSignedHeader(c.header)
 
-	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]), " ts ", time.Now().UTC().String())
+	sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
+	if sh == nil {
+		c.chain.makeCosmosSignedHeader(c.header)
+	}
+
+	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
+
+	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]))
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
@@ -190,6 +197,7 @@ func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_numb
 }
 
 func (c *Executor) InitGenesis(evm *vm.EVM) {
+	log.Debug("init genesis state root ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	init_block_height := evm.Context.BlockNumber.Int64()
 	c.SetState(evm.StateDB, common.Hash{}, init_block_height)
 
@@ -226,12 +234,13 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	// }
 
 	// c.is_start_crosschain = true
+	log.Debug("init genesis done state root ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 }
 
 // TODO get cube block header instead
 func (c *Executor) Load(init_block_height int64) {
 	// if !c.is_start_crosschain {
-	log.Debug("load version... ", init_block_height)
+	log.Debug("load version...", "height", init_block_height)
 	c.app.LoadVersion2(init_block_height)
 	// c.is_start_crosschain = true
 	// }

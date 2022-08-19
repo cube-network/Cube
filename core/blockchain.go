@@ -1437,12 +1437,12 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
-			log.Debug("ChainHeadEvent ", block.Header().Number.Uint64())
+			log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
 			crosschain.GetCrossChain().EventHeader(block.Header())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
-		log.Debug("writeBlockWithState send ChainSideEvent ", block.Header().Number.Uint64())
+		log.Debug("writeBlockWithState send ChainSideEvent", "number", block.Header().Number.Uint64())
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
 
@@ -1475,6 +1475,11 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
+
+	h := bc.GetBlockByHash(chain[0].ParentHash())
+	if h == nil {
+		panic("unexpected block...")
+	}
 
 	// Do a sanity check that the provided chain is actually ordered and linked.
 	for i := 1; i < len(chain); i++ {
@@ -1727,6 +1732,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		substart := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 
+		log.Debug("process statedb ", statedb.IntermediateRoot(true).Hex())
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -1749,6 +1755,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			"trieHash", triehash, "trieProc", trieproc, "size", block.Size(), "txCount", len(block.Transactions()), "gasUsed", block.Header().GasUsed,
 			"cost", time.Since(substart)-trieproc-triehash)
 
+		log.Debug("process validate statedb ", statedb.IntermediateRoot(true).Hex())
 		// Validate the state using the default validator
 		substart = time.Now()
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {

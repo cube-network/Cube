@@ -15,6 +15,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
+	"github.com/tendermint/tendermint/types"
 	ct "github.com/tendermint/tendermint/types"
 )
 
@@ -151,6 +152,26 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader) {
 	}
 	v := vote.ToProto()
 	c.privValidator.SignVote(c.ChainID, v)
+	{
+		height, round := vote.Height, vote.Round
+
+		signBytes := types.VoteSignBytes(c.ChainID, v)
+
+		// It passed the checks. Sign the vote
+		sig, err := c.privValidator.Key.PrivKey.Sign(signBytes)
+		if err != nil {
+			log.Debug("sign error! ", err.Error())
+			panic("unexpected sign error ")
+		}
+		c.privValidator.LastSignState.Height = height
+		c.privValidator.LastSignState.Round = round
+		c.privValidator.LastSignState.Step = 3 /*step*/
+		c.privValidator.LastSignState.Signature = sig
+		c.privValidator.LastSignState.SignBytes = signBytes
+		c.privValidator.LastSignState.Save()
+
+		v.Signature = sig
+	}
 
 	cc := ct.CommitSig{}
 	cc.BlockIDFlag = ct.BlockIDFlagCommit
@@ -255,7 +276,16 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.signedHeader[hash] = header
+	// TODO update, not replace
+	if _, ok := c.signedHeader[hash]; !ok {
+		c.signedHeader[hash] = header
+	} else {
+		for i := 0; i < len(header.Commit.Signatures); i++ {
+			if header.Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
+				c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
+			}
+		}
+	}
 	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
 }
 
@@ -263,7 +293,11 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	log.Info("getSignedHeader", "number", height, "hash", hash)
-	return c.signedHeader[hash]
+	h := c.signedHeader[hash]
+	if h == nil {
+		log.Error("getSignedHeader failed")
+	}
+	return h
 }
 
 func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
@@ -276,7 +310,7 @@ func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common
 		if header != nil {
 			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
 		} else {
-			log.Info("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
+			log.Error("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
 		}
 	}
 	c.signedHeader[hash] = header

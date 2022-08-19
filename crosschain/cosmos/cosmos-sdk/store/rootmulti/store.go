@@ -986,6 +986,23 @@ func getCommitInfo(db dbm.DB, ver int64) (*types.CommitInfo, error) {
 }
 
 func setCommitInfo(batch dbm.Batch, version int64, cInfo *types.CommitInfo) {
+	sk := make([]string, len(cInfo.StoreInfos))
+	for i := 0; i < len(sk); i++ {
+		sk[i] = cInfo.StoreInfos[i].Name
+	}
+	sort.Strings(sk)
+
+	si := make([]types.StoreInfo, len(sk))
+	for i := 0; i < len(sk); i++ {
+		for j := 0; j < len(sk); j++ {
+			if cInfo.StoreInfos[j].Name == sk[i] {
+				si[i] = cInfo.StoreInfos[j]
+				break
+			}
+		}
+	}
+	cInfo.StoreInfos = si
+
 	bz, err := cInfo.Marshal()
 	if err != nil {
 		panic(err)

@@ -124,8 +124,8 @@ func (vmgr *ValidatorsMgr) getValidators(h *et.Header) ([]common.Address, *types
 	return addrs, types.NewValidatorSet(validators)
 }
 
-func (vmgr *ValidatorsMgr) getValidator(addr common.Address) *types.Validator {
-	return vmgr.AddrValMap[addr]
+func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address) *types.Validator {
+	return vmgr.AddrValMap[cubeAddr]
 }
 
 func getAddressesFromHeader(h *et.Header, isCosmosEnable bool) []common.Address {

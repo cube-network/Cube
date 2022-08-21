@@ -17,7 +17,6 @@
 package eth
 
 import (
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"math/rand"
@@ -82,8 +81,8 @@ type Peer struct {
 	queuedBlockAndHeaders chan *blockAndHeaderPropagation // Queue of blocks to broadcast to the peer
 	queuedBlockAnns       chan *types.Block               // Queue of blocks to announce to the peer
 
-	knownCosmosHeaders  *knownCache                   // Set of cosmos headers known to be known by this peer
-	queuedCosmosHeaders chan *cosmosHeaderPropagation // Queue of cosmos headers to broadcast to the peer
+	knownCosmosVotes  *knownCache                 // Set of cosmos headers known to be known by this peer
+	queuedCosmosVotes chan *cosmosVotePropagation // Queue of cosmos headers to broadcast to the peer
 
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
 	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
@@ -104,11 +103,11 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		version:               version,
 		knownTxs:              newKnownCache(maxKnownTxs),
 		knownBlocks:           newKnownCache(maxKnownBlocks),
-		knownCosmosHeaders:    newKnownCache(maxKnownBlocks),
+		knownCosmosVotes:      newKnownCache(maxKnownBlocks),
 		queuedBlocks:          make(chan *blockPropagation, maxQueuedBlocks),
 		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
 		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
-		queuedCosmosHeaders:   make(chan *cosmosHeaderPropagation, maxQueuedBlocks),
+		queuedCosmosVotes:     make(chan *cosmosVotePropagation, maxQueuedBlocks),
 		txBroadcast:           make(chan []common.Hash),
 		txAnnounce:            make(chan []common.Hash),
 		txpool:                txpool,
@@ -162,9 +161,9 @@ func (p *Peer) KnownBlock(hash common.Hash) bool {
 	return p.knownBlocks.Contains(hash)
 }
 
-// KnownCosmosHeader returns whether peer is known to already have a cosmos header.
-func (p *Peer) KnownCosmosHeader(hash common.Hash) bool {
-	return p.knownCosmosHeaders.Contains(hash)
+// KnownCosmosVote returns whether peer is known to already have a cosmos header.
+func (p *Peer) KnownCosmosVote(hash common.Hash) bool {
+	return p.knownCosmosVotes.Contains(hash)
 }
 
 // KnownTransaction returns whether peer is known to already have a transaction.
@@ -179,11 +178,11 @@ func (p *Peer) markBlock(hash common.Hash) {
 	p.knownBlocks.Add(hash)
 }
 
-// markCosmosHeader marks a cosmos-header as known for the peer, ensuring that the cosmos-header will
+// markCosmosVote marks a cosmos-header as known for the peer, ensuring that the cosmos-header will
 // never be propagated to this particular peer.
-func (p *Peer) markCosmosHeader(hash common.Hash) {
+func (p *Peer) markCosmosVote(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known cosmos-header hash
-	p.knownCosmosHeaders.Add(hash)
+	p.knownCosmosVotes.Add(hash)
 }
 
 // markTransaction marks a transaction as known for the peer, ensuring that it
@@ -311,11 +310,11 @@ func (p *Peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 }
 
 // SendNewBlockAndHeader propagates an entire block to a remote peer.
-func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td *big.Int) error {
+func (p *Peer) SendNewBlockAndHeader(blockHeader *types.BlockAndCosmosHeader, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
 	block := blockHeader.Block
 	p.knownBlocks.Add(block.Hash())
-	p.knownCosmosHeaders.Add(block.Hash())
+	p.knownCosmosVotes.Add(block.Hash())
 	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr(), "id", p.ID())
 	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
 		BlockAndHeader: blockHeader,
@@ -325,38 +324,38 @@ func (p *Peer) SendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td 
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *core.BlockAndCosmosHeader, td *big.Int) {
+func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *types.BlockAndCosmosHeader, td *big.Int) {
 	block := blockHeader.Block
 	select {
 	case p.queuedBlockAndHeaders <- &blockAndHeaderPropagation{blockAndHeader: blockHeader, td: td}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
 		p.knownBlocks.Add(block.Hash())
-		p.knownCosmosHeaders.Add(block.Hash())
+		p.knownCosmosVotes.Add(block.Hash())
 	default:
 		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
 	}
 }
 
-// SendNewCosmosHeader propagates a cosmos-header to a remote peer.
-func (p *Peer) SendNewCosmosHeader(header *core.CosmosHeader) error {
+// SendNewCosmosVote propagates a cosmos-header to a remote peer.
+func (p *Peer) SendNewCosmosVote(vote *types.CosmosVote) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
-	p.knownCosmosHeaders.Add(header.Hash)
-	log.Info("=====SendNewCosmosHeader", "number", header.CosmosHeader.Height, "hash", header.Hash)
-	return p2p.Send(p.rw, NewCosmosHeaderMsg, &NewCosmosHeaderPacket{
-		Header: header,
+	p.knownCosmosVotes.Add(vote.Hash())
+	log.Info("=====SendNewCosmosVote", "index", vote.Index, "headerHash", vote.HeaderHash)
+	return p2p.Send(p.rw, NewCosmosVoteMsg, &NewCosmosVotePacket{
+		Vote: vote,
 	})
 }
 
-// AsyncSendNewCosmosHeader queues a cosmos-header for propagation to a remote peer. If
+// AsyncSendNewCosmosVote queues a cosmos-header for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewCosmosHeader(header *core.CosmosHeader) {
+func (p *Peer) AsyncSendNewCosmosVote(vote *types.CosmosVote) {
 	//block := blockHeader.Block
 	select {
-	case p.queuedCosmosHeaders <- &cosmosHeaderPropagation{header: header}:
+	case p.queuedCosmosVotes <- &cosmosVotePropagation{vote: vote}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
-		p.knownCosmosHeaders.Add(header.Hash)
+		p.knownCosmosVotes.Add(vote.Hash())
 	default:
-		p.Log().Debug("Dropping block propagation", "number", header.CosmosHeader.Height, "hash", header.Hash)
+		p.Log().Debug("Dropping cosmos vote propagation", "index", vote.Index, "headerHash", vote.HeaderHash)
 	}
 }
 
@@ -368,7 +367,7 @@ func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
 	})
 }
 
-func (p *Peer) ReplyCubeAndCosmosHeaders(id uint64, headers []*core.CubeAndCosmosHeader) error {
+func (p *Peer) ReplyCubeAndCosmosHeaders(id uint64, headers []*types.CubeAndCosmosHeader) error {
 	return p2p.Send(p.rw, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
 		RequestId:                  id,
 		CubeAndCosmosHeadersPacket: headers,

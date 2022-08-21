@@ -19,7 +19,6 @@ package eth
 import (
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core"
 	"io"
 	"math/big"
 
@@ -66,7 +65,7 @@ const (
 	GetPooledTransactionsMsg      = 0x12
 	PooledTransactionsMsg         = 0x13
 	NewBlockAndHeaderMsg          = 0x14
-	NewCosmosHeaderMsg            = 0x15
+	NewCosmosVoteMsg              = 0x15
 	GetCubeAndCosmosHeadersMsg    = 0x16
 	CubeAndCosmosHeadersMsg       = 0x17
 )
@@ -192,7 +191,7 @@ type BlockHeadersPacket66 struct {
 	BlockHeadersPacket
 }
 
-type CubeAndCosmosHeadersPacket []*core.CubeAndCosmosHeader
+type CubeAndCosmosHeadersPacket []*types.CubeAndCosmosHeader
 
 type CubeAndCosmosHeadersPacket66 struct {
 	RequestId uint64
@@ -224,7 +223,7 @@ func (request *NewBlockPacket) sanityCheck() error {
 
 // NewBlockPacket is the network packet for the block propagation message.
 type NewBlockAndHeaderPacket struct {
-	BlockAndHeader *core.BlockAndCosmosHeader
+	BlockAndHeader *types.BlockAndCosmosHeader
 	//Block *types.Block
 	TD *big.Int
 }
@@ -246,25 +245,8 @@ func (request *NewBlockAndHeaderPacket) sanityCheck() error {
 }
 
 // NewBlockPacket is the network packet for the block propagation message.
-type NewCosmosHeaderPacket struct {
-	Header *core.CosmosHeader
-}
-
-// sanityCheck verifies that the values are reasonable, as a DoS protection
-func (request *NewCosmosHeaderPacket) sanityCheck() error {
-	if request.Header == nil || request.Header.CosmosHeader == nil {
-		return fmt.Errorf("header is empty")
-	}
-	// todo: should check the relative of block header and cosmos header
-	//if err := request.header.Block.SanityCheck(); err != nil {
-	//	return err
-	//}
-	//TD at mainnet block #7753254 is 76 bits. If it becomes 100 million times
-	// larger, it will still fit within 100 bits
-	//if tdlen := request.TD.BitLen(); tdlen > 100 {
-	//	return fmt.Errorf("too large block TD: bitlen %d", tdlen)
-	//}
-	return nil
+type NewCosmosVotePacket struct {
+	Vote *types.CosmosVote
 }
 
 // GetBlockBodiesPacket represents a block body query.
@@ -423,8 +405,8 @@ func (*NewBlockPacket) Kind() byte   { return NewBlockMsg }
 func (*NewBlockAndHeaderPacket) Name() string { return "NewBlockAndHeader" }
 func (*NewBlockAndHeaderPacket) Kind() byte   { return NewBlockAndHeaderMsg }
 
-func (*NewCosmosHeaderPacket) Name() string { return "NewCosmosHeader" }
-func (*NewCosmosHeaderPacket) Kind() byte   { return NewCosmosHeaderMsg }
+func (*NewCosmosVotePacket) Name() string { return "NewCosmosVote" }
+func (*NewCosmosVotePacket) Kind() byte   { return NewCosmosVoteMsg }
 
 //func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
 //func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }

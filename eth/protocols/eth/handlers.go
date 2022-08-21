@@ -20,7 +20,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/trie"
 	ct "github.com/tendermint/tendermint/types"
@@ -138,7 +137,7 @@ func handleGetCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) e
 	return peer.ReplyCubeAndCosmosHeaders(query.RequestId, response)
 }
 
-func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmosHeadersPacket, peer *Peer) []*core.CubeAndCosmosHeader {
+func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmosHeadersPacket, peer *Peer) []*types.CubeAndCosmosHeader {
 	hashMode := query.Origin.Hash != (common.Hash{})
 	first := true
 	maxNonCanonical := uint64(100)
@@ -148,7 +147,7 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 	var (
 		bytes common.StorageSize
 		//headers []*types.Header
-		headers []*core.CubeAndCosmosHeader
+		headers []*types.CubeAndCosmosHeader
 		unknown bool
 		lookups int
 	)
@@ -173,14 +172,14 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 		if origin == nil {
 			break
 		}
-		log.Debug("query ori hash ", origin.Hash().Hex(), " number ", origin.Number.Uint64())
+		log.Debug("query ori hash ", "hash", origin.Hash().Hex(), " number ", origin.Number.Uint64())
 		var signedHeader *ct.SignedHeader
 		if crosschain.GetCrossChain() != nil {
 			signedHeader = crosschain.GetCrossChain().GetSignedHeader(origin.Number.Uint64(), origin.Hash())
 		}
-		h := &core.CubeAndCosmosHeader{
+		h := &types.CubeAndCosmosHeader{
 			Header:       origin,
-			CosmosHeader: core.CosmosHeaderFromSignedHeader(signedHeader),
+			CosmosHeader: types.CosmosHeaderFromSignedHeader(signedHeader),
 		}
 		headers = append(headers, h)
 		// todo:
@@ -425,20 +424,17 @@ func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, ann)
 }
 
-func handleNewCosmosHeader(backend Backend, msg Decoder, peer *Peer) error {
+func handleNewCosmosVote(backend Backend, msg Decoder, peer *Peer) error {
 	// Retrieve and decode the propagated block
-	ann := new(NewCosmosHeaderPacket)
+	ann := new(NewCosmosVotePacket)
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
-	}
-	if err := ann.sanityCheck(); err != nil {
-		return err
 	}
 
 	// todo: do some verification
 
 	// Mark the peer as owning the block
-	peer.markCosmosHeader(ann.Header.Hash)
+	peer.markCosmosVote(ann.Vote.Hash())
 
 	return backend.Handle(peer, ann)
 }

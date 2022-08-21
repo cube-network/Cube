@@ -405,13 +405,13 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 	for {
 		select {
 		case <-w.startCh:
-			log.Debug("start  send newWorkCh....", "time", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("start send newWorkCh....", "time", time.Now().UTC().String())
 			clearPending(w.chain.CurrentBlock().NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
-			log.Debug("chainHeadCh send newWorkCh....", "time", time.Now().UTC().String(), time.Now().UTC().String())
+			log.Debug("chainHeadCh send newWorkCh....", "time", time.Now().UTC().String())
 			clearPending(head.Block.NumberU64())
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
@@ -703,9 +703,9 @@ func (w *worker) resultLoop() {
 			cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
 			if cosmosHeader != nil {
 				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
-				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
+				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&types.BlockAndCosmosHeader{
 					block,
-					core.CosmosHeaderFromSignedHeader(cosmosHeader),
+					types.CosmosHeaderFromSignedHeader(cosmosHeader),
 				}})
 			} else {
 				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
@@ -1133,7 +1133,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 		}
 		select {
 		case w.taskCh <- &task{receipts: receipts, state: s, block: block, createdAt: time.Now(), crosschain: w.current.crosschain}:
-			log.Debug("worker commit send taskCh... ", time.Now().UTC().String())
+			log.Debug("worker commit send taskCh... ", "time", time.Now().UTC().String())
 			w.unconfirmed.Shift(block.NumberU64() - 1)
 			log.Info("Commit new mining work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 				"uncles", len(uncles), "txs", w.current.tcount,

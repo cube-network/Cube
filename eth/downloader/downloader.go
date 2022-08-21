@@ -646,8 +646,11 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, pivot *ty
 	if mode == FastSync {
 		fetch = 2 // head + pivot headers
 	}
-	//go p.peer.RequestHeadersByHash(latest, fetch, fsMinFullBlocks-1, true)
+	//if crosschain.GetCrossChain() != nil && crosschain.GetCrossChain(). {
 	go p.peer.RequestTwoHeadersByHash(latest, fetch, fsMinFullBlocks-1, true)
+	//} else {
+	//	go p.peer.RequestHeadersByHash(latest, fetch, fsMinFullBlocks-1, true)
+	//}
 
 	ttl := d.peers.rates.TargetTimeout()
 	timeout := time.After(ttl)

@@ -18,6 +18,7 @@ package fetcher
 
 import (
 	"errors"
+	types2 "github.com/tendermint/tendermint/types"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -95,7 +96,7 @@ func newTester(light bool) *fetcherTester {
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.broadcastBlockAndHeader, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, tester.continousInturn)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.getCosmosHeader, tester.broadcastBlockAndHeader, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, tester.continousInturn)
 	tester.fetcher.Start()
 
 	return tester
@@ -107,6 +108,11 @@ func (f *fetcherTester) getHeader(hash common.Hash) *types.Header {
 	defer f.lock.RUnlock()
 
 	return f.headers[hash]
+}
+
+// getHeader retrieves a header from the tester's block chain.
+func (f *fetcherTester) getCosmosHeader(height uint64, hash common.Hash) *types2.SignedHeader {
+	return nil
 }
 
 // getBlock retrieves a block from the tester's block chain.
@@ -126,7 +132,7 @@ func (f *fetcherTester) verifyHeader(header *types.Header) error {
 func (f *fetcherTester) broadcastBlock(block *types.Block, propagate bool) {
 }
 
-func (f *fetcherTester) broadcastBlockAndHeader(block *core.BlockAndCosmosHeader, propagate bool) {
+func (f *fetcherTester) broadcastBlockAndHeader(block *types.BlockAndCosmosHeader, propagate bool) {
 }
 
 // chainHeight retrieves the current height (block number) of the chain.

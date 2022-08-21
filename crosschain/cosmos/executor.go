@@ -171,17 +171,14 @@ func (c *Executor) EndBlock(vals []common.Address) {
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
-	// todo: sign commit id and cube.header.number
-	c.chain.vote(vals, rc, c.header)
-
 	sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
 	if sh == nil {
-		c.chain.makeCosmosSignedHeader(c.header)
+		c.chain.makeCosmosSignedHeader(c.header, vals)
 	}
 
 	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
 
-	log.Debug("EndBlock ibc hash", hex.EncodeToString(rc.Data[:]))
+	log.Debug("EndBlock", "ibcHash", hex.EncodeToString(rc.Data[:]))
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
@@ -190,14 +187,14 @@ func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_numb
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_last, app_hash_last)
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_cur, app_hash)
 
-	log.Debug("setstate ", app_hash_last.Hex(), " ", app_hash.Hex())
+	log.Debug("setstate", "last", app_hash_last.Hex(), "now", app_hash.Hex())
 
 	cn := common.BigToHash(big.NewInt(block_number))
 	statedb.SetState(system.CrossChainCosmosContract, state_block_number, cn)
 }
 
 func (c *Executor) InitGenesis(evm *vm.EVM) {
-	log.Debug("init genesis state root ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	log.Debug("init genesis", "state root", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	init_block_height := evm.Context.BlockNumber.Int64()
 	c.SetState(evm.StateDB, common.Hash{}, init_block_height)
 

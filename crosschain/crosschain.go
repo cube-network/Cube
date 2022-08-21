@@ -30,7 +30,8 @@ type CrossChain interface {
 	// TODO remove cosmos info
 	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
 	GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, vals []common.Address, header *ct.SignedHeader) error
+	HandleHeader(h *types.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error)
+	HandleVote(vote *types.CosmosVote, vals []common.Address) error
 }
 
 var cc CrossChain

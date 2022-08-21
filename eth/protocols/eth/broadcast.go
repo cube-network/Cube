@@ -17,7 +17,6 @@
 package eth
 
 import (
-	"github.com/ethereum/go-ethereum/core"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -40,15 +39,15 @@ type blockPropagation struct {
 // blockAndHeaderPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
 type blockAndHeaderPropagation struct {
-	blockAndHeader *core.BlockAndCosmosHeader
+	blockAndHeader *types.BlockAndCosmosHeader
 	td             *big.Int
 }
 
-// cosmosHeaderPropagation is a block propagation event, waiting for its turn in the
+// cosmosVotePropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
-type cosmosHeaderPropagation struct {
-	header *core.CosmosHeader
-	td     *big.Int
+type cosmosVotePropagation struct {
+	vote *types.CosmosVote
+	//td     *big.Int
 }
 
 // broadcastBlocks is a write loop that multiplexes blocks and block accouncements
@@ -75,11 +74,11 @@ func (p *Peer) broadcastBlocks() {
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
 
-		case prop := <-p.queuedCosmosHeaders:
-			if err := p.SendNewCosmosHeader(prop.header); err != nil {
+		case prop := <-p.queuedCosmosVotes:
+			if err := p.SendNewCosmosVote(prop.vote); err != nil {
 				return
 			}
-			p.Log().Trace("Propagated cosmos header", "number", prop.header.CosmosHeader.Height, "hash", prop.header.Hash, "td", prop.td)
+			p.Log().Trace("Propagated cosmos vote", "index", prop.vote.Index, "headerHash", prop.vote.HeaderHash)
 
 		case <-p.term:
 			return

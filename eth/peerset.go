@@ -211,16 +211,16 @@ func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {
 	return list
 }
 
-// peersWithoutCosmosHeader retrieves a list of peers that do not have a given cosmos-header in
+// peersWithoutCosmosVote retrieves a list of peers that do not have a given cosmos-header in
 // their set of known hashes so it might be propagated to them.
-func (ps *peerSet) peersWithoutCosmosHeader(hash common.Hash) []*ethPeer {
+func (ps *peerSet) peersWithoutCosmosVote(headerHash common.Hash, voteHash common.Hash) []*ethPeer {
 	ps.lock.RLock()
 	defer ps.lock.RUnlock()
 
 	list := make([]*ethPeer, 0, len(ps.peers))
-	log.Debug("peersWithoutCosmosHeader total peers", "count", len(ps.peers))
+	log.Debug("peersWithoutCosmosVote total peers", "count", len(ps.peers))
 	for _, p := range ps.peers {
-		if !p.KnownCosmosHeader(hash) {
+		if !p.KnownCosmosVote(voteHash) && p.KnownBlock(headerHash) {
 			list = append(list, p)
 		}
 	}

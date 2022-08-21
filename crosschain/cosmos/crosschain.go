@@ -84,6 +84,7 @@ func (c *Cosmos) Init(datadir string,
 
 func (c *Cosmos) SetCoinbase(addr common.Address) {
 	c.coinbase = addr
+	c.chain.cubeAddr = addr
 }
 
 func (c *Cosmos) APIs() []rpc.API {
@@ -102,7 +103,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	defer c.callmu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64(), 10))
 		return nil
 	}
 
@@ -133,7 +134,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	}
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
@@ -153,7 +154,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
 	log.Debug("seal exec", "executor", exec)
 	executor := exec.(*Executor)
 	if executor == nil || !IsEnable(c.config, executor.header.Number) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(executor.header.Number.Uint64(), 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(executor.header.Number.Uint64(), 10))
 		return
 	}
 
@@ -165,11 +166,11 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, header.Number) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(header.Number.Uint64(), 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64(), 10))
 		return
 	}
 
-	log.Info("event header ", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
+	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
 	var statedb *state.StateDB
 	var err error
@@ -191,7 +192,7 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(height, 10))
 		return nil
 	}
 	return c.chain.getSignedHeader(height, hash)
@@ -202,30 +203,32 @@ func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(int64(height))) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(height, 10))
 		return nil
 	}
 
 	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
 }
 
-func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) error {
+func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, h.Number) {
-		log.Debug("cosmos not enable yet", strconv.FormatUint(h.Number.Uint64(), 10))
-		return nil
-	}
-
-	if header == nil {
-		return errors.New("missing cosmos header")
-	}
-
-	//_, err := c.validatorsfn(chain, h)
-	//if err != nil {
-	//	return err
+	//if !IsEnable(c.config, h.Number) {
+	//	log.Debug("cosmos not enable yet", "number", strconv.FormatUint(h.Number.Uint64(), 10))
+	//	return nil, nil
 	//}
 
-	return c.chain.handleSignedHeader(h, header)
+	if header == nil {
+		return nil, errors.New("missing cosmos header")
+	}
+
+	return c.chain.handleSignedHeader(h, vals, header)
+}
+
+func (c *Cosmos) HandleVote(vote *et.CosmosVote, vals []common.Address) error {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.handleVote(vote, vals)
 }

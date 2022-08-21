@@ -26,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -96,7 +95,7 @@ type blockBroadcasterFn func(block *types.Block, propagate bool)
 type cosmosHeaderRetrievalFn func(height uint64, hash common.Hash) *ct.SignedHeader
 
 // blockAndHeaderBroadcasterFn is a callback type for broadcasting a block to connected peers.
-type blockAndHeaderBroadcasterFn func(blockAndHeader *core.BlockAndCosmosHeader, propagate bool)
+type blockAndHeaderBroadcasterFn func(blockAndHeader *types.BlockAndCosmosHeader, propagate bool)
 
 // chainHeightFn is a callback type to retrieve the current chain height.
 type chainHeightFn func() uint64
@@ -980,7 +979,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			//}, true)
 			sh := f.getCosmosHeader(block.NumberU64(), block.Header().Hash())
 			if sh != nil {
-				bsh := &core.BlockAndCosmosHeader{Block: block, CosmosHeader: core.CosmosHeaderFromSignedHeader(sh)}
+				bsh := &types.BlockAndCosmosHeader{Block: block, CosmosHeader: types.CosmosHeaderFromSignedHeader(sh)}
 				go f.broadcastBlockAndHeader(bsh, true)
 			} else {
 				go f.broadcastBlock(block, true)

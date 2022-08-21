@@ -431,11 +431,11 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 	// Run each of the tests and verify the results against the chain
 	for i, tt := range tests {
 		// Collect the headers to expect in the response
-		var headers []*core.CubeAndCosmosHeader
+		var headers []*types.CubeAndCosmosHeader
 		for _, hash := range tt.expect {
-			tmp := &core.CubeAndCosmosHeader{
+			tmp := &types.CubeAndCosmosHeader{
 				Header:       backend.chain.GetBlockByHash(hash).Header(),
-				CosmosHeader: &core.CosmosHeaderForP2P{},
+				CosmosHeader: &types.CosmosHeaderForP2P{},
 			}
 			headers = append(headers, tmp)
 		}

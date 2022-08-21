@@ -123,6 +123,7 @@ type handler struct {
 	njfSub                 event.Subscription
 	minedBlockSub          *event.TypeMuxSubscription
 	minedBlockAndHeaderSub *event.TypeMuxSubscription
+	cosmosVoteSub          *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
 
@@ -448,6 +449,11 @@ func (h *handler) Start(maxPeers int) {
 	h.minedBlockAndHeaderSub = h.eventMux.Subscribe(core.NewMinedBlockAndHeaderEvent{})
 	go h.minedBlockAndHeaderBroadcastLoop()
 
+	// broadcast cosmos vote
+	h.wg.Add(1)
+	h.cosmosVoteSub = h.eventMux.Subscribe(core.NewCosmosVoteEvent{})
+	go h.newCosmosVoteBroadcastLoop()
+
 	// broadcast self-built attestation
 	h.wg.Add(1)
 	h.naCh = make(chan core.NewAttestationEvent, naChanSize)
@@ -469,6 +475,7 @@ func (h *handler) Stop() {
 	h.txsSub.Unsubscribe()                 // quits txBroadcastLoop
 	h.minedBlockSub.Unsubscribe()          // quits blockBroadcastLoop
 	h.minedBlockAndHeaderSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
+	h.cosmosVoteSub.Unsubscribe()          // quits newCosmosVoteBroadcastLoop
 	h.naSub.Unsubscribe()                  // quits newAttestationBroadcastLoop
 	h.njfSub.Unsubscribe()                 // quits newJustifiedOrFinalizedBlockBroadcastLoop
 
@@ -526,7 +533,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastBlockAndHeader(blockAndHeader *core.BlockAndCosmosHeader, propagate bool) {
+func (h *handler) BroadcastBlockAndHeader(blockAndHeader *types.BlockAndCosmosHeader, propagate bool) {
 	block := blockAndHeader.Block
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
@@ -563,22 +570,18 @@ func (h *handler) BroadcastBlockAndHeader(blockAndHeader *core.BlockAndCosmosHea
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastCosmosHeader(header *core.CosmosHeader, propagate bool) {
-	hash := header.Hash
-	peers := h.peers.peersWithoutBlock(hash)
-	log.Info("Broadcast CosmosHeader", "peers", len(peers), "number", header.CosmosHeader.Height, "hash", hash)
+func (h *handler) BroadcastCosmosVote(vote *types.CosmosVote) {
+	peers := h.peers.peersWithoutCosmosVote(vote.HeaderHash, vote.Hash())
+	log.Info("Broadcast CosmosVote", "peers", len(peers), "index", vote.Index, "headerHash", vote.HeaderHash)
 
-	// If propagation is requested, send to a subset of the peer
-	if propagate {
-		// Send the block to a subset of our peers
-		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
-		for _, peer := range transfer {
-			log.Info("metric", "method", "BroadcastCosmosHeader", "peer", peer.ID(), "hash", hash.String(), "number", header.CosmosHeader.Height, "fullBlock", false)
-			peer.AsyncSendNewCosmosHeader(header)
-		}
-		log.Trace("Propagated cosmos header", "hash", hash, "recipients", len(transfer))
-		return
+	// Send the block to a subset of our peers
+	transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+	for _, peer := range transfer {
+		log.Info("metric", "method", "BroadcastCosmosVote", "peer", peer.ID(), "index", vote.Index, "headerHash", vote.HeaderHash)
+		peer.AsyncSendNewCosmosVote(vote)
 	}
+	log.Trace("Propagated cosmos vote", "index", vote.Index, "headerHash", vote.HeaderHash, "recipients", len(transfer))
+	return
 }
 
 // BroadcastTransactions will propagate a batch of transactions
@@ -666,6 +669,16 @@ func (h *handler) minedBlockAndHeaderBroadcastLoop() {
 		if ev, ok := obj.Data.(core.NewMinedBlockAndHeaderEvent); ok {
 			h.BroadcastBlockAndHeader(ev.BlockAndHeader, true)  // First propagate block to peers
 			h.BroadcastBlockAndHeader(ev.BlockAndHeader, false) // Only then announce to the rest
+		}
+	}
+}
+
+func (h *handler) newCosmosVoteBroadcastLoop() {
+	defer h.wg.Done()
+
+	for obj := range h.cosmosVoteSub.Chan() {
+		if ev, ok := obj.Data.(core.NewCosmosVoteEvent); ok {
+			h.BroadcastCosmosVote(ev.CosmosVote)
 		}
 	}
 }

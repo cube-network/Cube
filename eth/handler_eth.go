@@ -97,6 +97,9 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	case *eth.CubeAndCosmosHeadersPacket:
 		return h.handleTwoHeaders(peer, *packet)
 
+	case *eth.NewCosmosVotePacket:
+		return h.handleCosmosVoteBroadcast(peer, packet.Vote)
+
 	case *eth.NewPooledTransactionHashesPacket:
 		return h.txFetcher.Notify(peer.ID(), *packet)
 
@@ -169,7 +172,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 
 // handleHeaders is invoked from a peer's message handler when it transmits a batch
 // of headers for the local node to process.
-func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCosmosHeader) error {
+func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*types.CubeAndCosmosHeader) error {
 	p := h.peers.peer(peer.ID())
 	if p == nil {
 		return errors.New("unregistered during callback")
@@ -197,9 +200,25 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 		//chs = append(chs, th.Header)
 		chs[i] = th.Header
 		// todo: verify cosmos header
-		if crosschain.GetCrossChain() != nil {
-			sh := core.SignedHeaderFromCosmosHeader(th.CosmosHeader)
-			if err := crosschain.GetCrossChain().HandleHeader(th.Header, sh); err != nil {
+		if crosschain.GetCrossChain() != nil && th.CosmosHeader != nil {
+			sh := types.SignedHeaderFromCosmosHeader(th.CosmosHeader)
+			vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, th.Header)
+			if err != nil {
+				header := h.chain.GetHeaderByNumber(th.Header.Number.Uint64())
+				vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
+				if err != nil {
+					log.Error("get top validators failed 1", "err", err)
+					return err
+				}
+			}
+
+			vote, err := crosschain.GetCrossChain().HandleHeader(th.Header, vals, sh)
+			if vote != nil {
+				log.Info("BroadcastCosmosVote 2", "index", vote.Index, "headerHash", vote.HeaderHash)
+				h.eventMux.Post(core.NewCosmosVoteEvent{vote})
+			}
+			if err != nil {
+				log.Error("HandleHeader failed", "peer", p.ID(), "err", err)
 				return err
 			}
 		}
@@ -215,8 +234,10 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*core.CubeAndCos
 
 			// Validate the header and either drop the peer or continue
 			if th.Header.Hash() != h.checkpointHash {
+				log.Error("checkpoint hash mismatch", "peer", p.ID())
 				return errors.New("checkpoint hash mismatch")
 			}
+			log.Error("syncDrop Stop", "peer", p.ID())
 			return nil
 		}
 		// Otherwise if it's a whitelisted block, validate against the set
@@ -304,14 +325,32 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
-func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeader *core.BlockAndCosmosHeader, td *big.Int) error {
+func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeader *types.BlockAndCosmosHeader, td *big.Int) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
 	block := blockAndHeader.Block
 	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
 	// todo: deal with cosmos header
-	if crosschain.GetCrossChain() != nil {
-		sh := core.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
-		err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
+	if crosschain.GetCrossChain() != nil && blockAndHeader.CosmosHeader != nil {
+		sh := types.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
+		vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, block.Header())
+		if err != nil {
+			header := h.chain.GetHeaderByNumber(blockAndHeader.Block.NumberU64())
+			vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
+			if err != nil {
+				log.Error("get top validators failed 2", "err", err)
+				return err
+			}
+		}
+		vote, err := crosschain.GetCrossChain().HandleHeader(block.Header(), vals, sh)
+		if vote != nil {
+			log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
+			h.eventMux.Post(core.NewCosmosVoteEvent{vote})
+		}
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
 			return err
@@ -331,6 +370,32 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 	if _, td := peer.Head(); trueTD.Cmp(td) > 0 {
 		peer.SetHead(trueHead, trueTD)
 		h.chainSync.handlePeerEvent(peer)
+	}
+
+	return nil
+}
+
+func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.CosmosVote) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
+	if crosschain.GetCrossChain() != nil {
+		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		header := h.chain.GetHeader(vote.HeaderHash, vote.Number.Uint64())
+		vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, header)
+		if err != nil {
+			header = h.chain.GetHeaderByNumber(vote.Number.Uint64())
+			vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
+			if err != nil {
+				log.Error("get top validators failed 2", "err", err)
+				return err
+			}
+		}
+		if err := crosschain.GetCrossChain().HandleVote(vote, vals); err != nil {
+			return nil
+		}
 	}
 
 	return nil

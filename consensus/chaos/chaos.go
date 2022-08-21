@@ -618,7 +618,7 @@ func (c *Chaos) Prepare(chain consensus.ChainHeaderReader, header *types.Header)
 	}
 
 	if number%c.config.Epoch == 0 {
-		newSortedValidators, err := c.getTopValidators(chain, header)
+		newSortedValidators, err := c.GetTopValidators(chain, header)
 		if err != nil {
 			return err
 		}
@@ -748,7 +748,7 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 
 // updateValidators updates validators info to system contracts
 func (c *Chaos) updateValidators(vmCtx *systemcontract.CallContext, chain consensus.ChainHeaderReader, mined bool) error {
-	newValidators, err := c.getTopValidators(chain, vmCtx.Header)
+	newValidators, err := c.GetTopValidators(chain, vmCtx.Header)
 	if err != nil {
 		return err
 	}
@@ -832,7 +832,7 @@ func (c *Chaos) tryLazyPunish(chain consensus.ChainHeaderReader, header *types.H
 }
 
 // call this at epoch block to get top validators based on the state of epoch block - 1
-func (c *Chaos) getTopValidators(chain consensus.ChainHeaderReader, header *types.Header) ([]common.Address, error) {
+func (c *Chaos) GetTopValidators(chain consensus.ChainHeaderReader, header *types.Header) ([]common.Address, error) {
 	parent := chain.GetHeader(header.ParentHash, header.Number.Uint64()-1)
 	if parent == nil {
 		return []common.Address{}, consensus.ErrUnknownAncestor

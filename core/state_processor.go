@@ -161,7 +161,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	bloomWg.Wait()
 	returnErrBeforeWaitGroup = false
 
-	crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
+	vals, err := chaosEngine.GetTopValidators(p.bc, header)
+	if err != nil {
+		log.Error("GetTopValidators failed", "number", header.Number)
+		return nil, nil, 0, err
+	}
+	crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain, vals)
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs); err != nil {

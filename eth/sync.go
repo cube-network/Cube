@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -264,8 +263,8 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		if crosschain.GetCrossChain() != nil {
 			sh := crosschain.GetCrossChain().GetSignedHeader(head.NumberU64(), head.Hash())
 			if sh != nil {
-				bah := &core.BlockAndCosmosHeader{
-					CosmosHeader: core.CosmosHeaderFromSignedHeader(sh),
+				bah := &types.BlockAndCosmosHeader{
+					CosmosHeader: types.CosmosHeaderFromSignedHeader(sh),
 					Block:        head,
 				}
 				h.BroadcastBlockAndHeader(bah, false)

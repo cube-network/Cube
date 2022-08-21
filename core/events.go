@@ -30,7 +30,11 @@ type NewMinedBlockEvent struct {
 }
 
 type NewMinedBlockAndHeaderEvent struct {
-	BlockAndHeader *BlockAndCosmosHeader
+	BlockAndHeader *types.BlockAndCosmosHeader
+}
+
+type NewCosmosVoteEvent struct {
+	CosmosVote *types.CosmosVote
 }
 
 // RemovedLogsEvent is posted when a reorg happens

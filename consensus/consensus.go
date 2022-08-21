@@ -169,6 +169,8 @@ type ChaosEngine interface {
 
 	Validators(chain ChainHeaderReader, hash common.Hash, number uint64) ([]common.Address, error)
 
+	GetTopValidators(chain ChainHeaderReader, header *types.Header) ([]common.Address, error)
+
 	// CalculateGasPool calculate the expected max gas used for a block
 	CalculateGasPool(header *types.Header) uint64
 

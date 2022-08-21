@@ -191,7 +191,7 @@ var eth66 = map[uint64]msgHandler{
 	GetPooledTransactionsMsg:      handleGetPooledTransactions66,
 	PooledTransactionsMsg:         handlePooledTransactions66,
 	NewBlockAndHeaderMsg:          handleNewBlockAndHeader,
-	NewCosmosHeaderMsg:            handleNewCosmosHeader,
+	NewCosmosVoteMsg:              handleNewCosmosVote,
 	GetCubeAndCosmosHeadersMsg:    handleGetCubeAndCosmosHeaders66,
 	CubeAndCosmosHeadersMsg:       handleNewCubeAndCosmosHeaders66,
 }

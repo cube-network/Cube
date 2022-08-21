@@ -17,20 +17,21 @@ import (
 
 type CrossChain interface {
 	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, header *types.Header)
-	SetCoidbase(addr common.Address)
+	SetCoinbase(addr common.Address)
 
 	APIs() []rpc.API
 
 	NewExecutor(header *types.Header, statedb *state.StateDB) vm.CrossChain
 	FreeExecutor(exec vm.CrossChain)
-	Seal(exec vm.CrossChain)
+	Seal(exec vm.CrossChain, vals []common.Address)
 
 	EventHeader(header *types.Header)
 
 	// TODO remove cosmos info
 	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
 	GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, header *ct.SignedHeader) error
+	HandleHeader(h *types.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error)
+	HandleVote(vote *types.CosmosVote, vals []common.Address) error
 }
 
 var cc CrossChain

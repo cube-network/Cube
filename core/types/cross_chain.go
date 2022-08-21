@@ -1,18 +1,18 @@
-package core
+package types
 
 import (
 	"github.com/ethereum/go-ethereum/log"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
 	ct "github.com/tendermint/tendermint/types"
 )
 
 type BlockAndCosmosHeader struct {
-	Block        *types.Block
+	Block        *Block
 	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
 }
 
@@ -22,8 +22,19 @@ type CosmosHeader struct {
 }
 
 type CubeAndCosmosHeader struct {
-	Header       *types.Header
+	Header       *Header
 	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
+}
+
+type CosmosVote struct {
+	Number     *big.Int
+	HeaderHash common.Hash // cube header's hash
+	Index      uint32
+	Vote       ct.CommitSig
+}
+
+func (h *CosmosVote) Hash() common.Hash {
+	return rlpHash(h)
 }
 
 type CosmosHeaderForP2P struct {

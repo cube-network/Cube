@@ -159,22 +159,22 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 	c.app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto()})
 }
 
-func (c *Executor) EndBlock(vals []common.Address) {
+func (c *Executor) EndBlock() {
 	rc := c.app.BaseApp.Commit()
 	// TODO hardfork cosmos block height
-	// if c.header.Number.Int64() > 128 {
-	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
-	// 	c.db.Delete([]byte(key))
-	// }
+	if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
+		key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
+		c.db.Delete([]byte(key))
+	}
 
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
-	sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
-	if sh == nil {
-		c.chain.makeCosmosSignedHeader(c.header, vals)
-	}
+	// sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
+	// if sh == nil {
+	// 	c.chain.makeCosmosSignedHeader(c.header)
+	// }
 
 	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
 
@@ -194,7 +194,6 @@ func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_numb
 }
 
 func (c *Executor) InitGenesis(evm *vm.EVM) {
-	log.Debug("init genesis", "state root", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	init_block_height := evm.Context.BlockNumber.Int64()
 	c.SetState(evm.StateDB, common.Hash{}, init_block_height)
 
@@ -231,7 +230,6 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	// }
 
 	// c.is_start_crosschain = true
-	log.Debug("init genesis done state root ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 }
 
 // TODO get cube block header instead

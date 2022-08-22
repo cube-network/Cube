@@ -943,21 +943,34 @@ func getLatestVersion(db dbm.DB) int64 {
 
 // Commits each store and returns a new commitInfo.
 func commitStores(version int64, storeMap map[types.StoreKey]types.CommitKVStore) *types.CommitInfo {
+	sk := make([]string, len(storeMap))
+	i := 0
+	for k, _ := range storeMap {
+		sk[i] = k.Name()
+		i++
+	}
+	sort.Strings(sk)
+
 	storeInfos := make([]types.StoreInfo, 0, len(storeMap))
 
-	for key, store := range storeMap {
-		commitID := store.Commit()
+	// for key, store := range storeMap {
+	for i := 0; i < len(sk); i++ {
+		for key, store := range storeMap {
+			if key.Name() == sk[i] {
+				commitID := store.Commit()
 
-		if store.GetStoreType() == types.StoreTypeTransient {
-			continue
+				if store.GetStoreType() == types.StoreTypeTransient {
+					continue
+				}
+
+				// println("save version commit ", " version ", commitID.Version, " hash ", hex.EncodeToString(commitID.Hash), " key ", key.Name())
+
+				si := types.StoreInfo{}
+				si.Name = key.Name()
+				si.CommitId = commitID
+				storeInfos = append(storeInfos, si)
+			}
 		}
-
-		// println("save version commit ", " version ", commitID.Version, " hash ", hex.EncodeToString(commitID.Hash), " key ", key.Name())
-
-		si := types.StoreInfo{}
-		si.Name = key.Name()
-		si.CommitId = commitID
-		storeInfos = append(storeInfos, si)
 	}
 
 	return &types.CommitInfo{

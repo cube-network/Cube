@@ -1,11 +1,14 @@
 package cosmos
 
 import (
+	"encoding/hex"
 	"errors"
+	"sort"
 	"strings"
 	"sync"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
 	"github.com/ethereum/go-ethereum/log"
@@ -106,7 +109,9 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 		log.Debug("Failed to Set, err", err.Error())
 		return err
 	}
-	// log.Debug("store. set ", csdb.counter, " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
+	// h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
+	// log.Debug("store. set state root ", h)
+	// log.Debug("store. set ", strconv.Itoa(int(csdb.counter)), " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
 
 	return nil
 }
@@ -148,12 +153,59 @@ func (csdb *CosmosStateDB) Close() error {
 	return nil
 }
 
+type CosmosStateDBBatch struct {
+	csdb  *CosmosStateDB
+	cache map[string][]byte
+}
+
+func (b *CosmosStateDBBatch) Set(key, value []byte) error {
+	b.cache[hex.EncodeToString(key)] = value
+	return nil
+}
+
+func (b *CosmosStateDBBatch) Delete(key []byte) error {
+	delete(b.cache, hex.EncodeToString(key))
+	return nil
+}
+
+func (b *CosmosStateDBBatch) Write() error {
+	if len(b.cache) == 0 {
+		return nil
+	}
+	key := make([]string, len(b.cache))
+	i := 0
+	for k := range b.cache {
+		key[i] = k
+		i++
+	}
+	sort.Strings(key)
+	for i := 0; i < len(key); i++ {
+		k, _ := hex.DecodeString(key[i])
+		b.csdb.Set(k, b.cache[key[i]])
+	}
+	return nil
+}
+
+func (b *CosmosStateDBBatch) WriteSync() error {
+	return b.Write()
+}
+
+func (b *CosmosStateDBBatch) Close() error {
+	return nil
+}
+
 func (csdb *CosmosStateDB) NewBatch() dbm.Batch {
-	// csdb.mu.Lock()
-	// defer csdb.mu.Unlock()
-	// h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
-	// log.Debug("newbatch state root ", h)
-	return csdb
+	csdb.mu.Lock()
+	defer csdb.mu.Unlock()
+	h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
+	log.Debug("newbatch state root ", h)
+
+	b := &CosmosStateDBBatch{}
+	b.csdb = csdb
+	b.cache = make(map[string][]byte)
+	return b
+
+	// return csdb
 }
 
 func (csdb *CosmosStateDB) Print() error {

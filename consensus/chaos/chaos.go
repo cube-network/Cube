@@ -652,13 +652,15 @@ func (c *Chaos) Finalize(chain consensus.ChainHeaderReader, header *types.Header
 		ntxs := make([]*types.Transaction, 0)
 		txs = &ntxs
 	}
-
+	log.Debug("chaos finalize start ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	// Preparing jobs before finalize
 	if err := c.prepareFinalize(chain, header, state, txs, receipts, punishTxs, proposalTxs, false); err != nil {
+		log.Debug("prepare finalize fail")
 		return err
 	}
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	log.Debug("chaos finalize done ", header.Root.Hex())
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	return nil
@@ -697,17 +699,22 @@ func (c *Chaos) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *t
 func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types.Header,
 	state *state.StateDB, txs *[]*types.Transaction, receipts *[]*types.Receipt, punishTxs []*types.Transaction, proposalTxs []*types.Transaction, mined bool) error {
 	// punish validator if low difficulty block found
+
+	log.Debug("chaos prepareFinalize start 1 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
+
 	if header.Difficulty.Cmp(diffInTurn) != 0 {
 		if err := c.tryLazyPunish(chain, header, state); err != nil {
 			return err
 		}
 	}
+	log.Debug("chaos prepareFinalize start 2 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	// execute block reward tx.
 	if len(*txs) > 0 {
 		if err := c.tryDistributeBlockFee(chain, header, state); err != nil {
 			return err
 		}
 	}
+	log.Debug("chaos prepareFinalize start 3 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	// do epoch thing at the end, because it will update active validators
 	if header.Number.Uint64()%c.config.Epoch == 0 {
 		vmCtx := &systemcontract.CallContext{
@@ -724,6 +731,7 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 			return err
 		}
 	}
+	log.Debug("chaos prepareFinalize start 4 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	// UpdateRewardsInfo once a day
 	if header.Number.Uint64()%c.rewardsUpdatePeroid == 0 {
 		if err := systemcontract.UpdateRewardsInfo(&systemcontract.CallContext{
@@ -735,14 +743,17 @@ func (c *Chaos) prepareFinalize(chain consensus.ChainHeaderReader, header *types
 			return err
 		}
 	}
+	log.Debug("chaos prepareFinalize start 5 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	// punish double sign
 	if err := c.punishDoubleSign(chain, header, state, txs, receipts, punishTxs, mined); err != nil {
 		return err
 	}
+	log.Debug("chaos prepareFinalize start 6 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	if chain.Config().IsGravitation(header.Number) {
 		// process proposal
 		return c.processProposalTx(chain, header, state, txs, receipts, proposalTxs, mined)
 	}
+	log.Debug("chaos prepareFinalize start 7 ", state.IntermediateRoot(chain.Config().IsEIP158(header.Number)).Hex())
 	return nil
 }
 

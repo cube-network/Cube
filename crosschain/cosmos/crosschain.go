@@ -138,6 +138,9 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 		return
 	}
 
+	root := executor.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true)
+	log.Debug("freeexecutor state root ", root.Hex())
+
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
 	log.Debug("freeExecutorCounter", "counter", c.freeExecutorCounter)

@@ -88,7 +88,6 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 	}
 	vmgr.Validators = types.NewValidatorSet(validators)
 	vmgr.NextValidators = types.NewValidatorSet(validators)
-	//vmgr.NextValidators = types.NewValidatorSet(validators).CopyIncrementProposerPriority(1)
 	vmgr.LastValidators = types.NewValidatorSet(nil)
 	vmgr.LastHeightValidatorsChanged = height
 

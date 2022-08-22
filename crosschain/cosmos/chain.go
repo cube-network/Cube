@@ -337,22 +337,22 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 	return h
 }
 
-func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	log.Info("getSignedHeaderWithSealHash", "number", height, "sealHash", sealHash, "hash", hash)
-	header := c.signedHeader[sealHash]
-	if header == nil && height == c.latestSignedHeight {
-		header = c.signedHeader[c.latestSignedHash]
-		if header != nil {
-			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
-		} else {
-			log.Error("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
-		}
-	}
-	c.signedHeader[hash] = header
-	return header
-}
+// func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
+// 	c.mu.Lock()
+// 	defer c.mu.Unlock()
+// 	log.Info("getSignedHeaderWithSealHash", "number", height, "sealHash", sealHash, "hash", hash)
+// 	header := c.signedHeader[sealHash]
+// 	if header == nil && height == c.latestSignedHeight {
+// 		header = c.signedHeader[c.latestSignedHash]
+// 		if header != nil {
+// 			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
+// 		} else {
+// 			log.Error("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
+// 		}
+// 	}
+// 	c.signedHeader[hash] = header
+// 	return header
+// }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 	h := c.getHeaderByNumber(uint64(block_height))

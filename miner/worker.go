@@ -699,8 +699,7 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			// TODO Make New Header
-			cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
+			cosmosHeader := crosschain.GetCrossChain().GetSignedHeader(block.NumberU64(), hash)
 			if cosmosHeader != nil {
 				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
 				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&types.BlockAndCosmosHeader{
@@ -708,9 +707,21 @@ func (w *worker) resultLoop() {
 					types.CosmosHeaderFromSignedHeader(cosmosHeader),
 				}})
 			} else {
-				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
-				w.mux.Post(core.NewMinedBlockEvent{block})
+				if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
+					panic("cosmos header not found!")
+				}
 			}
+			// cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
+			// if cosmosHeader != nil {
+			// 	log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
+			// 	w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
+			// 		block,
+			// 		core.CosmosHeaderFromSignedHeader(cosmosHeader),
+			// 	}})
+			// } else {
+			// 	log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+			// 	w.mux.Post(core.NewMinedBlockEvent{block})
+			// }
 
 			crosschain.GetCrossChain().FreeExecutor(task.crosschain)
 			// Insert the block into the set of pending ones to resultLoop for confirmations
@@ -1112,11 +1123,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
 	log.Debug("worker commit...")
-	vals, err := w.chain.ChaosEngine.GetTopValidators(w.chain, w.current.header)
-	if err != nil {
-		return err
-	}
-	crosschain.GetCrossChain().Seal(w.current.crosschain, vals)
+
+	crosschain.GetCrossChain().Seal(w.current.crosschain)
 	// Deep copy receipts here to avoid interaction between different tasks.
 	cpyReceipts := copyReceipts(w.current.receipts)
 	// copy transactions to a new slice to avoid interaction between different tasks.

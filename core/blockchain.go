@@ -1421,6 +1421,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	//	bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
 	//}
 
+	log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
+	vals, err := bc.ChaosEngine.GetTopValidators(bc, block.Header())
+	crosschain.GetCrossChain().EventHeader(block.Header(), vals)
+
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
 	}
@@ -1437,8 +1441,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
-			log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
-			crosschain.GetCrossChain().EventHeader(block.Header())
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
@@ -1732,7 +1734,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		substart := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 
-		log.Debug("process statedb ", statedb.IntermediateRoot(true).Hex())
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -1755,7 +1756,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			"trieHash", triehash, "trieProc", trieproc, "size", block.Size(), "txCount", len(block.Transactions()), "gasUsed", block.Header().GasUsed,
 			"cost", time.Since(substart)-trieproc-triehash)
 
-		log.Debug("process validate statedb ", statedb.IntermediateRoot(true).Hex())
 		// Validate the state using the default validator
 		substart = time.Now()
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {

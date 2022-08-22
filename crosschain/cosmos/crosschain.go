@@ -144,7 +144,7 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	log.Debug("free exec", "executor", exec)
 }
 
-func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
+func (c *Cosmos) Seal(exec vm.CrossChain) {
 	c.callmu.Lock()
 	defer c.callmu.Unlock()
 
@@ -158,10 +158,10 @@ func (c *Cosmos) Seal(exec vm.CrossChain, vals []common.Address) {
 		return
 	}
 
-	executor.EndBlock(vals)
+	executor.EndBlock()
 }
 
-func (c *Cosmos) EventHeader(header *types.Header) {
+func (c *Cosmos) EventHeader(header *types.Header, vals []common.Address) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
@@ -171,6 +171,11 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	}
 
 	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
+
+	sh := c.chain.getSignedHeader(header.Number.Uint64(), header.Hash())
+	if sh == nil {
+		c.chain.makeCosmosSignedHeader(header, vals)
+	}
 
 	var statedb *state.StateDB
 	var err error
@@ -198,17 +203,15 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	return c.chain.getSignedHeader(height, hash)
 }
 
-func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
-	c.querymu.Lock()
-	defer c.querymu.Unlock()
-
-	if !IsEnable(c.config, big.NewInt(int64(height))) {
-		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(height, 10))
-		return nil
-	}
-
-	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
-}
+// func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
+// 	c.querymu.Lock()
+// 	defer c.querymu.Unlock()
+// 	if !IsEnable(c.config, big.NewInt(int64(height))) {
+// 		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
+// 		return nil
+// 	}
+// 	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
+// }
 
 func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error) {
 	c.querymu.Lock()

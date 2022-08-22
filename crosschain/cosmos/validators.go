@@ -30,17 +30,6 @@ type SimplifiedValidator struct {
 }
 
 type ValidatorsMgr struct {
-	//// LastValidators is used to validate block.LastCommit.
-	//// Validators are persisted to the database separately every time they change,
-	//// so we can query for historical validator sets.
-	//// Note that if s.LastBlockHeight causes a valset change,
-	//// we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1 + 1
-	//// Extra +1 due to nextValSet delay.
-	NextValidators              *types.ValidatorSet
-	Validators                  *types.ValidatorSet
-	LastValidators              *types.ValidatorSet
-	LastHeightValidatorsChanged int64
-
 	AddrValMap map[common.Address]*types.Validator // cube address => cosmos validator
 
 	config            *params.ChainConfig
@@ -86,20 +75,8 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 		validators[i] = tVal
 		vmgr.AddrValMap[val.CubeAddr] = tVal
 	}
-	vmgr.Validators = types.NewValidatorSet(validators)
-	vmgr.NextValidators = types.NewValidatorSet(validators)
-	vmgr.LastValidators = types.NewValidatorSet(nil)
-	vmgr.LastHeightValidatorsChanged = height
 
 	return nil
-}
-
-func (vmgr *ValidatorsMgr) updateValidators(h *et.Header, height int64) {
-	vmgr.LastValidators = types.NewValidatorSet(vmgr.Validators.Validators)
-	//
-	_, vmgr.Validators = vmgr.getValidators(h.Number.Uint64())
-	vmgr.NextValidators = types.NewValidatorSet(vmgr.Validators.Validators)
-	vmgr.LastHeightValidatorsChanged = height
 }
 
 func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
@@ -120,7 +97,10 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *type
 		validators[i] = tVal
 		log.Info("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 	}
-	return addrs, types.NewValidatorSet(validators)
+	valset := &types.ValidatorSet{
+		Validators: validators,
+	}
+	return addrs, valset //types.NewValidatorSet(validators)
 }
 
 func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address) *types.Validator {

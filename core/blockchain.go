@@ -1422,8 +1422,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	//}
 
 	log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
-	vals, err := bc.ChaosEngine.GetTopValidators(bc, block.Header())
-	crosschain.GetCrossChain().EventHeader(block.Header(), vals)
+	crosschain.GetCrossChain().EventHeader(block.Header())
 
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)

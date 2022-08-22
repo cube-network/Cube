@@ -25,12 +25,12 @@ type CrossChain interface {
 	FreeExecutor(exec vm.CrossChain)
 	Seal(exec vm.CrossChain)
 
-	EventHeader(header *types.Header, vals []common.Address)
+	EventHeader(header *types.Header)
 
 	// TODO remove cosmos info
 	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error)
-	HandleVote(vote *types.CosmosVote, vals []common.Address) error
+	HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
+	HandleVote(vote *types.CosmosVote) error
 }
 
 var cc CrossChain

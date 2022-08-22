@@ -161,7 +161,7 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	executor.EndBlock()
 }
 
-func (c *Cosmos) EventHeader(header *types.Header, vals []common.Address) {
+func (c *Cosmos) EventHeader(header *types.Header) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
@@ -174,7 +174,7 @@ func (c *Cosmos) EventHeader(header *types.Header, vals []common.Address) {
 
 	sh := c.chain.getSignedHeader(header.Number.Uint64(), header.Hash())
 	if sh == nil {
-		c.chain.makeCosmosSignedHeader(header, vals)
+		c.chain.makeCosmosSignedHeader(header)
 	}
 
 	var statedb *state.StateDB
@@ -213,7 +213,7 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 // 	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
 // }
 
-func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.SignedHeader) (*types.CosmosVote, error) {
+func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) (*types.CosmosVote, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
@@ -226,12 +226,12 @@ func (c *Cosmos) HandleHeader(h *et.Header, vals []common.Address, header *ct.Si
 		return nil, errors.New("missing cosmos header")
 	}
 
-	return c.chain.handleSignedHeader(h, vals, header)
+	return c.chain.handleSignedHeader(h, header)
 }
 
-func (c *Cosmos) HandleVote(vote *et.CosmosVote, vals []common.Address) error {
+func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	return c.chain.handleVote(vote, vals)
+	return c.chain.handleVote(vote)
 }

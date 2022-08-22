@@ -98,17 +98,17 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 func (vmgr *ValidatorsMgr) updateValidators(h *et.Header, height int64) {
 	vmgr.LastValidators = types.NewValidatorSet(vmgr.Validators.Validators)
 	//
-	_, vmgr.Validators = vmgr.getValidators(h)
+	_, vmgr.Validators = vmgr.getValidators(h.Number.Uint64())
 	vmgr.NextValidators = types.NewValidatorSet(vmgr.Validators.Validators)
 	vmgr.LastHeightValidatorsChanged = height
 }
 
-func (vmgr *ValidatorsMgr) getValidators(h *et.Header) ([]common.Address, *types.ValidatorSet) {
+func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
 	var vheight uint64 = 0
-	if h.Number.Uint64() >= 200 {
-		vheight = h.Number.Uint64() - h.Number.Uint64()%200
+	if height >= 200 { // todo: use parameter instead of constant
+		vheight = height - height%200
 	}
-	vh := vmgr.getHeaderByNumber(uint64(vheight))
+	vh := vmgr.getHeaderByNumber(vheight)
 	addrs := getAddressesFromHeader(vh, IsEnable(vmgr.config, big.NewInt(int64(vheight)))) // make([]common.Address, 1) //
 	count := len(addrs)
 	validators := make([]*types.Validator, count)

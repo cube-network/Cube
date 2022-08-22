@@ -372,8 +372,8 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 }
 
 func (c *CosmosChain) getHeader(block_height int64) *ct.Header {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 	h := c.getHeaderByNumber(uint64(block_height))
 	if h == nil {
 		log.Error("Cannot get block header", "number", strconv.Itoa(int(block_height)))

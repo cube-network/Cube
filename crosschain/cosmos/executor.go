@@ -3,6 +3,7 @@ package cosmos
 import (
 	"encoding/hex"
 	"fmt"
+	"runtime/debug"
 
 	"math/big"
 	"strconv"
@@ -137,6 +138,7 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
+	debug.PrintStack()
 	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex())
 
 	c.header = header
@@ -160,6 +162,7 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 }
 
 func (c *Executor) EndBlock() {
+	debug.PrintStack()
 	rc := c.app.BaseApp.Commit()
 	// TODO hardfork cosmos block height
 	if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
@@ -265,16 +268,19 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
+		log.Warn("tx unpack input fail ", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
 
 	argbin, err := hex.DecodeString(arg)
 	if err != nil {
+		log.Warn("tx decode arg fail ", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
 
 	msgs, err := c.GetMsgs(argbin)
 	if err != nil {
+		log.Warn("tx get msg fail ", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
 
@@ -285,11 +291,11 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	}
 	for i, msg := range msgs {
 		if handler := c.app.MsgServiceRouter().Handler(msg); handler != nil {
-			msgResult, err := handler(c.app.GetContextForTx(evm.SimulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			eventMsgName := sdk.MsgTypeURL(msg)
 			log.Debug("process tx ", eventMsgName)
+			msgResult, err := handler(c.app.GetContextForTx(evm.SimulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
 			if err != nil {
-				fmt.Println("process tx fail, eventMsgName ", eventMsgName, "run tx err ", err.Error())
+				log.Warn("process tx fail, eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted
 			}
 
@@ -299,13 +305,16 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 
 			txMsgData.Data = append(txMsgData.Data, &sdk.MsgData{MsgType: sdk.MsgTypeURL(msg), Data: msgResult.Data})
 			msgLogs = append(msgLogs, sdk.NewABCIMessageLog(uint32(i), msgResult.Log, msgEvents))
+			log.Debug("tx handle end")
 		} else {
+			log.Warn("tx router not found")
 			return nil, vm.ErrExecutionReverted
 		}
 	}
 
 	data, err := proto.Marshal(txMsgData)
 	if err != nil {
+		log.Debug("tx marshal fail")
 		return nil, sdkerrors.Wrap(err, "failed to marshal tx data")
 	}
 
@@ -356,6 +365,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 			}
 		}
 	}
+	log.Debug("tx run end")
 	return data, nil
 }
 

@@ -606,6 +606,7 @@ func (w *worker) taskLoop() {
 			// Reject duplicate sealing work due to resubmitting.
 			sealHash := w.engine.SealHash(task.block.Header())
 			if sealHash == prev {
+				log.Debug("duplicate sealhash")
 				continue
 			}
 			// Interrupt previous sealing operation
@@ -613,6 +614,7 @@ func (w *worker) taskLoop() {
 			stopCh, prev = make(chan struct{}), sealHash
 
 			if w.skipSealHook != nil && w.skipSealHook(task) {
+				log.Debug("skipSealHook sealhash")
 				continue
 			}
 			w.pendingMu.Lock()
@@ -709,6 +711,7 @@ func (w *worker) resultLoop() {
 					types.CosmosHeaderFromSignedHeader(cosmosHeader),
 				}})
 			} else {
+				log.Info("GetSignedHeader but nil")
 				if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
 					panic("cosmos header not found!")
 				}
@@ -1108,16 +1111,17 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			log.Debug("local commit txs return")
 			return
 		}
 	}
 	if len(remoteTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, remoteTxs, header.BaseFee)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {
+			log.Debug("remote commit txs return")
 			return
 		}
 	}
-	log.Info("commitNewWork before commit", "number", w.current.header.Number.Uint64(), "hash", w.current.header.Hash())
 	w.commit(uncles, w.fullTaskHook, true, tstart)
 }
 
@@ -1135,6 +1139,7 @@ func (w *worker) commit(uncles []*types.Header, interval func(), update bool, st
 	s := w.current.state.Copy()
 	block, receipts, err := w.engine.FinalizeAndAssemble(w.chain, w.current.header, s, txs, uncles, cpyReceipts)
 	if err != nil {
+		log.Debug("finalize fail ", err.Error())
 		return err
 	}
 	if w.isRunning() {

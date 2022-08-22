@@ -40,8 +40,6 @@ type CosmosChain struct {
 
 	getHeaderByNumber  cccommon.GetHeaderByNumberFn
 	cube_cosmos_header map[string][]byte
-	latestSignedHeight uint64
-	latestSignedHash   common.Hash
 }
 
 // priv_validator_addr: chaos.validator
@@ -121,12 +119,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	vals, _ := c.valsMgr.getValidators(h.Number.Uint64())
 	c.voteSignedHeader(signedHeader, vals)
 
-	//signedHeader := &ct.SignedHeader{Header: header, Commit: nil}
-
 	// store header
 	c.storeSignedHeader(h.Hash(), signedHeader)
-	c.latestSignedHeight = h.Number.Uint64()
-	c.latestSignedHash = h.Hash()
 
 	return signedHeader
 }
@@ -146,7 +140,12 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader, vals []common.Ad
 		log.Error("voteSignedHeader unknown data")
 		return -1, ct.CommitSig{}, errors.New("voteSignedHeader unknown data")
 	}
-	idx := c.getValidatorIndex(vals)
+
+	pubkey, _ := c.privValidator.GetPubKey()
+	addr := pubkey.Address()
+	//idx := c.getValidatorIndex(vals)
+	_, valset := c.valsMgr.getValidators(uint64(header.Height))
+	idx, _ := valset.GetByAddress(addr)
 	if idx < 0 {
 		log.Error("getValidatorIndex failed", "cubeAddr", c.cubeAddr, "vals", vals)
 		return -1, ct.CommitSig{}, errors.New("getValidatorIndex failed")
@@ -156,14 +155,6 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader, vals []common.Ad
 		return -1, ct.CommitSig{}, nil
 	}
 
-	pubkey, _ := c.privValidator.GetPubKey()
-	addr := pubkey.Address()
-	//_, val := c.valsMgr.Validators.GetByAddress(addr)
-	//
-	//if val == nil {
-	//	log.Error("voteSignedHeader", "cosmosAddr", addr.String())
-	//	panic("not a validator")
-	//}
 	vote := &ct.Vote{
 		Type:             tmproto.PrecommitType,
 		Height:           header.Height,
@@ -171,7 +162,7 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader, vals []common.Ad
 		BlockID:          header.Commit.BlockID,
 		Timestamp:        header.Time,
 		ValidatorAddress: addr,
-		ValidatorIndex:   int32(idx),
+		ValidatorIndex:   idx,
 	}
 	v := vote.ToProto()
 	c.privValidator.SignVote(c.ChainID, v)
@@ -206,7 +197,7 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader, vals []common.Ad
 	commit.Signatures[idx] = cc
 	header.Commit = commit
 
-	return idx, cc, nil
+	return int(idx), cc, nil
 }
 
 func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) (*et.CosmosVote, error) {
@@ -218,21 +209,6 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 	if header.Commit == nil {
 		return nil, errors.New("missing commit")
 	}
-
-	//// check state_root
-	//var app_hash common.Hash
-	//copy(app_hash[:], h.Extra[32:64])
-	//
-	//// check validators
-	//_, vals := c.valsMgr.getValidators(h)
-	//if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
-	//	return fmt.Errorf("Verify validatorsHash failed. number=%f hash=%s\n", h.Number, h.Hash())
-	//}
-	//// check proposer
-	//proposer := c.valsMgr.getValidator(h.Coinbase)
-	//if !bytes.Equal(proposer.Address, header.ProposerAddress) {
-	//	return fmt.Errorf("Verify proposer failed. number=%f hash=%s\n", h.Number, h.Hash())
-	//}
 
 	if err := header.Header.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("invalid header: %w", err)
@@ -248,13 +224,13 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		return nil, fmt.Errorf("header belongs to another chain %q, not %q", header.ChainID, c.ChainID)
 	}
 
-	//// Make sure the header is consistent with the commit.
-	//if header.Commit.Height != header.Height {
-	//	return fmt.Errorf("header and commit height mismatch: %d vs %d", header.Height, header.Commit.Height)
-	//}
-	//if hhash, chash := header.Header.Hash(), header.Commit.BlockID.Hash; !bytes.Equal(hhash, chash) {
-	//	return fmt.Errorf("commit signs block %X, header is block %X", chash, hhash)
-	//}
+	// Make sure the header is consistent with the commit.
+	if header.Commit.Height != header.Height {
+		return nil, fmt.Errorf("header and commit height mismatch: %d vs %d", header.Height, header.Commit.Height)
+	}
+	if hhash, chash := header.Header.Hash(), header.Commit.BlockID.Hash; !bytes.Equal(hhash, chash) {
+		return nil, fmt.Errorf("commit signs block %X, header is block %X", chash, hhash)
+	}
 	//if err := header.ValidateBasic(c.ChainID); err != nil {
 	//	return err
 	//}
@@ -263,49 +239,65 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 	//// check state_root
 	//var stateRoot common.Hash
 	//copy(stateRoot[:], h.Extra[:32])
-	//
-	//// check validators
-	//_, vals := c.valsMgr.getValidators(h)
-	//if !bytes.Equal(header.ValidatorsHash, vals.Hash()) {
-	//	return fmt.Errorf("Verify validatorsHash failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
-	//}
 
-	//// check proposer
-	//proposer := c.valsMgr.getValidator(h.Coinbase)
-	//if !bytes.Equal(proposer.Address, header.ProposerAddress) {
-	//	return fmt.Errorf("Verify proposer failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
-	//}
+	// check validators
+	vals, valset := c.valsMgr.getValidators(h.Number.Uint64())
+	if !bytes.Equal(header.ValidatorsHash, valset.Hash()) {
+		return nil, fmt.Errorf("Verify validatorsHash failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
+	}
+	if len(vals) != len(header.Commit.Signatures) {
+		return nil, fmt.Errorf("Verify signatures' count failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
+	}
 
-	//// todo: check votes
-	//sigs := header.Commit.Signatures
-	//if len(sigs) < 1 {
-	//	return fmt.Errorf("Commit signatures are wrong. number=%f hash=%s\n", h.Number, h.Hash())
-	//}
-	//
-	////voteSet := ct.CommitToVoteSet(c.ChainID, header.Commit, vals)
-	//// check proposer's signature
-	//idx, val := c.valsMgr.Validators.GetByAddress(proposer.Address)
-	//vote := header.Commit.GetByIndex(idx) //voteSet.GetByIndex(idx)
-	//if err := vote.Verify(c.ChainID, val.PubKey); err != nil {
-	//	return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
-	//}
+	// check proposer
+	proposer := c.valsMgr.getValidator(h.Coinbase)
+	if !bytes.Equal(proposer.Address, header.ProposerAddress) {
+		return nil, fmt.Errorf("Verify proposer failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
+	}
 
-	// todo: check other signatures
+	// check votes
+	sigs := header.Commit.Signatures
+	if len(sigs) < 1 {
+		return nil, fmt.Errorf("Commit signatures are wrong. number=%f hash=%s\n", h.Number, h.Hash())
+	}
+
+	// check signatures
+	commit := header.Commit
+	for i, sig := range commit.Signatures {
+		if sig.BlockIDFlag == ct.BlockIDFlagCommit {
+			realVote := &ct.Vote{
+				Type:             tmproto.PrecommitType,
+				Height:           header.Height,
+				Round:            commit.Round,
+				BlockID:          commit.BlockID,
+				Timestamp:        header.Time,
+				ValidatorAddress: sig.ValidatorAddress,
+				ValidatorIndex:   int32(i),
+				Signature:        sig.Signature,
+			}
+			_, val := valset.GetByIndex(int32(i))
+			if err := realVote.Verify(c.ChainID, val.PubKey); err != nil {
+				return nil, fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
+			}
+		}
+	}
 
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
 
-	// todo: vote
-	vals, _ := c.valsMgr.getValidators(h.Number.Uint64())
-	idx, vote, err := c.voteSignedHeader(header, vals)
+	// vote
+	index, vote, err := c.voteSignedHeader(header, vals)
 	if err != nil {
 		return nil, err
 	}
 
+	// store header
+	c.storeSignedHeader(h.Hash(), header)
+
 	cv := &et.CosmosVote{
 		Number:     h.Number,
 		Vote:       vote,
-		Index:      uint32(idx),
+		Index:      uint32(index),
 		HeaderHash: h.Hash(),
 	}
 
@@ -325,7 +317,15 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 			}
 		}
 	}
-	log.Info("storeSignedHeader", "hash", hash, "header", header.Hash())
+
+	counter := 0
+	for i := 0; i < len(c.signedHeader[hash].Commit.Signatures); i++ {
+		if c.signedHeader[hash].Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
+			c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
+			counter++
+		}
+	}
+	log.Info("storeSignedHeader", "votes", strconv.Itoa(counter), "number", header.Height, "hash", hash, "header", header.Hash())
 }
 
 func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
@@ -338,23 +338,6 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 	//}
 	return h
 }
-
-// func (c *CosmosChain) getSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
-// 	c.mu.Lock()
-// 	defer c.mu.Unlock()
-// 	log.Info("getSignedHeaderWithSealHash", "number", height, "sealHash", sealHash, "hash", hash)
-// 	header := c.signedHeader[sealHash]
-// 	if header == nil && height == c.latestSignedHeight {
-// 		header = c.signedHeader[c.latestSignedHash]
-// 		if header != nil {
-// 			log.Info("getHeaderInstead", "number", height, "hash", c.latestSignedHash)
-// 		} else {
-// 			log.Error("getHeaderInstead failed", "number", height, "hash", c.latestSignedHash)
-// 		}
-// 	}
-// 	c.signedHeader[hash] = header
-// 	return header
-// }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 	h := c.getHeaderByNumber(uint64(block_height))
@@ -370,6 +353,7 @@ func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 
 	// make light block
 	_, validators := c.valsMgr.getValidators(h.Number.Uint64())
+	log.Info("get cosmos vals", "valset", validators)
 	return &ct.LightBlock{SignedHeader: header, ValidatorSet: validators}
 }
 
@@ -419,6 +403,7 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	if err := realVote.Verify(c.ChainID, validator.PubKey); err != nil {
 		return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, validator.PubKey, err)
 	}
+	vote.Vote.Timestamp = realVote.Timestamp
 	header.Commit.Signatures[vote.Index] = vote.Vote
 	c.storeSignedHeader(vote.HeaderHash, header)
 

@@ -202,17 +202,7 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*types.CubeAndCo
 		// todo: verify cosmos header
 		if crosschain.GetCrossChain() != nil && th.CosmosHeader != nil {
 			sh := types.SignedHeaderFromCosmosHeader(th.CosmosHeader)
-			vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, th.Header)
-			if err != nil {
-				header := h.chain.GetHeaderByNumber(th.Header.Number.Uint64())
-				vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
-				if err != nil {
-					log.Error("get top validators failed 1", "err", err)
-					return err
-				}
-			}
-
-			vote, err := crosschain.GetCrossChain().HandleHeader(th.Header, vals, sh)
+			vote, err := crosschain.GetCrossChain().HandleHeader(th.Header, sh)
 			if vote != nil {
 				log.Info("BroadcastCosmosVote 2", "index", vote.Index, "headerHash", vote.HeaderHash)
 				h.eventMux.Post(core.NewCosmosVoteEvent{vote})
@@ -337,16 +327,7 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 	// todo: deal with cosmos header
 	if crosschain.GetCrossChain() != nil && blockAndHeader.CosmosHeader != nil {
 		sh := types.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
-		vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, block.Header())
-		if err != nil {
-			header := h.chain.GetHeaderByNumber(blockAndHeader.Block.NumberU64())
-			vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
-			if err != nil {
-				log.Error("get top validators failed 2", "err", err)
-				return err
-			}
-		}
-		vote, err := crosschain.GetCrossChain().HandleHeader(block.Header(), vals, sh)
+		vote, err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
 		if vote != nil {
 			log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
 			h.eventMux.Post(core.NewCosmosVoteEvent{vote})
@@ -383,17 +364,7 @@ func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.Cosmo
 
 	if crosschain.GetCrossChain() != nil {
 		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
-		header := h.chain.GetHeader(vote.HeaderHash, vote.Number.Uint64())
-		vals, err := h.chain.ChaosEngine.GetTopValidators(h.chain, header)
-		if err != nil {
-			header = h.chain.GetHeaderByNumber(vote.Number.Uint64())
-			vals, err = h.chain.ChaosEngine.GetTopValidators(h.chain, header)
-			if err != nil {
-				log.Error("get top validators failed 2", "err", err)
-				return err
-			}
-		}
-		if err := crosschain.GetCrossChain().HandleVote(vote, vals); err != nil {
+		if err := crosschain.GetCrossChain().HandleVote(vote); err != nil {
 			return nil
 		}
 	}

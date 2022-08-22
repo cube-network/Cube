@@ -84,7 +84,7 @@ var (
 
 type CosmosApp struct {
 	*baseapp.BaseApp
-	blockFn      expectedkeepers.BlockFn
+	headerFn     expectedkeepers.HeaderFn
 	codec        EncodingConfig
 	mm           *module.Manager
 	configurator module.Configurator
@@ -124,13 +124,13 @@ func NewCosmosApp(
 	db dbm.DB,
 	config *cubeparams.ChainConfig,
 	codec EncodingConfig,
-	blockFn expectedkeepers.BlockFn) *CosmosApp {
+	headerFn expectedkeepers.HeaderFn) *CosmosApp {
 
 	bApp := baseapp.NewBaseApp("Cube", tl.NewNopLogger(), db, codec.TxConfig.TxDecoder())
 	bApp.SetVersion(version.Version)
 	bApp.SetInterfaceRegistry(codec.InterfaceRegistry)
 
-	app := &CosmosApp{BaseApp: bApp, codec: codec, blockFn: blockFn}
+	app := &CosmosApp{BaseApp: bApp, codec: codec, headerFn: headerFn}
 
 	// Create IBC Router
 	ibcRouter := porttypes.NewRouter()
@@ -222,7 +222,7 @@ func (app *CosmosApp) setupSDKModule(skipUpgradeHeights map[int64]bool, homePath
 	app.UpgradeKeeper = upgradekeeper.NewKeeper(skipUpgradeHeights, app.keys[upgradetypes.StoreKey], appCodec, homePath, app.BaseApp)
 
 	// SDK module keepers
-	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1, BlockFn: app.blockFn}
+	app.StakingKeeper = expectedkeepers.CubeStakingKeeper{Stub: 1, HeaderFn: app.headerFn}
 
 	app.AccountKeeper = expectedkeepers.CubeAccountKeeper{}
 	// authkeeper.NewAccountKeeper(

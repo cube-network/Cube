@@ -209,7 +209,8 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*types.CubeAndCo
 			}
 			if err != nil {
 				log.Error("HandleHeader failed", "peer", p.ID(), "err", err)
-				return err
+				// TODO NOT return
+				// return err
 			}
 		}
 	}

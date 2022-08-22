@@ -641,10 +641,12 @@ func (w *worker) resultLoop() {
 			log.Debug("worker resultLoop resultCh... ", "time", time.Now().UTC().String())
 			// Short circuit when receiving empty result.
 			if block == nil {
+				log.Debug("resultLoop block is nil")
 				continue
 			}
 			// Short circuit when receiving duplicate result caused by resubmitting.
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
+				log.Debug("resultLoop already hash block ", block.Hash().Hex(), " number ", strconv.Itoa(int(block.NumberU64())))
 				continue
 			}
 			var (

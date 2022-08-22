@@ -2,6 +2,7 @@ package cosmos
 
 import (
 	"math/big"
+	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -97,17 +98,31 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 func (vmgr *ValidatorsMgr) updateValidators(h *et.Header, height int64) {
 	vmgr.LastValidators = types.NewValidatorSet(vmgr.Validators.Validators)
 	//
-	_, vmgr.Validators = vmgr.getValidators(h.Number.Uint64())
-	vmgr.NextValidators = types.NewValidatorSet(vmgr.Validators.Validators)
-	vmgr.LastHeightValidatorsChanged = height
+	_, vmgr.Validators = vmgr.getValidators(h.Number.Uint64(), h)
+	if vmgr.Validators != nil {
+		vmgr.NextValidators = types.NewValidatorSet(vmgr.Validators.Validators)
+		vmgr.LastHeightValidatorsChanged = height
+	} else {
+		log.Warn("update validators fail, ", strconv.Itoa(int(height)))
+	}
 }
 
-func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
+func (vmgr *ValidatorsMgr) getValidators(height uint64, h *et.Header) ([]common.Address, *types.ValidatorSet) {
 	var vheight uint64 = 0
 	if height >= 200 { // todo: use parameter instead of constant
 		vheight = height - height%200
 	}
-	vh := vmgr.getHeaderByNumber(vheight)
+	var vh *et.Header
+	if h != nil && h.Number.Uint64() == vheight {
+		vh = h
+	} else {
+		vh = vmgr.getHeaderByNumber(vheight)
+	}
+	// TODO vh is nil
+	if vh == nil {
+		log.Warn("get header is nil ", strconv.Itoa(int(vheight)))
+		return []common.Address{}, nil
+	}
 	addrs := getAddressesFromHeader(vh, IsEnable(vmgr.config, big.NewInt(int64(vheight)))) // make([]common.Address, 1) //
 	count := len(addrs)
 	validators := make([]*types.Validator, count)

@@ -98,7 +98,7 @@ func makeCosmosHeader(cubeheader *cubetypes.Header, config *params.ChainConfig) 
 func NewCosmosExecutor(datadir string,
 	config *params.ChainConfig,
 	codec EncodingConfig,
-	blockFn expectedkeepers.BlockFn,
+	headerFn expectedkeepers.HeaderFn,
 	blockContext vm.BlockContext,
 	statedb *state.StateDB,
 	header *types.Header,
@@ -107,7 +107,7 @@ func NewCosmosExecutor(datadir string,
 	queryMode bool) *Executor {
 
 	db := NewCosmosStateDB(makeContext(blockContext, config, header, statedb))
-	app := NewCosmosApp(datadir, db, config, codec, blockFn)
+	app := NewCosmosApp(datadir, db, config, codec, headerFn)
 
 	executor := &Executor{app: app}
 	executor.queryMode = queryMode

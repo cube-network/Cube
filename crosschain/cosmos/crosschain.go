@@ -78,7 +78,7 @@ func (c *Cosmos) Init(datadir string,
 			panic("cosmos init state root not found")
 		}
 		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn)
-		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, c.header, common.Address{}, nil, true)
+		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
 
@@ -114,7 +114,7 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// 	exector = elem.Value.(*Executor)
 	// 	c.callExectors.Remove(elem)
 	// } else {
-	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.GetLightBlock, c.blockContext, statedb, header, c.coinbase, c.chain, false)
+	exector = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, header, c.coinbase, c.chain, false)
 	// }
 
 	c.newExecutorCounter++

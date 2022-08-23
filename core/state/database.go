@@ -103,6 +103,9 @@ type Trie interface {
 	// nodes of the longest existing prefix of the key (at least the root), ending
 	// with the node that proves the absence of the key.
 	Prove(key []byte, fromLevel uint, proofDb ethdb.KeyValueWriter) error
+
+	// TrieNodeHashCache returns internal hash cache of trie node
+	TrieNodeHashCache() *trie.HashCache
 }
 
 // NewDatabase creates a backing store for state. The returned database is safe for

@@ -1,6 +1,7 @@
 package cosmos
 
 import (
+	"encoding/hex"
 	"math/big"
 	"strconv"
 
@@ -102,6 +103,8 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64, h *et.Header) ([]common.
 	for i := 0; i < count; i++ {
 		val := vmgr.AddrValMap[addrs[i]]
 		if val == nil {
+			log.Info("count ", strconv.Itoa(count))
+			log.Info("header extra ", hex.EncodeToString(vh.Extra), " height ", strconv.Itoa(int(vheight)), " addr ", addrs[i].Hex(), " index ", strconv.Itoa(i))
 			panic("validator is nil")
 		}
 		tVal := types.NewValidator(val.PubKey, val.VotingPower)

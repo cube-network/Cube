@@ -3,7 +3,6 @@ package cosmos
 import (
 	"encoding/hex"
 	"fmt"
-	"runtime/debug"
 
 	"math/big"
 	"strconv"
@@ -138,8 +137,9 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
-	debug.PrintStack()
-	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex())
+	// log.Debug(string(debug.Stack()))
+	log.Debug("begin block", "height", header.Number.Int64(), " root ", header.Root.Hex(), " parenthash ", header.ParentHash.Hex())
+	log.Debug("statedb root begin block start ", statedb.IntermediateRoot(true).Hex())
 
 	c.header = header
 	c.statedb = statedb
@@ -159,29 +159,29 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 
 	hdr := makeCosmosHeader(header, c.config)
 	c.app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto()})
+	log.Debug("statedb root begin block end ", statedb.IntermediateRoot(true).Hex())
 }
 
 func (c *Executor) EndBlock() {
-	debug.PrintStack()
-	rc := c.app.BaseApp.Commit()
-	// TODO hardfork cosmos block height
-	if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
-		key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
-		c.db.Delete([]byte(key))
-	}
+	// log.Debug(string(debug.Stack()))
+	log.Debug("statedb root end block start ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 
+	rc := c.app.BaseApp.Commit()
+	log.Debug("statedb root end block middle 0 ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	// TODO hardfork cosmos block height
+	// if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
+	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
+	// 	c.db.Delete([]byte(key))
+	// }
+	log.Debug("statedb root end block middle ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
 
-	// sh := c.chain.getSignedHeader(c.header.Number.Uint64(), c.header.Hash())
-	// if sh == nil {
-	// 	c.chain.makeCosmosSignedHeader(c.header)
-	// }
-
 	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
 
 	log.Debug("EndBlock", "ibcHash", hex.EncodeToString(rc.Data[:]))
+	log.Debug("statedb root end block end ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
@@ -265,6 +265,8 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	} else {
 	}
 
+	log.Debug("statedb root run tx start ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
@@ -306,8 +308,10 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 			txMsgData.Data = append(txMsgData.Data, &sdk.MsgData{MsgType: sdk.MsgTypeURL(msg), Data: msgResult.Data})
 			msgLogs = append(msgLogs, sdk.NewABCIMessageLog(uint32(i), msgResult.Log, msgEvents))
 			log.Debug("tx handle end")
+			log.Debug("statedb root run tx 1 ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 		} else {
 			log.Warn("tx router not found")
+			log.Debug("statedb root run tx ret 1 ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 			return nil, vm.ErrExecutionReverted
 		}
 	}
@@ -315,6 +319,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	data, err := proto.Marshal(txMsgData)
 	if err != nil {
 		log.Debug("tx marshal fail")
+		log.Debug("statedb root run tx ret 2 ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 		return nil, sdkerrors.Wrap(err, "failed to marshal tx data")
 	}
 
@@ -366,6 +371,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 		}
 	}
 	log.Debug("tx run end")
+	log.Debug("statedb root run tx edn ", evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	return data, nil
 }
 

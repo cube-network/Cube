@@ -417,6 +417,7 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
+		// log.Debug("setstate ", addr.Hex(), " key ", key.Hex(), " val ", value.Hex())
 		stateObject.SetState(s.db, key, value)
 	}
 }
@@ -1126,7 +1127,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
 	// Clear out any leftover from previous executions
 	s.accessList = newAccessList()
-	
+
 	s.AddAddressToAccessList(sender)
 	if dst != nil {
 		s.AddAddressToAccessList(*dst)

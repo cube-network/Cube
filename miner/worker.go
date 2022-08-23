@@ -1128,6 +1128,8 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 // commit runs any post-transaction state modifications, assembles the final block
 // and commits new work if consensus engine is running.
 func (w *worker) commit(uncles []*types.Header, interval func(), update bool, start time.Time) error {
+	// log.Debug(string(debug.Stack()))
+
 	log.Debug("worker commit...")
 
 	crosschain.GetCrossChain().Seal(w.current.crosschain)

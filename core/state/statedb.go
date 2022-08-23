@@ -1124,7 +1124,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
 	// Clear out any leftover from previous executions
 	s.accessList = newAccessList()
-	
+
 	s.AddAddressToAccessList(sender)
 	if dst != nil {
 		s.AddAddressToAccessList(*dst)
@@ -1232,7 +1232,7 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		}
 	}
 
-	s.db.TrieDB().WaitAndPrepareNextCommit()
+	s.db.TrieDB().WaitAndPrepareNextCommit(s.trie.TrieNodeHashCache())
 	go func(s *StateDB) {
 		defer s.db.TrieDB().DoneAsyncCommit()
 		// Commit objects to the trie, measuring the elapsed time

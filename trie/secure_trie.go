@@ -217,3 +217,8 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 	}
 	return t.secKeyCache
 }
+
+// TrieNodeHashCache returns internal hash cache of trie node
+func (t *SecureTrie) TrieNodeHashCache() *HashCache {
+	return t.trie.trieNodeCache
+}

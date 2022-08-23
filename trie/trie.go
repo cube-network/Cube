@@ -65,7 +65,8 @@ type Trie struct {
 	// Keep track of the number leafs which have been inserted since the last
 	// hashing operation. This number will not directly map to the number of
 	// actually unhashed nodes
-	unhashed int
+	unhashed      int
+	trieNodeCache *HashCache // use to cache <hash, trieNode>
 }
 
 // newFlag returns the cache flag value for a newly created node.
@@ -84,7 +85,8 @@ func New(root common.Hash, db *Database) (*Trie, error) {
 		panic("trie.New called without a database")
 	}
 	trie := &Trie{
-		db: db,
+		db:            db,
+		trieNodeCache: &HashCache{inner: make(map[common.Hash]node)},
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
 		rootnode, err := trie.resolveHash(root[:], nil)
@@ -579,7 +581,7 @@ func (t *Trie) hashRoot() (node, node, error) {
 	if t.db == nil {
 		h = newHasher(t.unhashed >= 100)
 	} else {
-		h = newHasherWithCache(t.unhashed >= 100, t.db.GetDirtyHashCache())
+		h = newHasherWithCache(t.unhashed >= 100, t.trieNodeCache)
 	}
 	defer returnHasherToPool(h)
 	hashed, cached := h.hash(t.root, true)
@@ -591,4 +593,5 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
+	t.trieNodeCache = &HashCache{inner: make(map[common.Hash]node)}
 }

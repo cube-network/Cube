@@ -659,8 +659,6 @@ func (w *worker) resultLoop() {
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
 			if !exist {
-				crosschain.GetCrossChain().FreeExecutor(task.crosschain)
-				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
 			}
 			// Different block could share same sealhash, deep copy here to prevent write-write conflict.

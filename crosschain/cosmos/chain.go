@@ -87,6 +87,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64(), h)
+	// TODO NextValidatorsHash N%200 -1,
+	// chaos.gettopvalidators(h.number)
 
 	// make header
 	header := &ct.Header{
@@ -391,6 +393,16 @@ func (c *CosmosChain) getHeader(block_height int64) *ct.Header {
 	}
 	log.Debug("getlightblock height ", strconv.Itoa(int(block_height)), h.Hash().Hex())
 	return header.Header
+}
+
+func (c *CosmosChain) GetValidators(block_height int64) *types.ValidatorSet {
+	_, validators := c.valsMgr.getValidators(uint64(block_height), nil)
+	if validators == nil {
+		log.Warn("Cannot get validator set, number ", strconv.Itoa(int(block_height)))
+		return nil
+	}
+
+	return validators
 }
 
 func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {

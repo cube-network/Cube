@@ -3,9 +3,10 @@ package expectedkeepers
 import (
 	"encoding/hex"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // BankKeeper defines the expected bank keeper
@@ -127,16 +128,15 @@ func (cbk CubeBankKeeper) DumpCoins(ctx sdk.Context, sender, receiver sdk.AccAdd
 	{
 		sb, err := systemcontract.GetBalance(ctx, sender, amt[0])
 		if err != nil {
-			log.Debug("err ", err.Error())
+			log.Debug("DumpCoins sender err ", err.Error(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		} else {
-			log.Debug("from  ", sb.Int64(), " to ", hex.EncodeToString(sender.Bytes()))
+			log.Debug("sender bal  ", sb.Int64(), " addr ", hex.EncodeToString(sender.Bytes()))
 		}
 		rb, err := systemcontract.GetBalance(ctx, receiver, amt[0])
 		if err != nil {
-			log.Debug("err ", err.Error())
+			log.Debug("DumpCoins receiver err ", err.Error(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		} else {
-			log.Debug("from ", rb.Int64(), " to ", hex.EncodeToString(receiver.Bytes()))
+			log.Debug("receiver bal ", rb.Int64(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		}
 	}
-
 }

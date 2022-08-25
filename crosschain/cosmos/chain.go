@@ -11,8 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	et "github.com/ethereum/go-ethereum/core/types"
 	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/tendermint/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
@@ -25,11 +27,12 @@ import (
 // validator index,pubkey
 
 type CosmosChain struct {
-	config       *params.ChainConfig
-	ChainID      string
-	mu           sync.Mutex
-	signedHeader map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
-	// light_block    *lru.ARCCache
+	config  *params.ChainConfig
+	ethdb   ethdb.Database
+	ChainID string
+	mu      sync.Mutex
+	// signedHeader map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
+	signedHeader *lru.ARCCache
 	//valsMgr     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
 	valsMgr *ValidatorsMgr
 	//priv_addr_idx  uint32
@@ -40,18 +43,22 @@ type CosmosChain struct {
 	best_block_height uint64
 
 	getHeaderByNumber cccommon.GetHeaderByNumberFn
-	vote_cache        map[string][]*et.CosmosVote // TODO clean later，avoid OOM
+	// vote_cache        map[string][]*et.CosmosVote // TODO clean later，avoid OOM
+	vote_cache *lru.ARCCache
 }
 
 // priv_validator_addr: chaos.validator
-func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn) *CosmosChain {
+func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn, ethdb ethdb.Database) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
 	c.config = config
+	c.ethdb = ethdb
 	// c.ChainID = "ibc-1"
 	c.ChainID = config.ChainID.String()
-	c.vote_cache = make(map[string][]*et.CosmosVote)
-	c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
+	// c.vote_cache = make(map[string][]*et.CosmosVote)
+	c.vote_cache, _ = lru.NewARC(4096)
+	// c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
+	c.signedHeader, _ = lru.NewARC(4096)
 	c.privValidator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
 	c.privValidator.Save()
 
@@ -131,9 +138,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	var vote_cache []*et.CosmosVote = nil
 	{
 		c.mu.Lock()
-		if _, ok := c.vote_cache[h.Hash().Hex()]; ok {
-			vote_cache = c.vote_cache[h.Hash().Hex()]
-			delete(c.vote_cache, h.Hash().Hex())
+		if vc, ok := c.vote_cache.Get(h.Hash()); ok {
+			vote_cache = vc.([]*et.CosmosVote)
+			c.vote_cache.Remove(h.Hash())
 		}
 		c.mu.Unlock()
 	}
@@ -337,45 +344,47 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 }
 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
 	if header == nil {
 		log.Warn("nil header for hash ", hash.Hex())
 		return
 	}
 
-	// h := c.signedHeader[hash]
-	// if h == nil {
-	// 	log.Debug("new signed header")
-	c.signedHeader[hash] = header
-	// } else {
-	// 	log.Debug("update signed header")
-	// 	for i := 0; i < len(header.Commit.Signatures); i++ {
-	// 		if header.Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
-	// 			log.Debug("update sig idx ", strconv.Itoa(i), " ", c.signedHeader[hash].Commit.Signatures[i].ValidatorAddress.String(), " ", header.Commit.Signatures[i].ValidatorAddress.String())
-	// 			c.signedHeader[hash].Commit.Signatures[i] = header.Commit.Signatures[i]
-	// 		}
-	// 	}
-	// }
-
-	counter := 0
-	for i := 0; i < len(c.signedHeader[hash].Commit.Signatures); i++ {
-		if c.signedHeader[hash].Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
-			counter++
-		}
+	ph := header.ToProto()
+	bz, _ := ph.Marshal()
+	err := c.ethdb.Put(hash[:], bz)
+	if err != nil {
+		log.Error("storeSignedHeader db put fail ", hash.Hex())
 	}
-	log.Info("storeSignedHeader", "votes", strconv.Itoa(counter), "number", header.Height, "hash", hash, "header", header.Hash())
+
+	// c.signedHeader[hash] = header
+	c.signedHeader.Add(hash, header)
+
+	log.Info("storeSignedHeader", "number", header.Height, "hash", hash, "header", header.Hash())
 }
 
 func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	//log.Info("getSignedHeader", "number", height, "hash", hash)
-	h := c.signedHeader[hash]
-	//if h == nil {
-	//	log.Error("getSignedHeader failed")
-	//}
-	return h
+	// c.mu.Lock()
+	// defer c.mu.Unlock()
+
+	// h := c.signedHeader[hash]
+	h, ok := c.signedHeader.Get(hash)
+
+	if !ok {
+		bz, err := c.ethdb.Get(hash[:])
+		if err == nil {
+			tsh := &tmproto.SignedHeader{}
+			// TODO handler unmarshal error
+			tsh.Unmarshal(bz)
+			sh, _ := types.SignedHeaderFromProto(tsh)
+			return sh
+		} else {
+			return nil
+		}
+	} else {
+		return h.(*ct.SignedHeader)
+	}
 }
 
 func (c *CosmosChain) getHeader(block_height int64) *ct.Header {
@@ -463,14 +472,19 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	header := c.getSignedHeader(vote.Number.Uint64(), vote.HeaderHash)
 	if header == nil {
 		c.mu.Lock()
-		defer c.mu.Unlock()
-		if _, ok := c.vote_cache[vote.HeaderHash.Hex()]; !ok {
-			c.vote_cache[vote.HeaderHash.Hex()] = make([]*et.CosmosVote, 1)
-			c.vote_cache[vote.HeaderHash.Hex()][0] = vote
+		if c.vote_cache.Contains(vote.HeaderHash) {
+			vc := make([]*et.CosmosVote, 1)
+			vc[0] = vote
+			c.vote_cache.Add(vote.HeaderHash, vc)
 		} else {
-			c.vote_cache[vote.HeaderHash.Hex()] = append(c.vote_cache[vote.HeaderHash.Hex()], vote)
+			vci, _ := c.vote_cache.Get(vote.HeaderHash)
+			vc := vci.([]*et.CosmosVote)
+			vc = append(vc, vote)
+			c.vote_cache.Add(vote.HeaderHash, vc)
 		}
-		log.Error("get signed header failed", "number", vote.Number, "hash", vote.HeaderHash.Hex())
+		c.mu.Unlock()
+
+		log.Error("get signed header failed, cache vote, ", "number", vote.Number, "hash", vote.HeaderHash.Hex())
 		return errors.New("get signed header failed")
 	}
 	if len(header.Commit.Signatures) <= int(vote.Index) {

@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
 	"github.com/ethereum/go-ethereum/log"
@@ -109,10 +108,7 @@ func (csdb *CosmosStateDB) Set(key []byte, val []byte) error {
 		log.Debug("Failed to Set, err", err.Error())
 		return err
 	}
-	// h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
-	// log.Debug("store. set state root ", h)
-	// log.Debug("store. set ", strconv.Itoa(int(csdb.counter)), " key (", len(key), ")", string(key), " hex key ", hex.EncodeToString(key), " val (", len(val), ") ", hex.EncodeToString(val))
-
+	
 	return nil
 }
 
@@ -197,9 +193,7 @@ func (b *CosmosStateDBBatch) Close() error {
 func (csdb *CosmosStateDB) NewBatch() dbm.Batch {
 	csdb.mu.Lock()
 	defer csdb.mu.Unlock()
-	h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
-	log.Debug("newbatch state root ", h)
-
+	
 	b := &CosmosStateDBBatch{}
 	b.csdb = csdb
 	b.cache = make(map[string][]byte)

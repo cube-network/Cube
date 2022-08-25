@@ -77,7 +77,7 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn)
+		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, ethdb)
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
@@ -118,7 +118,6 @@ func (c *Cosmos) NewExecutor(header *types.Header, statedb *state.StateDB) vm.Cr
 	// }
 
 	c.newExecutorCounter++
-	log.Debug("new exec", "exector", exector)
 	log.Debug("newExecutorCounter ", "counter", c.newExecutorCounter, " block height ", header.Number.Int64())
 
 	exector.BeginBlock(header, statedb)
@@ -138,13 +137,9 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 		return
 	}
 
-	root := executor.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true)
-	log.Debug("freeexecutor state root ", root.Hex())
-
 	// c.callExectors.PushFront(exec)
 	c.freeExecutorCounter++
 	log.Debug("freeExecutorCounter", "counter", c.freeExecutorCounter)
-	log.Debug("free exec", "executor", exec)
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain) {

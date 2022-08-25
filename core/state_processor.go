@@ -163,8 +163,6 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
 
-	log.Debug("state processort state root ", statedb.IntermediateRoot(true).Hex())
-
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs); err != nil {
 		return nil, nil, 0, err

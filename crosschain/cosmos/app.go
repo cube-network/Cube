@@ -48,6 +48,7 @@ import (
 	ibckeeper "github.com/cosmos/ibc-go/v4/modules/core/keeper"
 	ibcmock "github.com/cosmos/ibc-go/v4/testing/mock"
 
+	stypes "github.com/cosmos/cosmos-sdk/store/types"
 	tl "github.com/tendermint/tendermint/libs/log"
 )
 
@@ -185,6 +186,9 @@ func NewCosmosApp(
 	app.SetBeginBlocker(app.BeginBlocker)
 
 	app.SetEndBlocker(app.EndBlocker)
+
+	po := stypes.PruningOptions{KeepRecent: 128, KeepEvery: 1, Interval: 1}
+	app.BaseApp.CommitMultiStore().SetPruning(po)
 
 	return app
 }

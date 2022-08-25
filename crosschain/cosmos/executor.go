@@ -169,10 +169,10 @@ func (c *Executor) EndBlock() {
 	rc := c.app.BaseApp.Commit()
 	log.Debug("statedb root end block middle 0 ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	// TODO hardfork cosmos block height
-	// if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
-	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
-	// 	c.db.Delete([]byte(key))
-	// }
+	if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
+		key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
+		c.db.Delete([]byte(key))
+	}
 	log.Debug("statedb root end block middle ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())

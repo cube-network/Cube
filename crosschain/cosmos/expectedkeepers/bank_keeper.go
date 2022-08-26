@@ -2,9 +2,11 @@ package expectedkeepers
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -74,16 +76,27 @@ func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderMo
 }
 
 func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
+	if fromAddr == nil {
+		fromAddr = cbk.moduleAccs["transfer"]
+	}
+	if toAddr == nil {
+		toAddr = cbk.moduleAccs["transfer"]
+	}
 	log.Debug("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
-	if amt.Empty() {
-		return fmt.Errorf("send coins failed as no coin's info provided")
+	if !ctx.EVM().Context.CanTransfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), amt[0].Amount.BigInt()) {
+		return errors.New("insufficient balance")
 	}
-	cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
-	if _, err := systemcontract.SendCoin(ctx, fromAddr, toAddr, amt[0]); err != nil {
-		log.Debug("Failed to perform SendCoin", "coin", amt.String(), "err", err.Error())
-		return err
-	}
-	cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
+	ctx.EVM().Context.Transfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt[0].Amount.BigInt())
+
+	// if amt.Empty() {
+	// 	return fmt.Errorf("send coins failed as no coin's info provided")
+	// }
+	// cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
+	// if _, err := systemcontract.SendCoin(ctx, fromAddr, toAddr, amt[0]); err != nil {
+	// 	log.Debug("Failed to perform SendCoin", "coin", amt.String(), "err", err.Error())
+	// 	return err
+	// }
+	// cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
 
 	return nil
 }

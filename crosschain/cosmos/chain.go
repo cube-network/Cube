@@ -473,7 +473,7 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	header := c.getSignedHeader(vote.Number.Uint64(), vote.HeaderHash)
 	if header == nil {
 		c.mu.Lock()
-		if c.vote_cache.Contains(vote.HeaderHash) {
+		if !c.vote_cache.Contains(vote.HeaderHash) {
 			vc := make([]*et.CosmosVote, 1)
 			vc[0] = vote
 			c.vote_cache.Add(vote.HeaderHash, vc)

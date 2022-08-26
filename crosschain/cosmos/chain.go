@@ -378,7 +378,7 @@ func (c *CosmosChain) getSignedHeader(height uint64, hash common.Hash) *ct.Signe
 			// TODO handler unmarshal error
 			tsh.Unmarshal(bz)
 			sh, _ := types.SignedHeaderFromProto(tsh)
-			c.signedHeader.Add(sh.Hash(), sh)
+			c.signedHeader.Add(hash, sh)
 			return sh
 		} else {
 			return nil

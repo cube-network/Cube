@@ -175,7 +175,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
-	sh := c.chain.getSignedHeader(header.Number.Uint64(), header.Hash())
+	sh := c.chain.getSignedHeader(header.Hash())
 	if sh == nil {
 		c.chain.makeCosmosSignedHeader(header)
 	}
@@ -203,7 +203,7 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(height, 10))
 		return nil
 	}
-	return c.chain.getSignedHeader(height, hash)
+	return c.chain.getSignedHeader(hash)
 }
 
 // func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
@@ -237,4 +237,25 @@ func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {
 	defer c.querymu.Unlock()
 
 	return c.chain.handleVote(vote)
+}
+
+func (c *Cosmos) CheckVotes(height uint64, hash common.Hash, h *et.Header) *types.CosmosLackedVoteIndexs { // (*types.CosmosVotesList, *types.CosmosLackedVoteIndexs) {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.checkVotes(height, hash, h)
+}
+
+func (c *Cosmos) HandleVotesQuery(idxs *types.CosmosLackedVoteIndexs) (*types.CosmosVotesList, error) {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.handleVotesQuery(idxs)
+}
+
+func (c *Cosmos) HandleVotesList(votes *types.CosmosVotesList) error {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.handleVotesList(votes)
 }

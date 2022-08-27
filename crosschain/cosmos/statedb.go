@@ -198,7 +198,7 @@ func (csdb *CosmosStateDB) NewBatch() dbm.Batch {
 	csdb.mu.Lock()
 	defer csdb.mu.Unlock()
 	h := csdb.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex()
-	log.Debug("newbatch state root ", h)
+	log.Debug("newbatch", "state root", h)
 
 	b := &CosmosStateDBBatch{}
 	b.csdb = csdb

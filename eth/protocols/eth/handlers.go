@@ -431,8 +431,6 @@ func handleNewCosmosVote(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
-	// todo: do some verification
-
 	// Mark the peer as owning the block
 	peer.markCosmosVote(ann.Vote.Hash())
 
@@ -460,6 +458,42 @@ func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	requestTracker.Fulfil(peer.id, peer.version, BlockHeadersMsg, res.RequestId)
 
 	return backend.Handle(peer, &res.BlockHeadersPacket)
+}
+
+func handleGetCosmosVotesPacket66(backend Backend, msg Decoder, peer *Peer) error {
+	var query GetCosmosVotesPacket66
+	if err := msg.Decode(&query); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+
+	var vl []*types.CosmosVotesList
+	if crosschain.GetCrossChain() != nil {
+		idxs := query.GetCosmosVotesPacket.Idxs
+		log.Info("handleGetCosmosVotesPacket66", "number", idxs.Number, "indexs", idxs.Indexs, "hash", idxs.Hash)
+		votes, err := crosschain.GetCrossChain().HandleVotesQuery(idxs)
+		if err != nil {
+			log.Info("HandleVotesQuery failed", "err", err)
+			return err
+		}
+		if votes != nil {
+			vl = append(vl, votes)
+			return peer.ReplyCosmosVotes(query.RequestId, vl)
+		}
+	}
+	return nil
+}
+
+func handleCosmosVotes(backend Backend, msg Decoder, peer *Peer) error {
+	// Retrieve and decode the propagated block
+	log.Info("handleCosmosVotes")
+	res := new(CosmosVotesPacket66)
+	if err := msg.Decode(res); err != nil {
+		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
+	}
+	requestTracker.Fulfil(peer.id, peer.version, CosmosVotesMsg, res.RequestId)
+	log.Info("handle CosmosHeadersPacket66", "peer", peer.id)
+
+	return backend.Handle(peer, &res.CosmosVotesPacket)
 }
 
 func handleBlockBodies66(backend Backend, msg Decoder, peer *Peer) error {

@@ -31,6 +31,9 @@ type CrossChain interface {
 	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
 	HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
 	HandleVote(vote *types.CosmosVote) error
+	CheckVotes(height uint64, hash common.Hash, h *types.Header) *types.CosmosLackedVoteIndexs //(*types.CosmosVotesList, *types.CosmosLackedVoteIndexs)
+	HandleVotesQuery(idxs *types.CosmosLackedVoteIndexs) (*types.CosmosVotesList, error)
+	HandleVotesList(votes *types.CosmosVotesList) error
 }
 
 var cc CrossChain

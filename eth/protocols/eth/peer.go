@@ -81,8 +81,9 @@ type Peer struct {
 	queuedBlockAndHeaders chan *blockAndHeaderPropagation // Queue of blocks to broadcast to the peer
 	queuedBlockAnns       chan *types.Block               // Queue of blocks to announce to the peer
 
-	knownCosmosVotes  *knownCache                 // Set of cosmos headers known to be known by this peer
-	queuedCosmosVotes chan *cosmosVotePropagation // Queue of cosmos headers to broadcast to the peer
+	knownCosmosVotes     *knownCache                 // Set of cosmos headers known to be known by this peer
+	queuedCosmosVotes    chan *cosmosVotePropagation // Queue of cosmos headers to broadcast to the peer
+	queuedGetCosmosVotes chan *getCosmosVotesPropagation
 
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
 	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
@@ -108,6 +109,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
 		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
 		queuedCosmosVotes:     make(chan *cosmosVotePropagation, maxQueuedBlocks),
+		queuedGetCosmosVotes:  make(chan *getCosmosVotesPropagation, maxQueuedBlocks),
 		txBroadcast:           make(chan []common.Hash),
 		txAnnounce:            make(chan []common.Hash),
 		txpool:                txpool,
@@ -359,6 +361,39 @@ func (p *Peer) AsyncSendNewCosmosVote(vote *types.CosmosVote) {
 	}
 }
 
+func (p *Peer) RequestCosmosVotes(idxs *types.CosmosLackedVoteIndexs) error {
+	log.Info("RequestCosmosVotes", "number", idxs.Number, "indexs", idxs.Indexs, "hash", idxs.Hash)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCosmosVotesMsg, CosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCosmosVotesMsg, &GetCosmosVotesPacket66{
+		RequestId: id,
+		GetCosmosVotesPacket: &GetCosmosVotesPacket{
+			Idxs: idxs,
+		},
+	})
+}
+
+func (p *Peer) AsyncSendGetCosmosVotes(idxs *types.CosmosLackedVoteIndexs) {
+	select {
+	case p.queuedGetCosmosVotes <- &getCosmosVotesPropagation{idxs: idxs}:
+		log.Debug("AsyncSendGetCosmosVotes", "number", idxs.Number, "hash", idxs.Hash, "peer", p.id)
+	default:
+		p.Log().Debug("Dropping get cosmos votes propagation", "number", idxs.Number, "hash", idxs.Hash)
+	}
+}
+
+//func (p *Peer) SendCosmosVotes(id uint64, votes *types.CosmosVotesList) error {
+//	log.Info("=====SendCosmosVotes", "number", votes.Number, "count", len(votes.Commits), "hash", votes.Hash)
+//	//id := rand.Uint64()
+//	//
+//	//requestTracker.Track(p.id, p.version, GetCosmosVotesMsg, CosmosVotesMsg, id)
+//	return p2p.Send(p.rw, CosmosVotesMsg, &CosmosVotesPacket66{
+//		RequestId:         id,
+//		CosmosVotesPacket: &CosmosVotesPacket{Votes: votes},
+//	})
+//}
+
 // ReplyBlockHeaders is the eth/66 version of SendBlockHeaders.
 func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
 	return p2p.Send(p.rw, BlockHeadersMsg, BlockHeadersPacket66{
@@ -371,6 +406,15 @@ func (p *Peer) ReplyCubeAndCosmosHeaders(id uint64, headers []*types.CubeAndCosm
 	return p2p.Send(p.rw, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
 		RequestId:                  id,
 		CubeAndCosmosHeadersPacket: headers,
+	})
+}
+
+func (p *Peer) ReplyCosmosVotes(id uint64, votes []*types.CosmosVotesList) error {
+	commit := votes[0]
+	log.Info("Send CosmosVotes", "number", commit.Number, "count", len(commit.Commits), "hash", commit.Hash)
+	return p2p.Send(p.rw, CosmosVotesMsg, CosmosVotesPacket66{
+		RequestId:         id,
+		CosmosVotesPacket: votes,
 	})
 }
 

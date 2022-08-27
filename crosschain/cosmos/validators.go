@@ -109,7 +109,7 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64, h *et.Header) ([]common.
 		}
 		tVal := types.NewValidator(val.PubKey, val.VotingPower)
 		validators[i] = tVal
-		log.Info("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
+		//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 	}
 	return addrs, types.NewValidatorSet(validators)
 }

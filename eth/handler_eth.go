@@ -100,6 +100,12 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	case *eth.NewCosmosVotePacket:
 		return h.handleCosmosVoteBroadcast(peer, packet.Vote)
 
+	//case *eth.GetCosmosVotesPacket:
+	//	return h.handleGetCosmosVotesBroadcast(peer, packet.Idxs)
+
+	case *eth.CosmosVotesPacket:
+		return h.handleCosmosVotes(peer, *packet)
+
 	case *eth.NewPooledTransactionHashesPacket:
 		return h.txFetcher.Notify(peer.ID(), *packet)
 
@@ -205,7 +211,7 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*types.CubeAndCo
 			vote, err := crosschain.GetCrossChain().HandleHeader(th.Header, sh)
 			if vote != nil {
 				log.Info("BroadcastCosmosVote 2", "index", vote.Index, "headerHash", vote.HeaderHash)
-				h.eventMux.Post(core.NewCosmosVoteEvent{vote})
+				h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
 			}
 			if err != nil {
 				log.Error("HandleHeader failed", "peer", p.ID(), "err", err)
@@ -331,7 +337,7 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 		vote, err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
 		if vote != nil {
 			log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
-			h.eventMux.Post(core.NewCosmosVoteEvent{vote})
+			h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
 		}
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
@@ -366,7 +372,26 @@ func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.Cosmo
 	if crosschain.GetCrossChain() != nil {
 		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
 		if err := crosschain.GetCrossChain().HandleVote(vote); err != nil {
-			return nil
+			return err
+		}
+		log.Info("BroadcastCosmosVote 3", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
+	}
+
+	return nil
+}
+
+func (h *ethHandler) handleCosmosVotes(peer *eth.Peer, votes []*types.CosmosVotesList) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
+	if crosschain.GetCrossChain() != nil && len(votes) > 0 {
+		commit := votes[0]
+		log.Info("handleCosmosVotes", "number", commit.Number, "count", len(commit.Commits), "hash", commit.Hash)
+		if err := crosschain.GetCrossChain().HandleVotesList(commit); err != nil {
+			return err
 		}
 	}
 

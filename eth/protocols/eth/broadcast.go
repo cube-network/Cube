@@ -50,6 +50,10 @@ type cosmosVotePropagation struct {
 	//td     *big.Int
 }
 
+type getCosmosVotesPropagation struct {
+	idxs *types.CosmosLackedVoteIndexs
+}
+
 // broadcastBlocks is a write loop that multiplexes blocks and block accouncements
 // to the remote peer. The goal is to have an async writer that does not lock up
 // node internals and at the same time rate limits queued data.
@@ -79,6 +83,12 @@ func (p *Peer) broadcastBlocks() {
 				return
 			}
 			p.Log().Trace("Propagated cosmos vote", "index", prop.vote.Index, "headerHash", prop.vote.HeaderHash)
+
+		case prop := <-p.queuedGetCosmosVotes:
+			if err := p.RequestCosmosVotes(prop.idxs); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated get cosmos votes", "number", prop.idxs.Number, "hash", prop.idxs.Hash)
 
 		case <-p.term:
 			return

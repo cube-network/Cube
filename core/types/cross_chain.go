@@ -37,6 +37,23 @@ func (h *CosmosVote) Hash() common.Hash {
 	return rlpHash(h)
 }
 
+type CosmosLackedVoteIndexs struct {
+	Number *big.Int
+	Hash   common.Hash
+	Indexs []*big.Int
+}
+
+type CosmosVoteCommit struct {
+	Index *big.Int
+	Vote  ct.CommitSig
+}
+
+type CosmosVotesList struct {
+	Number  *big.Int
+	Hash    common.Hash
+	Commits []CosmosVoteCommit
+}
+
 type CosmosHeaderForP2P struct {
 	// basic block info
 	Version tmversion.Consensus `json:"version"`

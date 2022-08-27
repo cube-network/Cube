@@ -421,6 +421,10 @@ func (bc *BlockChain) SubscribeNewJustifiedOrFinalizedBlockEvent(ch chan<- NewJu
 	return bc.scope.Track(bc.newJustifiedOrFinalizedBlockFeed.Subscribe(ch))
 }
 
+func (bc *BlockChain) SubscribeRequestCosmosVotesEvent(ch chan<- RequestCosmosVotesEvent) event.Subscription {
+	return bc.scope.Track(bc.requestCosmosVotesFeed.Subscribe(ch))
+}
+
 func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) uint8 {
 	// Short circuit if the status's already in the cache, retrieve otherwise
 	status, oldHash := bc.GetBlockStatusByNum(number)

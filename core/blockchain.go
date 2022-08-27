@@ -184,6 +184,7 @@ type BlockChain struct {
 	blockProcFeed                    event.Feed
 	newAttestationFeed               event.Feed
 	newJustifiedOrFinalizedBlockFeed event.Feed
+	requestCosmosVotesFeed           event.Feed
 	scope                            event.SubscriptionScope
 	genesisBlock                     *types.Block
 

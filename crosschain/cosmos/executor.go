@@ -159,21 +159,21 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 
 	hdr := makeCosmosHeader(header, c.config)
 	c.app.BeginBlock(abci.RequestBeginBlock{Header: *hdr.ToProto()})
-	log.Debug("statedb root begin block end ", statedb.IntermediateRoot(true).Hex())
+	log.Debug("statedb begin block end", "root", statedb.IntermediateRoot(true).Hex())
 }
 
 func (c *Executor) EndBlock() {
 	// log.Debug(string(debug.Stack()))
-	log.Debug("statedb root end block start ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	log.Debug("statedb end block start", "root", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 
 	rc := c.app.BaseApp.Commit()
-	log.Debug("statedb root end block middle 0 ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	log.Debug("statedb end block middle 0", "root", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	// TODO hardfork cosmos block height
 	// if c.header.Number.Int64() > 128+c.config.CrosschainCosmosBlock.Int64() {
 	// 	key := fmt.Sprintf("s/%d", c.header.Number.Int64()-128)
 	// 	c.db.Delete([]byte(key))
 	// }
-	log.Debug("statedb root end block middle ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	log.Debug("statedb end block middle", "root", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 	copy(c.header.Extra[32:64], rc.Data[:])
 	c.SetState(c.statedb, common.BytesToHash(rc.Data[:]), c.header.Number.Int64())
 	// c.app.EndBlock(abci.RequestEndBlock{Height: c.header.Number.Int64()})
@@ -181,7 +181,7 @@ func (c *Executor) EndBlock() {
 	c.db.evm.StateDB.(*state.StateDB).Finalise(true)
 
 	log.Debug("EndBlock", "ibcHash", hex.EncodeToString(rc.Data[:]))
-	log.Debug("statedb root end block end ", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
+	log.Debug("statedb end block end", "root", c.db.evm.StateDB.(*state.StateDB).IntermediateRoot(true).Hex())
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {

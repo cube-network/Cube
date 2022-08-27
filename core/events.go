@@ -57,3 +57,7 @@ type NewAttestationEvent struct{ A *types.Attestation }
 type NewJustifiedOrFinalizedBlockEvent struct {
 	JF *types.BlockStatus
 }
+
+type RequestCosmosVotesEvent struct {
+	Idxs *types.CosmosLackedVoteIndexs
+}

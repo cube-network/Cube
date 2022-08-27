@@ -194,6 +194,8 @@ var eth66 = map[uint64]msgHandler{
 	NewCosmosVoteMsg:              handleNewCosmosVote,
 	GetCubeAndCosmosHeadersMsg:    handleGetCubeAndCosmosHeaders66,
 	CubeAndCosmosHeadersMsg:       handleNewCubeAndCosmosHeaders66,
+	GetCosmosVotesMsg:             handleGetCosmosVotesPacket66,
+	CosmosVotesMsg:                handleCosmosVotes,
 }
 
 // handleMessage is invoked whenever an inbound message is received from a remote

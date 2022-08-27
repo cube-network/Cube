@@ -43,7 +43,7 @@ var ProtocolVersions = []uint{ETH66}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-var protocolLengths = map[uint]uint64{ETH66: 24}
+var protocolLengths = map[uint]uint64{ETH66: 26}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
@@ -68,6 +68,8 @@ const (
 	NewCosmosVoteMsg              = 0x15
 	GetCubeAndCosmosHeadersMsg    = 0x16
 	CubeAndCosmosHeadersMsg       = 0x17
+	GetCosmosVotesMsg             = 0x18
+	CosmosVotesMsg                = 0x19
 )
 
 var (
@@ -196,6 +198,26 @@ type CubeAndCosmosHeadersPacket []*types.CubeAndCosmosHeader
 type CubeAndCosmosHeadersPacket66 struct {
 	RequestId uint64
 	CubeAndCosmosHeadersPacket
+}
+
+type GetCosmosVotesPacket struct {
+	Idxs *types.CosmosLackedVoteIndexs
+}
+
+type GetCosmosVotesPacket66 struct {
+	RequestId uint64
+	*GetCosmosVotesPacket
+}
+
+//type CosmosVotesPacket struct {
+//	*types.CosmosVotesList
+//}
+//
+type CosmosVotesPacket []*types.CosmosVotesList
+
+type CosmosVotesPacket66 struct {
+	RequestId uint64
+	CosmosVotesPacket
 }
 
 // NewBlockPacket is the network packet for the block propagation message.
@@ -392,6 +414,12 @@ func (*BlockHeadersPacket) Kind() byte   { return BlockHeadersMsg }
 
 func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
 func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }
+
+func (*GetCosmosVotesPacket) Name() string { return "GetCosmosVotesPacket" }
+func (*GetCosmosVotesPacket) Kind() byte   { return GetCosmosVotesMsg }
+
+func (*CosmosVotesPacket) Name() string { return "CosmosVotesPacket" }
+func (*CosmosVotesPacket) Kind() byte   { return CosmosVotesMsg }
 
 func (*GetBlockBodiesPacket) Name() string { return "GetBlockBodies" }
 func (*GetBlockBodiesPacket) Kind() byte   { return GetBlockBodiesMsg }

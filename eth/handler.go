@@ -49,6 +49,7 @@ const (
 	txChanSize  = 4096
 	naChanSize  = 4096
 	njfChanSize = 4096
+	lcvChanSize = 4096
 )
 
 var (
@@ -121,6 +122,8 @@ type handler struct {
 	naSub                  event.Subscription
 	njfCh                  chan core.NewJustifiedOrFinalizedBlockEvent
 	njfSub                 event.Subscription
+	lcvCh                  chan core.RequestCosmosVotesEvent
+	lcvSub                 event.Subscription
 	minedBlockSub          *event.TypeMuxSubscription
 	minedBlockAndHeaderSub *event.TypeMuxSubscription
 	cosmosVoteSub          *event.TypeMuxSubscription
@@ -466,6 +469,12 @@ func (h *handler) Start(maxPeers int) {
 	h.njfSub = h.chain.SubscribeNewJustifiedOrFinalizedBlockEvent(h.njfCh)
 	go h.newJustifiedOrFinalizedBlockBroadcastLoop()
 
+	// broadcast request for lacked cosmos votes
+	h.wg.Add(1)
+	h.lcvCh = make(chan core.RequestCosmosVotesEvent, lcvChanSize)
+	h.lcvSub = h.chain.SubscribeRequestCosmosVotesEvent(h.lcvCh)
+	go h.requestCosmosVotesBroadcastLoop()
+
 	// start sync handlers
 	h.wg.Add(1)
 	go h.chainSync.loop()
@@ -575,7 +584,7 @@ func (h *handler) BroadcastCosmosVote(vote *types.CosmosVote) {
 	log.Info("Broadcast CosmosVote", "peers", len(peers), "index", vote.Index, "headerHash", vote.HeaderHash)
 
 	// Send the block to a subset of our peers
-	transfer := peers[:int(math.Sqrt(float64(len(peers))))]
+	transfer := peers //[:int(math.Sqrt(float64(len(peers))))]
 	for _, peer := range transfer {
 		log.Info("metric", "method", "BroadcastCosmosVote", "peer", peer.ID(), "index", vote.Index, "headerHash", vote.HeaderHash)
 		peer.AsyncSendNewCosmosVote(vote)
@@ -634,8 +643,12 @@ func (h *handler) BroadcastAttestationToOtherNodes(a *types.Attestation) {
 	// Send the attestation to a subset of our peers
 	transfer := peers //[:int(math.Sqrt(float64(len(peers))))]
 	for _, peer := range transfer {
-		log.Info("metric", "method", "BroadcastAttestationToOtherNodes", "peer", peer.ID(), "hash", a.TargetRangeEdge.Hash.String(), "number", a.TargetRangeEdge.Number.Uint64())
+		log.Info("metric", "method", "BroadcastAttestationToOtherNodes", "source", a.SourceRangeEdge.Number.Uint64(), "target", a.TargetRangeEdge.Number.Uint64(), "peer", peer.ID(), "hash", a.TargetRangeEdge.Hash.String())
 		peer.AsyncSendNewAttestation(a)
+	}
+	lackIdxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
+	if lackIdxs != nil {
+		h.BroadcastGetCosmosVotes(lackIdxs)
 	}
 }
 
@@ -644,8 +657,23 @@ func (h *handler) BroadcastJustifiedOrFinalizedBlockToOtherNodes(bs *types.Block
 	// Send the attestation to a subset of our peers
 	transfer := peers //[:int(math.Sqrt(float64(len(peers))))] // TODO
 	for _, peer := range transfer {
-		log.Info("metric", "method", "BroadcastJustifiedOrFinalizedBlockToOtherNodes", "peer", peer.ID(), "hash", bs.Hash.String(), "number", bs.BlockNumber.Uint64())
+		log.Info("metric", "method", "BroadcastJustifiedOrFinalizedBlockToOtherNodes", "number", bs.BlockNumber.Uint64(), "peer", peer.ID(), "hash", bs.Hash.String())
 		peer.AsyncSendNewJustifiedOrFinalizedBlock(bs)
+	}
+	//if bs.Status == types.BasFinalized {
+	//lackIdxs := crosschain.GetCrossChain().CheckVotes(bs.BlockNumber.Uint64(), bs.Hash, nil)
+	//if lackIdxs != nil {
+	//	h.BroadcastGetCosmosVotes(lackIdxs)
+	//}
+	//}
+}
+
+func (h *handler) BroadcastGetCosmosVotes(idxs *types.CosmosLackedVoteIndexs) {
+	peers := h.peers.peersWithBlock(idxs.Hash)
+	transfer := peers //[:int(math.Sqrt(float64(len(peers))))] // TODO
+	for _, peer := range transfer {
+		log.Info("metric", "method", "BroadcastGetCosmosVotes", "peer", peer.ID(), "hash", idxs.Hash.String(), "number", idxs.Number.Uint64())
+		peer.AsyncSendGetCosmosVotes(idxs)
 	}
 }
 
@@ -714,7 +742,19 @@ func (h *handler) newJustifiedOrFinalizedBlockBroadcastLoop() {
 		select {
 		case njf := <-h.njfCh:
 			h.BroadcastJustifiedOrFinalizedBlockToOtherNodes(njf.JF)
-		case <-h.naSub.Err():
+		case <-h.njfSub.Err():
+			return
+		}
+	}
+}
+
+func (h *handler) requestCosmosVotesBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case lcv := <-h.lcvCh:
+			h.BroadcastGetCosmosVotes(lcv.Idxs)
+		case <-h.lcvSub.Err():
 			return
 		}
 	}

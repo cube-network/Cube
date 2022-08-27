@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"math/big"
@@ -37,6 +38,15 @@ func handleNewAttestation(backend Backend, msg Decoder, peer *Peer) error {
 	err := backend.Chain().HandleAttestation(a)
 	if err != nil {
 		log.Warn(err.Error())
+	}
+	// todo: maybe should remove?
+	idxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
+	if idxs != nil {
+		// request lacked votes
+		backend.Chain().BroadcastGetCosmosVotesFromOtherNodes(idxs)
+		//} else if commit != nil {
+		//	// broadcast votes to other peers
+		//	backend.Chain().BroadcastCosmosVotesToOtherNodes(commit)
 	}
 	return nil
 }
@@ -62,7 +72,17 @@ func handleNewJustifiedOrFinalizedBlock(backend Backend, msg Decoder, peer *Peer
 		if block == nil {
 			return fmt.Errorf("block not found %d", bs.BlockNumber.Uint64())
 		}
-		return p2p.Send(peer.rw, GetAttestationsMsg, &types.RequestAttestation{BlockNumber: new(big.Int).Set(block.Number()), Hash: block.Hash()})
+		err := p2p.Send(peer.rw, GetAttestationsMsg, &types.RequestAttestation{BlockNumber: new(big.Int).Set(block.Number()), Hash: block.Hash()})
+		//// todo: request cosmos votes ?
+		//idxs := crosschain.GetCrossChain().CheckVotes(block.NumberU64(), block.Hash(), block.Header())
+		//if idxs != nil {
+		//	// request lacked votes
+		//	backend.Chain().BroadcastGetCosmosVotesFromOtherNodes(idxs)
+		//	//} else if commit != nil {
+		//	//	// broadcast votes to other peers
+		//	//	backend.Chain().BroadcastCosmosVotesToOtherNodes(commit)
+		//}
+		return err
 	}
 	// Ignore bs.Status == BasJustified, status == BasFinalized
 	// bs.Status == BasJustified, status == BasJustified

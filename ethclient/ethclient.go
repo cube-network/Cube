@@ -589,8 +589,8 @@ func (ec *Client) CosmosCommit(ctx context.Context, height *int64) (*tt.ResultCo
 	return q, nil
 }
 
-func (ec *Client) CosmosValidators(ctx context.Context, height *int64, page, perPage *int) (*tt.ResultValidators, error) {
-	q := &tt.ResultValidators{}
+func (ec *Client) CosmosValidators(ctx context.Context, height *int64, page, perPage *int) ([]byte, error) {
+	var q []byte
 	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosValidators", height, page, perPage)
 	if err != nil {
 		return q, err

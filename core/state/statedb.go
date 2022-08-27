@@ -1235,7 +1235,7 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		}
 	}
 
-	s.db.TrieDB().WaitAndPrepareNextCommit()
+	s.db.TrieDB().WaitAndPrepareNextCommit(s.trie.TrieNodeHashCache())
 	go func(s *StateDB) {
 		defer s.db.TrieDB().DoneAsyncCommit()
 		// Commit objects to the trie, measuring the elapsed time

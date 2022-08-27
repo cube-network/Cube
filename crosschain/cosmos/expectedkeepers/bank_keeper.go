@@ -2,10 +2,13 @@ package expectedkeepers
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
+
 	sdk "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // BankKeeper defines the expected bank keeper
@@ -73,16 +76,27 @@ func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderMo
 }
 
 func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coins) error {
+	if fromAddr == nil {
+		fromAddr = cbk.moduleAccs["transfer"]
+	}
+	if toAddr == nil {
+		toAddr = cbk.moduleAccs["transfer"]
+	}
 	log.Debug("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
-	if amt.Empty() {
-		return fmt.Errorf("send coins failed as no coin's info provided")
+	if !ctx.EVM().Context.CanTransfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), amt[0].Amount.BigInt()) {
+		return errors.New("insufficient balance")
 	}
-	cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
-	if _, err := systemcontract.SendCoin(ctx, fromAddr, toAddr, amt[0]); err != nil {
-		log.Debug("Failed to perform SendCoin", "coin", amt.String(), "err", err.Error())
-		return err
-	}
-	cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
+	ctx.EVM().Context.Transfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt[0].Amount.BigInt())
+
+	// if amt.Empty() {
+	// 	return fmt.Errorf("send coins failed as no coin's info provided")
+	// }
+	// cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
+	// if _, err := systemcontract.SendCoin(ctx, fromAddr, toAddr, amt[0]); err != nil {
+	// 	log.Debug("Failed to perform SendCoin", "coin", amt.String(), "err", err.Error())
+	// 	return err
+	// }
+	// cbk.DumpCoins(ctx, fromAddr, toAddr, amt)
 
 	return nil
 }
@@ -127,16 +141,15 @@ func (cbk CubeBankKeeper) DumpCoins(ctx sdk.Context, sender, receiver sdk.AccAdd
 	{
 		sb, err := systemcontract.GetBalance(ctx, sender, amt[0])
 		if err != nil {
-			log.Debug("err ", err.Error())
+			log.Debug("DumpCoins sender err ", err.Error(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		} else {
-			log.Debug("from  ", sb.Int64(), " to ", hex.EncodeToString(sender.Bytes()))
+			log.Debug("sender bal  ", sb.Int64(), " addr ", hex.EncodeToString(sender.Bytes()))
 		}
 		rb, err := systemcontract.GetBalance(ctx, receiver, amt[0])
 		if err != nil {
-			log.Debug("err ", err.Error())
+			log.Debug("DumpCoins receiver err ", err.Error(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		} else {
-			log.Debug("from ", rb.Int64(), " to ", hex.EncodeToString(receiver.Bytes()))
+			log.Debug("receiver bal ", rb.Int64(), " addr ", hex.EncodeToString(receiver.Bytes()))
 		}
 	}
-
 }

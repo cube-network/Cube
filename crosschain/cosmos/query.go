@@ -68,7 +68,7 @@ func (c *Cosmos) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTx
 	return rts, err
 }
 
-func (c *Cosmos) CosmosValidators(height *int64, page, perPage *int) (*tt.ResultValidators, error) {
+func (c *Cosmos) CosmosValidators(height *int64, page, perPage *int) ([]byte, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
@@ -76,14 +76,17 @@ func (c *Cosmos) CosmosValidators(height *int64, page, perPage *int) (*tt.Result
 		return nil, errors.New("Not Support")
 	}
 
-	lb := c.chain.GetLightBlock(*height)
-	if lb == nil {
+	vals := c.chain.GetValidators(*height)
+	if vals == nil {
 		return nil, errors.New("invalid validators")
 	}
 
-	val := &tt.ResultValidators{BlockHeight: *height, Count: 1, Total: 1}
-	copy(val.Validators, lb.ValidatorSet.Validators)
-	return val, nil
+	// val := &tt.ResultValidators{BlockHeight: *height, Count: len(vals.Validators), Total: len(vals.Validators)}
+	// // copy(val.Validators, vals.Validators)
+	// val.Validators = vals.Validators
+
+	vt, _ := vals.ToProto()
+	return vt.Marshal()
 }
 
 func (c *Cosmos) CosmosLightBlock(height *int64) ([]byte, error) {

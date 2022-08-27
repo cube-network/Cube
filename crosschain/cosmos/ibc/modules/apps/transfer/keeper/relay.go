@@ -114,11 +114,12 @@ func (k Keeper) SendTransfer(
 		labels = append(labels, telemetry.NewLabel(coretypes.LabelSource, "true"))
 
 		// create the escrow address for the tokens
-		escrowAddress := types.GetEscrowAddress(sourcePort, sourceChannel)
+		// escrowAddress := types.GetEscrowAddress(sourcePort, sourceChannel)
 
 		// escrow source tokens. It fails if balance insufficient.
 		if err := k.bankKeeper.SendCoins(
-			ctx, sender, escrowAddress, sdk.NewCoins(token),
+			// ctx, sender, escrowAddress, sdk.NewCoins(token),
+			ctx, sender, nil, sdk.NewCoins(token),
 		); err != nil {
 			return err
 		}
@@ -144,7 +145,8 @@ func (k Keeper) SendTransfer(
 	}
 
 	packetData := types.NewFungibleTokenPacketData(
-		fullDenomPath, token.Amount.String(), sender.String(), receiver,
+		// fullDenomPath, token.Amount.String(), sender.String(), receiver,
+		fullDenomPath, token.Amount.String(), hex.EncodeToString(sender), receiver,
 	)
 
 	packet := channeltypes.NewPacket(
@@ -246,8 +248,9 @@ func (k Keeper) OnRecvPacket(ctx sdk.Context, packet channeltypes.Packet, data t
 		}
 
 		// unescrow tokens
-		escrowAddress := types.GetEscrowAddress(packet.GetDestPort(), packet.GetDestChannel())
-		if err := k.bankKeeper.SendCoins(ctx, escrowAddress, receiver, sdk.NewCoins(token)); err != nil {
+		// escrowAddress := types.GetEscrowAddress(packet.GetDestPort(), packet.GetDestChannel())
+		// if err := k.bankKeeper.SendCoins(ctx, escrowAddress, receiver, sdk.NewCoins(token)); err != nil {
+		if err := k.bankKeeper.SendCoins(ctx, nil, receiver, sdk.NewCoins(token)); err != nil {
 			// NOTE: this error is only expected to occur given an unexpected bug or a malicious
 			// counterparty module. The bug may occur in bank or any part of the code that allows
 			// the escrow address to be drained. A malicious counterparty module could drain the
@@ -383,8 +386,9 @@ func (k Keeper) refundPacketToken(ctx sdk.Context, packet channeltypes.Packet, d
 
 	if types.SenderChainIsSource(packet.GetSourcePort(), packet.GetSourceChannel(), data.Denom) {
 		// unescrow tokens back to sender
-		escrowAddress := types.GetEscrowAddress(packet.GetSourcePort(), packet.GetSourceChannel())
-		if err := k.bankKeeper.SendCoins(ctx, escrowAddress, sender, sdk.NewCoins(token)); err != nil {
+		// escrowAddress := types.GetEscrowAddress(packet.GetSourcePort(), packet.GetSourceChannel())
+		// if err := k.bankKeeper.SendCoins(ctx, escrowAddress, sender, sdk.NewCoins(token)); err != nil {
+		if err := k.bankKeeper.SendCoins(ctx, nil, sender, sdk.NewCoins(token)); err != nil {
 			// NOTE: this error is only expected to occur given an unexpected bug or a malicious
 			// counterparty module. The bug may occur in bank or any part of the code that allows
 			// the escrow address to be drained. A malicious counterparty module could drain the

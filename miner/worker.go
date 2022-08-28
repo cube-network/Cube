@@ -537,6 +537,10 @@ func (w *worker) mainLoop() {
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
+				if w.chainConfig.IsCrosschainCosmos(w.current.header.Number) {
+					log.Info("w.txsCh... abort for crosschain cosmos")
+					continue
+				}
 				w.mu.RLock()
 				coinbase := w.coinbase
 				w.mu.RUnlock()

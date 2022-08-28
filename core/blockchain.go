@@ -1422,13 +1422,13 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	//	bc.Cosmosapp.MakeSignedHeader(block.Header(), state)
 	//}
 
-	log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
-	crosschain.GetCrossChain().EventHeader(block.Header())
-
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
 	}
 	bc.futureBlocks.Remove(block.Hash())
+
+	log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
+	crosschain.GetCrossChain().EventHeader(block.Header())
 
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})

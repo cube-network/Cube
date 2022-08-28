@@ -94,6 +94,10 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64(), h)
+	if valset == nil {
+		log.Warn("failed to get validator set")
+		return nil
+	}
 	// TODO NextValidatorsHash N%200 -1,
 	// chaos.gettopvalidators(h.number)
 

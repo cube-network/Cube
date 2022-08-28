@@ -172,7 +172,12 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	sh := c.chain.getSignedHeader(header.Number.Uint64(), header.Hash())
 	if sh == nil {
-		c.chain.makeCosmosSignedHeader(header)
+		csh := c.chain.makeCosmosSignedHeader(header)
+		if csh == nil {
+			log.Warn("make cosmos signed header fail!")
+			return
+		}
+
 	}
 
 	var statedb *state.StateDB

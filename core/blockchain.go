@@ -184,6 +184,7 @@ type BlockChain struct {
 	blockProcFeed                    event.Feed
 	newAttestationFeed               event.Feed
 	newJustifiedOrFinalizedBlockFeed event.Feed
+	requestCosmosVotesFeed           event.Feed
 	scope                            event.SubscriptionScope
 	genesisBlock                     *types.Block
 
@@ -1479,7 +1480,10 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 
 	h := bc.GetBlockByHash(chain[0].ParentHash())
 	if h == nil {
-		panic("unexpected block...")
+		// panic("unexpected block...")
+		// TODO why panic ??
+		log.Error("unexpected block..., hash ", chain[0].Hash().Hex(), " parent hash ", chain[0].ParentHash().Hex())
+		return 0, nil
 	}
 
 	// Do a sanity check that the provided chain is actually ordered and linked.

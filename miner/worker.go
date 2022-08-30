@@ -705,18 +705,20 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			cosmosHeader := crosschain.GetCrossChain().GetSignedHeader(block.NumberU64(), hash)
-			if cosmosHeader != nil {
-				log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
-				w.mux.Post(core.NewMinedBlockAndHeaderEvent{&types.BlockAndCosmosHeader{
-					block,
-					types.CosmosHeaderFromSignedHeader(cosmosHeader),
-				}})
-			} else {
-				log.Info("GetSignedHeader but nil")
-				if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-					panic("cosmos header not found!")
+
+			if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
+				cosmosHeader := crosschain.GetCrossChain().GetSignedHeader(block.NumberU64(), hash)
+				if cosmosHeader != nil {
+					log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
+					w.mux.Post(core.NewMinedBlockAndHeaderEvent{&types.BlockAndCosmosHeader{block,
+						types.CosmosHeaderFromSignedHeader(cosmosHeader)}})
+				} else {
+					log.Warn("BroadcastBlockAndHeader is nil ", "number", block.NumberU64(), "hash", hash)
 				}
+			} else {
+				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+				w.mux.Post(core.NewMinedBlockEvent{block})
+
 			}
 			// cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
 			// if cosmosHeader != nil {

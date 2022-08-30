@@ -206,7 +206,7 @@ func (h *ethHandler) handleTwoHeaders(peer *eth.Peer, headers []*types.CubeAndCo
 		//chs = append(chs, th.Header)
 		chs[i] = th.Header
 		// todo: verify cosmos header
-		if crosschain.GetCrossChain() != nil && th.CosmosHeader != nil {
+		if h.chain.Config().IsCrosschainCosmos(th.Header.Number) && crosschain.GetCrossChain() != nil && th.CosmosHeader != nil {
 			sh := types.SignedHeaderFromCosmosHeader(th.CosmosHeader)
 			vote, err := crosschain.GetCrossChain().HandleHeader(th.Header, sh)
 			if vote != nil {
@@ -332,7 +332,7 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 	log.Info("handleBlockAndHeaderBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
 	// todo: deal with cosmos header
-	if crosschain.GetCrossChain() != nil && blockAndHeader.CosmosHeader != nil {
+	if h.chain.Config().IsCrosschainCosmos(block.Number()) && crosschain.GetCrossChain() != nil && blockAndHeader.CosmosHeader != nil {
 		sh := types.SignedHeaderFromCosmosHeader(blockAndHeader.CosmosHeader)
 		vote, err := crosschain.GetCrossChain().HandleHeader(block.Header(), sh)
 		if vote != nil {

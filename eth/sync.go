@@ -17,10 +17,11 @@
 package eth
 
 import (
-	"github.com/ethereum/go-ethereum/crosschain"
 	"math/big"
 	"sync/atomic"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crosschain"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -260,7 +261,7 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		//h.BroadcastBlock(&core.BlockAndCosmosHeader{
 		//	Block: head,
 		//}, false)
-		if crosschain.GetCrossChain() != nil {
+		if h.chain.Config().IsCrosschainCosmos(head.Number()) && crosschain.GetCrossChain() != nil {
 			sh := crosschain.GetCrossChain().GetSignedHeader(head.NumberU64(), head.Hash())
 			if sh != nil {
 				bah := &types.BlockAndCosmosHeader{

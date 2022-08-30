@@ -207,8 +207,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	p, isPrecompile := evm.precompile(addr)
 
 	isCrossChain := false
+	isRegisterValidator := false
 	if evm.Context.Crosschain != nil {
 		isCrossChain = evm.Context.Crosschain.IsCrossChainContract(addr)
+		isRegisterValidator = evm.Context.Crosschain.IsRegisterValidatorContract(addr)
 	}
 
 	if !evm.StateDB.Exist(addr) {
@@ -249,6 +251,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
 	} else if isCrossChain {
 		ret, gas, err = evm.Context.Crosschain.RunCrossChainContract(evm, input, gas)
+	} else if isRegisterValidator {
+		ret, gas, err = evm.Context.Crosschain.RunRegisterValidatorContract(evm, input, gas)
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.
@@ -269,6 +273,37 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	// above we revert to the snapshot and consume any gas remaining. Additionally
 	// when we're in homestead this also counts for code storage gas errors.
 	if err != nil {
+		evm.StateDB.RevertToSnapshot(snapshot)
+		if err != ErrExecutionReverted {
+			gas = 0
+		}
+		// TODO: consider clearing up unused snapshots:
+		//} else {
+		//	evm.StateDB.DiscardSnapshot(snapshot)
+	}
+	return ret, gas, err
+}
+
+func (evm *EVM) RunInterpreter(caller ContractRef, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
+	// Initialise a new contract and set the code that is to be used by the EVM.
+	// The contract is a scoped environment for this execution context only.
+	code := evm.StateDB.GetCode(addr)
+	if len(code) == 0 {
+		ret, err = nil, nil // gas is unchanged
+	} else {
+		addrCopy := addr
+		// If the account has no code, we can abort here
+		// The depth-check is already done, and precompiles handled above
+		contract := NewContract(caller, AccountRef(addrCopy), value, gas)
+		contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
+		ret, err = evm.interpreter.Run(contract, input, false)
+		gas = contract.Gas
+	}
+	// When an error was returned by the EVM or when setting the creation code
+	// above we revert to the snapshot and consume any gas remaining. Additionally
+	// when we're in homestead this also counts for code storage gas errors.
+	if err != nil {
+		snapshot := evm.StateDB.Snapshot()
 		evm.StateDB.RevertToSnapshot(snapshot)
 		if err != ErrExecutionReverted {
 			gas = 0

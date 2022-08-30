@@ -20,7 +20,7 @@ func GetBalance(ctx sdk.Context, addr sdk.AccAddress, amt sdk.Coin) (*big.Int, e
 	contract := system.ERC20FactoryContract
 	method := "getBalance"
 	owner := common.BytesToAddress(addr)
-	result, err := callContract(ctx, contract, method, amt.Denom, owner)
+	result, err := callContract(ctx.EVM(), contract, method, amt.Denom, owner)
 
 	// unpack data
 	ret, err := system.ABIUnpack(contract, method, result)
@@ -41,7 +41,7 @@ func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (sdk.Coins, error) {
 	contract := system.ERC20FactoryContract
 	method := "allBalances"
 	owner := common.BytesToAddress(addr)
-	result, err := callContract(ctx, contract, method, owner)
+	result, err := callContract(ctx.EVM(), contract, method, owner)
 
 	// unpack data
 	ret, err := system.ABIUnpack(contract, method, result)
@@ -68,19 +68,19 @@ func GetAllBalances(ctx sdk.Context, addr sdk.AccAddress) (sdk.Coins, error) {
 }
 
 func SendCoin(ctx sdk.Context, fromAddr sdk.AccAddress, toAddr sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "transferFrom", amt.Denom, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt.Amount.BigInt())
+	return callContract(ctx.EVM(), system.ERC20FactoryContract, "transferFrom", amt.Denom, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt.Amount.BigInt())
 }
 
 func MintCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "mintCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt(), amt.Denom)
+	return callContract(ctx.EVM(), system.ERC20FactoryContract, "mintCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt(), amt.Denom)
 }
 
 func BurnCoin(ctx sdk.Context, moduleAcc sdk.AccAddress, amt sdk.Coin) ([]byte, error) {
-	return callContract(ctx, system.ERC20FactoryContract, "burnCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt())
+	return callContract(ctx.EVM(), system.ERC20FactoryContract, "burnCoin", amt.Denom, common.BytesToAddress(moduleAcc), amt.Amount.BigInt())
 }
 
 // callContract executes contract in EVM
-func callContract(ctx sdk.Context, contract common.Address, method string, args ...interface{}) ([]byte, error) {
+func callContract(evm *vm.EVM, contract common.Address, method string, args ...interface{}) (ret []byte, err error) {
 	// Pack method and args for data seg
 	data, err := system.ABIPack(contract, method, args...)
 	if err != nil {
@@ -97,7 +97,11 @@ func callContract(ctx sdk.Context, contract common.Address, method string, args 
 	//vmenv := vm.NewEVM(blockContext, core.NewEVMTxContext(msg), ctx.Statedb, ctx.ChainConfig, vm.Config{})
 
 	// Run evm call
-	ret, _, err := ctx.EVM().Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	if msg.To().String() == system.AddrToPubkeyMapContract.String() {
+		ret, _, err = evm.RunInterpreter(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	} else {
+		ret, _, err = evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	}
 
 	if err == vm.ErrExecutionReverted {
 		reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))
@@ -124,7 +128,7 @@ func SetState(ctx sdk.Context, key []byte, val []byte, prefix string) ([]byte, e
 	}
 
 	method := "set"
-	_, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key, val, ctx.EVM().Context.BlockNumber.Uint64(), prefix)
+	_, err := callContract(ctx.EVM(), system.CrossChainCosmosStateContract, method, key, val, ctx.EVM().Context.BlockNumber.Uint64(), prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +137,7 @@ func SetState(ctx sdk.Context, key []byte, val []byte, prefix string) ([]byte, e
 
 func GetRoot(ctx sdk.Context, prefix string) ([][]byte, [][]byte, error) {
 	method := "getroot"
-	result, err := callContract(ctx, system.CrossChainCosmosStateContract, method, prefix)
+	result, err := callContract(ctx.EVM(), system.CrossChainCosmosStateContract, method, prefix)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -158,7 +162,7 @@ func GetRoot(ctx sdk.Context, prefix string) ([][]byte, [][]byte, error) {
 
 func GetState(ctx sdk.Context, key []byte) (bool, []byte, error) {
 	method := "get"
-	result, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key)
+	result, err := callContract(ctx.EVM(), system.CrossChainCosmosStateContract, method, key)
 	if err != nil {
 		return false, nil, err
 	}
@@ -186,7 +190,7 @@ func GetState(ctx sdk.Context, key []byte) (bool, []byte, error) {
 
 func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
 	method := "del"
-	_, err := callContract(ctx, system.CrossChainCosmosStateContract, method, key)
+	_, err := callContract(ctx.EVM(), system.CrossChainCosmosStateContract, method, key)
 	if err != nil {
 		return nil, err
 	}
@@ -194,14 +198,14 @@ func DelState(ctx sdk.Context, key []byte) ([]byte, error) {
 	return nil, nil
 }
 
-func RegisterValidator(ctx sdk.Context, address common.Address, pubkey string) ([]byte, error) {
-	return callContract(ctx, system.AddrToPubkeyMapContract, "registerValidator", address, pubkey)
+func RegisterValidator(evm *vm.EVM, address common.Address, pubkey string) ([]byte, error) {
+	return callContract(evm, system.AddrToPubkeyMapContract, "registerValidator", address, pubkey)
 }
 
 func GetAllValidators(ctx sdk.Context) ([]common.Address, []string, error) { //map[common.Address]*crosschain.Validator
 	contract := system.AddrToPubkeyMapContract
 	method := "getAllValidators"
-	result, err := callContract(ctx, contract, method)
+	result, err := callContract(ctx.EVM(), contract, method)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -226,10 +230,10 @@ func GetAllValidators(ctx sdk.Context) ([]common.Address, []string, error) { //m
 	return addrs, pubkeys, nil
 }
 
-func GetValidator(ctx sdk.Context, address common.Address) (string, error) { // *crosschain.Validator
+func GetValidator(evm *vm.EVM, address common.Address) (string, error) { // *crosschain.Validator
 	contract := system.AddrToPubkeyMapContract
 	method := "getValidator"
-	result, err := callContract(ctx, contract, method, address)
+	result, err := callContract(evm, contract, method, address)
 	if err != nil {
 		return string(0), err
 	}

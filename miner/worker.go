@@ -1109,7 +1109,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 			localTxs[account] = txs
 		}
 	}
-	log.Debug("local tx size ", len(localTxs), " remote tx ", len(remoteTxs))
+	log.Debug("tx size", "local", len(localTxs), " remote", len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(w.current.signer, localTxs, header.BaseFee)
 		if w.commitTransactions(txs, w.coinbase, interrupt) {

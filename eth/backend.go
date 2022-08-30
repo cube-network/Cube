@@ -559,6 +559,7 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			clique.Authorize(eb, wallet.SignData)
 		}
+
 		if chaos, ok := s.engine.(*chaos.Chaos); ok {
 			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
 			if wallet == nil || err != nil {
@@ -566,8 +567,10 @@ func (s *Ethereum) StartMining(threads int) error {
 				return fmt.Errorf("signer missing: %v", err)
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
+			crosschain.GetCrossChain().SetSignTx(wallet.SignTx)
 		}
 		crosschain.GetCrossChain().SetCoinbase(eb)
+		crosschain.GetCrossChain().SetFuncs(s.txPool.Nonce, s.txPool.GasPrice, s.txPool.AddLocal)
 
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

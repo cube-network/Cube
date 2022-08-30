@@ -126,6 +126,10 @@ func (c *Executor) IsCrossChainContract(addr common.Address) bool {
 	return addr.String() == system.CrossChainCosmosContract.String()
 }
 
+func (c *Executor) IsRegisterValidatorContract(addr common.Address) bool {
+	return addr.String() == system.AddrToPubkeyMapContract.String()
+}
+
 func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
 	gasCost := c.RequiredGas(input)
 	if suppliedGas < gasCost {
@@ -133,6 +137,16 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 	}
 	suppliedGas -= gasCost
 	output, err := c.Run(evm, input)
+	return output, suppliedGas, err
+}
+
+func (c *Executor) RunRegisterValidatorContract(evm *vm.EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
+	gasCost := c.RequiredGas(input)
+	if suppliedGas < gasCost {
+		return nil, 0, vm.ErrOutOfGas
+	}
+	suppliedGas -= gasCost
+	output, err := c.RegisterValidator(evm, input)
 	return output, suppliedGas, err
 }
 
@@ -221,9 +235,12 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	c.app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: c.config.ChainID.String(), InitialHeight: init_block_height})
 	c.app.mm.InitGenesis(c.app.GetContextForDeliverTx([]byte{}), c.codec.Marshaler, genesisState)
 
-	// if c.coinbase == evm.Context.Coinbase {
-	c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
-	// }
+	//c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
+
+	//chainid := new(big.Int)
+	//chainid.SetString(c.chain.ChainID, 10)
+	//c.chain.valsMgr.registerValidator(c.coinbase, c.chain.privValidator, chainid)
+	c.chain.generateRegisterValidatorTx()
 
 	// c.is_start_crosschain = true
 }
@@ -258,22 +275,26 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	} else {
 	}
 
+	//log.Info("before unpack", "input", string(input))
+
 	// TODO estimate gas ??
 	_, arg, err := UnpackInput(input)
 	if err != nil {
-		log.Warn("tx unpack input fail ", err.Error())
+		log.Warn("tx unpack input fail", "err", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
+	//log.Info("after unpack", "arg", arg)
 
 	argbin, err := hex.DecodeString(arg)
 	if err != nil {
-		log.Warn("tx decode arg fail ", err.Error())
+		log.Warn("tx decode arg fail", "err", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
+	//log.Info("after decode", "argbin", string(argbin))
 
 	msgs, err := c.GetMsgs(argbin)
 	if err != nil {
-		log.Warn("tx get msg fail ", err.Error())
+		log.Warn("tx get msg fail", "err", err.Error())
 		return nil, vm.ErrExecutionReverted
 	}
 
@@ -299,6 +320,8 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 			txMsgData.Data = append(txMsgData.Data, &sdk.MsgData{MsgType: sdk.MsgTypeURL(msg), Data: msgResult.Data})
 			msgLogs = append(msgLogs, sdk.NewABCIMessageLog(uint32(i), msgResult.Log, msgEvents))
 			log.Debug("tx handle end")
+			//} else if {
+
 		} else {
 			log.Warn("tx router not found")
 			return nil, vm.ErrExecutionReverted
@@ -362,11 +385,37 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	return data, nil
 }
 
+func (c *Executor) RegisterValidator(evm *vm.EVM, input []byte) ([]byte, error) {
+	//log.Info("before unpack", "input", string(input))
+
+	// TODO estimate gas ??
+	_, msg, err := UnpackInput(input)
+	if err != nil {
+		log.Warn("tx unpack input fail", "err", err.Error())
+		return nil, vm.ErrExecutionReverted
+	}
+	//log.Info("after unpack", "msg", msg)
+
+	msgBytes, err := hex.DecodeString(msg)
+	if err != nil {
+		log.Warn("tx decode arg fail", "err", err.Error())
+		return nil, vm.ErrExecutionReverted
+	}
+	//log.Info("after decode", "msgBytes", string(msgBytes))
+
+	c.chain.valsMgr.doRegisterValidator(evm, msgBytes)
+
+	txMsgData := &sdk.TxMsgData{}
+	data, _ := proto.Marshal(txMsgData)
+	return data, nil
+}
+
 func (app *Executor) GetMsgs(argbin []byte) ([]sdk.Msg, error) {
 	var body tx.TxBody
 	err := app.codec.Marshaler.Unmarshal(argbin, &body)
 	body.UnpackInterfaces(app.codec.InterfaceRegistry)
 	if err != nil {
+		log.Warn("Unmarshal txboby failed", "err", err)
 		return nil, vm.ErrExecutionReverted
 	}
 

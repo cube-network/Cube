@@ -65,8 +65,10 @@ type Trie struct {
 	// Keep track of the number leafs which have been inserted since the last
 	// hashing operation. This number will not directly map to the number of
 	// actually unhashed nodes
-	unhashed      int
-	trieNodeCache *HashCache // use to cache <hash, trieNode>
+	unhashed int
+	// cache <hash, trieNode> when calculate hash,
+	// use to support read when async commit statedb
+	dirtyTrieNodes *HashCache
 }
 
 // newFlag returns the cache flag value for a newly created node.
@@ -81,12 +83,17 @@ func (t *Trie) newFlag() nodeFlag {
 // New will panic if db is nil and returns a MissingNodeError if root does
 // not exist in the database. Accessing the trie loads nodes from db on demand.
 func New(root common.Hash, db *Database) (*Trie, error) {
+	return NewWithCache(root, db, nil)
+}
+
+// New creates a trie with an existing root node from db with dirty trie node hash cache
+func NewWithCache(root common.Hash, db *Database, dirtyTrieNodes *HashCache) (*Trie, error) {
 	if db == nil {
 		panic("trie.New called without a database")
 	}
 	trie := &Trie{
-		db:            db,
-		trieNodeCache: &HashCache{inner: make(map[common.Hash]node)},
+		db:             db,
+		dirtyTrieNodes: dirtyTrieNodes,
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
 		rootnode, err := trie.resolveHash(root[:], nil)
@@ -578,10 +585,12 @@ func (t *Trie) hashRoot() (node, node, error) {
 	}
 	// If the number of changes is below 100, we let one thread handle it
 	var h *hasher
-	if t.db == nil {
+	// if t.db == nil {
+	if t.dirtyTrieNodes == nil {
 		h = newHasher(t.unhashed >= 100)
 	} else {
-		h = newHasherWithCache(t.unhashed >= 100, t.trieNodeCache)
+		// h = newHasherWithCache(t.unhashed >= 100, t.trieNodeCache)
+		h = newHasherWithCache(t.unhashed >= 100, t.dirtyTrieNodes)
 	}
 	defer returnHasherToPool(h)
 	hashed, cached := h.hash(t.root, true)
@@ -593,5 +602,7 @@ func (t *Trie) hashRoot() (node, node, error) {
 func (t *Trie) Reset() {
 	t.root = nil
 	t.unhashed = 0
-	t.trieNodeCache = &HashCache{inner: make(map[common.Hash]node)}
+	// t.trieNodeCache = &HashCache{inner: make(map[common.Hash]node)}
+	t.dirtyTrieNodes = nil
+
 }

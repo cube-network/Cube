@@ -54,10 +54,17 @@ type SecureTrie struct {
 // A new cache generation is created by each call to Commit.
 // cachelimit sets the number of past cache generations to keep.
 func NewSecure(root common.Hash, db *Database) (*SecureTrie, error) {
+	return NewSecureWithCache(root, db, nil)
+}
+
+// NewSecureWithCache creates a trie with an existing root node from a backing database
+// with dirty trie node hash cache
+func NewSecureWithCache(root common.Hash, db *Database, dirtyTrieNodes *HashCache) (*SecureTrie, error) {
 	if db == nil {
 		panic("trie.NewSecure called without a database")
 	}
-	trie, err := New(root, db)
+	// trie, err := New(root, db)
+	trie, err := NewWithCache(root, db, dirtyTrieNodes)
 	if err != nil {
 		return nil, err
 	}
@@ -216,9 +223,4 @@ func (t *SecureTrie) getSecKeyCache() map[string][]byte {
 		t.secKeyCache = make(map[string][]byte)
 	}
 	return t.secKeyCache
-}
-
-// TrieNodeHashCache returns internal hash cache of trie node
-func (t *SecureTrie) TrieNodeHashCache() *HashCache {
-	return t.trie.trieNodeCache
 }

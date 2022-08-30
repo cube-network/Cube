@@ -102,6 +102,11 @@ type HashCache struct {
 	lock  sync.RWMutex
 }
 
+// NewHashCache creates HashCache
+func NewHashCache() *HashCache {
+	return &HashCache{inner: make(map[common.Hash]node)}
+}
+
 // Put writes <key, value> to cache with lock protection
 func (c *HashCache) Put(key []byte, value node) {
 	c.lock.Lock()

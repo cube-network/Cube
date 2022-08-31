@@ -625,7 +625,7 @@ func (c *CosmosChain) checkVotes(height uint64, hash common.Hash, h *et.Header) 
 func (c *CosmosChain) handleVotesQuery(idxs *et.CosmosLackedVoteIndexs) (*et.CosmosVotesList, error) {
 	sh := c.getSignedHeader(idxs.Hash)
 	if sh == nil {
-		return nil, errors.New("cannot get signedheader")
+		return nil, nil //errors.New("cannot get signedheader")
 	}
 	if idxs.Indexs == nil || len(idxs.Indexs) == 0 {
 		return nil, errors.New("indexs is empty")

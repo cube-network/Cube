@@ -393,6 +393,16 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 	// c.signedHeader[hash] = header
 	c.signedHeader.Add(hash, header)
 
+	counter := 0
+	for _, commitSig := range header.Commit.Signatures {
+		if commitSig.BlockIDFlag == ct.BlockIDFlagCommit {
+			counter++
+		}
+	}
+	if counter == len(header.Commit.Signatures) {
+		log.Info("CosmosVotesAllCollected", "number", header.Height, "hash", hash)
+	}
+
 	log.Info("storeSignedHeader", "number", header.Height, "hash", hash, "header", header.Hash())
 }
 
@@ -518,7 +528,7 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 		c.mu.Unlock()
 
 		log.Error("get signed header failed, cache vote, ", "number", vote.Number, "hash", vote.HeaderHash.Hex())
-		return errors.New("get signed header failed")
+		return nil //errors.New("get signed header failed")
 	}
 	if len(header.Commit.Signatures) <= int(vote.Index) {
 		log.Error("signatures' count is wrong", "origin", len(header.Commit.Signatures), "index", vote.Index)
@@ -560,7 +570,7 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	}
 
 	if err := realVote.Verify(c.ChainID, validator.PubKey); err != nil {
-		log.Warn("vote fail ", err.Error(), " index ", strconv.Itoa(int(vote.Index)), " hash ", vote.HeaderHash.Hex())
+		log.Warn("vote fail", "err", err.Error(), " index ", strconv.Itoa(int(vote.Index)), " hash ", vote.HeaderHash.Hex())
 		return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, validator.PubKey, err)
 	}
 	vote.Vote.Timestamp = realVote.Timestamp

@@ -33,6 +33,7 @@ type Cosmos struct {
 	blockContext vm.BlockContext
 	statefn      cccommon.StateFn
 	headerfn     cccommon.GetHeaderByNumberFn
+	headerhashfn cccommon.GetHeaderByHashFn
 
 	querymu       sync.Mutex
 	queryExecutor *Executor
@@ -54,6 +55,7 @@ func (c *Cosmos) Init(datadir string,
 	blockContext vm.BlockContext,
 	statefn cccommon.StateFn,
 	headerfn cccommon.GetHeaderByNumberFn,
+	headerhashfn cccommon.GetHeaderByHashFn,
 	header *types.Header) {
 
 	c.callmu.Lock()
@@ -67,6 +69,7 @@ func (c *Cosmos) Init(datadir string,
 		c.blockContext = blockContext
 		c.statefn = statefn
 		c.headerfn = headerfn
+		c.headerhashfn = headerhashfn
 		c.header = header
 
 		c.codec = MakeEncodingConfig()
@@ -173,8 +176,8 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, header.Number) {
-		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64(), 10))
+	if !IsEnable(c.config, big.NewInt(header.Number.Int64()-1)) {
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64()-1, 10))
 		return
 	}
 
@@ -190,19 +193,27 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	}
 
+	p := c.headerhashfn(header.ParentHash)
+	if p == nil {
+		log.Error("can not find header.parent ", header.ParentHash.Hex())
+		return
+	}
+
 	var statedb *state.StateDB
 	var err error
 	if c.statefn != nil {
-		statedb, err = c.statefn(header.Root)
+		// statedb, err = c.statefn(header.Root)
+		statedb, err = c.statefn(p.Root)
 	} else {
-		statedb, err = state.New(header.Root, c.sdb, nil)
+		// statedb, err = state.New(header.Root, c.sdb, nil)
+		statedb, err = state.New(p.Root, c.sdb, nil)
 	}
 
 	if err != nil {
-		log.Warn("cosmos event header state root not found, maybe reorg...")
+		log.Warn("cosmos event header state root not found, ", err.Error())
 		return
 	}
-	c.queryExecutor.BeginBlock(header, statedb)
+	c.queryExecutor.BeginBlock(p, statedb)
 }
 
 func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {

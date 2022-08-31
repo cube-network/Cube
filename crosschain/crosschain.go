@@ -16,7 +16,7 @@ import (
 )
 
 type CrossChain interface {
-	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, header *types.Header)
+	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, headerhashfn cccommon.GetHeaderByHashFn, header *types.Header)
 	SetCoinbase(addr common.Address)
 	SetFuncs(getNonce cccommon.GetNonceFn, getPrice cccommon.GetPriceFn, addLocalTx cccommon.AddLocalTxFn)
 	SetSignTx(signTx cccommon.SignTxFn)

@@ -4,6 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 )
@@ -11,6 +12,14 @@ import (
 // Maximize performance, space for time
 
 func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status uint8) error {
+	if status == types.BasJustified {
+		idxs := crosschain.GetCrossChain().CheckVotes(num.Uint64(), hash, nil)
+		if idxs != nil {
+			// request lacked votes
+			bc.BroadcastGetCosmosVotesFromOtherNodes(idxs)
+		}
+	}
+
 	s, h := rawdb.ReadBlockStatusByNum(bc.db, num)
 	if s == status && h == hash {
 		return nil

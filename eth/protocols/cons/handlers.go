@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"math/big"
@@ -39,15 +38,12 @@ func handleNewAttestation(backend Backend, msg Decoder, peer *Peer) error {
 	if err != nil {
 		log.Warn(err.Error())
 	}
-	// todo: maybe should remove?
-	idxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
-	if idxs != nil {
-		// request lacked votes
-		backend.Chain().BroadcastGetCosmosVotesFromOtherNodes(idxs)
-		//} else if commit != nil {
-		//	// broadcast votes to other peers
-		//	backend.Chain().BroadcastCosmosVotesToOtherNodes(commit)
-	}
+	//// todo: maybe should remove?
+	//idxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
+	//if idxs != nil {
+	//	// request lacked votes
+	//	backend.Chain().BroadcastGetCosmosVotesFromOtherNodes(idxs)
+	//}
 	return nil
 }
 

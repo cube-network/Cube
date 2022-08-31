@@ -646,10 +646,11 @@ func (h *handler) BroadcastAttestationToOtherNodes(a *types.Attestation) {
 		log.Info("metric", "method", "BroadcastAttestationToOtherNodes", "source", a.SourceRangeEdge.Number.Uint64(), "target", a.TargetRangeEdge.Number.Uint64(), "peer", peer.ID(), "hash", a.TargetRangeEdge.Hash.String())
 		peer.AsyncSendNewAttestation(a)
 	}
-	lackIdxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
-	if lackIdxs != nil {
-		h.BroadcastGetCosmosVotes(lackIdxs)
-	}
+	//lackIdxs := crosschain.GetCrossChain().CheckVotes(a.TargetRangeEdge.Number.Uint64(), a.TargetRangeEdge.Hash, nil)
+	//if lackIdxs != nil {
+	//	h.BroadcastGetCosmosVotes(lackIdxs)
+	//}
+	//h.chain.BroadcastGetCosmosVotesFromOtherNodes()
 }
 
 func (h *handler) BroadcastJustifiedOrFinalizedBlockToOtherNodes(bs *types.BlockStatus) {

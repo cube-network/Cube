@@ -40,6 +40,9 @@ type Cosmos struct {
 	callmu        sync.Mutex
 	callExectors  *list.List
 
+	headersmu sync.Mutex
+	headers   *list.List
+
 	chain *CosmosChain
 
 	newExecutorCounter  int64
@@ -75,6 +78,7 @@ func (c *Cosmos) Init(datadir string,
 		c.codec = MakeEncodingConfig()
 
 		c.callExectors = list.New()
+		c.headers = list.New()
 
 		statedb, err := state.New(header.Root, c.sdb, nil)
 		if err != nil {
@@ -190,13 +194,31 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 			log.Warn("make cosmos signed header fail!")
 			return
 		}
-
 	}
 
+	c.headersmu.Lock()
+	defer c.headersmu.Unlock()
+	c.headers.PushFront(header)
+
+	headers := list.New()
+	for h := c.headers.Front(); h != nil; h = h.Next() {
+		ch := h.Value.(*et.Header)
+		log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
+		if c.eventHeader(ch) {
+			c.headers = list.New()
+			break
+		} else {
+			headers.PushBack(h)
+		}
+	}
+	c.headers = headers
+}
+
+func (c *Cosmos) eventHeader(header *types.Header) bool {
 	p := c.headerhashfn(header.ParentHash)
 	if p == nil {
-		log.Error("can not find header.parent ", header.ParentHash.Hex())
-		return
+		log.Error("can not find header.parent ", header.ParentHash.Hex(), " number ", header.Number.Uint64(), " hash ", header.Hash().Hex())
+		return false
 	}
 
 	var statedb *state.StateDB
@@ -211,9 +233,10 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	if err != nil {
 		log.Warn("cosmos event header state root not found, ", err.Error())
-		return
+		return false
 	}
 	c.queryExecutor.BeginBlock(p, statedb)
+	return true
 }
 
 func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {

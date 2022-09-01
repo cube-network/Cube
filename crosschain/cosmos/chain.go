@@ -102,7 +102,12 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	//lastpsh := ct.PartSetHeader{Total: 1, Hash: h.ParentHash}
 	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
-	_, valset := c.valsMgr.getValidators(h.Number.Uint64(), h)
+	v := c.valsMgr.getValidator(c.cubeAddr)
+	if v == nil {
+		c.generateRegisterValidatorTx()
+	}
+
+	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
 	var valsetHash []byte
 	valsetSize := 0
 	if valset == nil {
@@ -112,8 +117,15 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 		valsetHash = valset.Hash()
 		valsetSize = valset.Size()
 	}
-	// TODO NextValidatorsHash N%200 -1,
-	// chaos.gettopvalidators(h.number)
+
+	_, nextValset := c.valsMgr.getNextValidators(h.Number.Uint64())
+	var nextValsetHash []byte
+	if nextValset == nil {
+		log.Warn("failed to get next validator set")
+		//return nil
+	} else {
+		nextValsetHash = nextValset.Hash()
+	}
 
 	// make header
 	header := &ct.Header{
@@ -124,8 +136,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 		LastCommitHash:     make([]byte, 32),
 		LastBlockID:        c.blockID, // todo: need to get parent header's hash
 		DataHash:           h.TxHash[:],
-		ValidatorsHash:     valsetHash, //valset.Hash(),
-		NextValidatorsHash: valsetHash, //valset.Hash(),
+		ValidatorsHash:     valsetHash,     //valset.Hash(),
+		NextValidatorsHash: nextValsetHash, //valset.Hash(),
 		ConsensusHash:      make([]byte, 32),
 		AppHash:            app_hash[:],
 		LastResultsHash:    make([]byte, 32),
@@ -192,7 +204,7 @@ func (c *CosmosChain) voteSignedHeader(h *et.Header, header *ct.SignedHeader) (i
 	pubkey, _ := c.privValidator.GetPubKey()
 	addr := pubkey.Address()
 	//idx := c.getValidatorIndex(vals)
-	vals, valset := c.valsMgr.getValidators(uint64(header.Height), h)
+	vals, valset := c.valsMgr.getValidators(uint64(header.Height))
 	if valset == nil {
 		log.Error("getValidators fail")
 		return -1, ct.CommitSig{}, errors.New("getValidatorIndex failed")
@@ -293,7 +305,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 	//copy(stateRoot[:], h.Extra[:32])
 
 	// check validators
-	vals, valset := c.valsMgr.getValidators(h.Number.Uint64(), h)
+	vals, valset := c.valsMgr.getValidators(h.Number.Uint64())
 	valsetSize := len(vals)
 	var valsetHash []byte
 	if valset != nil {
@@ -448,7 +460,7 @@ func (c *CosmosChain) getHeader(block_height int64) *ct.Header {
 }
 
 func (c *CosmosChain) GetValidators(block_height int64) *types.ValidatorSet {
-	_, validators := c.valsMgr.getValidators(uint64(block_height), nil)
+	_, validators := c.valsMgr.getValidators(uint64(block_height))
 	if validators == nil {
 		log.Warn("Cannot get validator set, number ", strconv.Itoa(int(block_height)))
 		return nil
@@ -471,7 +483,7 @@ func (c *CosmosChain) GetLightBlock(block_height int64) *ct.LightBlock {
 	log.Debug("getlightblock height ", strconv.Itoa(int(block_height)), h.Hash().Hex())
 
 	// make light block
-	vals, validators := c.valsMgr.getValidators(h.Number.Uint64(), nil)
+	vals, validators := c.valsMgr.getValidators(h.Number.Uint64())
 	if validators == nil {
 		log.Warn("Cannot get validator set, number ", strconv.Itoa(int(block_height)))
 		return nil
@@ -543,7 +555,7 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 		return errors.New("already exist signature which is not equal the new one")
 	}
 
-	vals, validators := c.valsMgr.getValidators(vote.Number.Uint64(), nil)
+	vals, validators := c.valsMgr.getValidators(vote.Number.Uint64())
 	if len(vals) <= int(vote.Index) {
 		return fmt.Errorf("invalid address. validators' count is %d, vote index is %d", len(vals), vote.Index)
 	}
@@ -555,6 +567,9 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	// }
 
 	validator := validators.Validators[vote.Index]
+	if validator == nil {
+		return fmt.Errorf("unregister validator. validators' count is %d, vote index is %d", len(vals), vote.Index)
+	}
 
 	commit := header.Commit
 	commitSig := vote.Vote
@@ -589,7 +604,7 @@ func (c *CosmosChain) checkVotes(height uint64, hash common.Hash, h *et.Header) 
 	}
 
 	// check votes
-	_, valset := c.valsMgr.getValidators(height, h)
+	_, valset := c.valsMgr.getValidators(height)
 	lackIdx := make([]*big.Int, 0)
 	//votes := make([]et.CosmosVoteCommit, 0)
 	for idx, commitSig := range sh.Commit.Signatures {

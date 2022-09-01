@@ -2,11 +2,12 @@ package cosmos
 
 import (
 	"encoding/hex"
+	"math/big"
+	"strconv"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/tendermint/tendermint/privval"
-	"math/big"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	et "github.com/ethereum/go-ethereum/core/types"
@@ -63,6 +64,9 @@ func NewValidatorsMgr(config *params.ChainConfig, privVal *privval.FilePV, heade
 		getHeaderByNumber: headerfn,
 	}
 
+	// TODO initAddrValMap from contract
+	// TODO initAddrValMap with version(cubeheader.hash)
+
 	return valMgr
 }
 
@@ -109,18 +113,32 @@ func NewValidatorsMgr(config *params.ChainConfig, privVal *privval.FilePV, heade
 //	return nil
 //}
 
-func (vmgr *ValidatorsMgr) getValidators(height uint64, h *et.Header) ([]common.Address, *types.ValidatorSet) {
+func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
+	if height%200 != 199 {
+		return vmgr.getValidators(height)
+	}
+
 	var vheight uint64 = 0
-	if height >= 200 { // todo: use parameter instead of constant
-		vheight = height - height%200
-	}
-	var vh *et.Header
-	if h != nil && h.Number.Uint64() == vheight {
-		vh = h
+	if height == 0 {
+		vheight = 0
 	} else {
-		vh = vmgr.getHeaderByNumber(vheight)
+		vheight = height - 199
 	}
-	// TODO vh is nil
+	return vmgr.getValidatorsImpl(vheight)
+}
+
+func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
+	var vheight uint64 = 0
+	if height < 400 {
+		vheight = 0
+	} else {
+		vheight = height - 200 - height%200
+	}
+	return vmgr.getValidatorsImpl(vheight)
+}
+
+func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, *types.ValidatorSet) {
+	vh := vmgr.getHeaderByNumber(vheight)
 	if vh == nil {
 		log.Warn("get header is nil ", strconv.Itoa(int(vheight)))
 		return []common.Address{}, nil
@@ -129,22 +147,31 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64, h *et.Header) ([]common.
 	count := len(addrs)
 	validators := make([]*types.Validator, count)
 	for i := 0; i < count; i++ {
-		val := vmgr.AddrValMap[addrs[i]]
+		// val := vmgr.AddrValMap[addrs[i]]
+		vals := vmgr.getAddrValMap(vheight)
+		val := vals[addrs[i]]
 		if val == nil {
-			log.Info("count ", strconv.Itoa(count))
-			log.Info("header extra ", hex.EncodeToString(vh.Extra), " height ", strconv.Itoa(int(vheight)), " addr ", addrs[i].Hex(), " index ", strconv.Itoa(i))
-			//panic("validator is nil")
-			return []common.Address{}, nil
+			// log.Info("count ", strconv.Itoa(count))
+			// log.Info("header extra ", hex.EncodeToString(vh.Extra), " height ", strconv.Itoa(int(vheight)), " addr ", addrs[i].Hex(), " index ", strconv.Itoa(i))
+			// //panic("validator is nil")
+			// return []common.Address{}, nil
+			log.Debug("getValidators val is nil", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
+			validators[i] = nil
+		} else {
+			tVal := types.NewValidator(val.PubKey, val.VotingPower)
+			validators[i] = tVal
+			//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 		}
-		tVal := types.NewValidator(val.PubKey, val.VotingPower)
-		validators[i] = tVal
-		//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 	}
 	return addrs, types.NewValidatorSet(validators)
 }
 
 func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address) *types.Validator {
 	return vmgr.AddrValMap[cubeAddr]
+}
+
+func (vmgr *ValidatorsMgr) getAddrValMap(height uint64) map[common.Address]*types.Validator {
+	return vmgr.AddrValMap
 }
 
 func getAddressesFromHeader(h *et.Header, isCosmosEnable bool) []common.Address {

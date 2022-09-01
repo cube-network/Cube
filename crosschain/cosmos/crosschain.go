@@ -205,7 +205,6 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		ch := h.Value.(*et.Header)
 		log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
 		if c.eventHeader(ch) {
-			c.headers = list.New()
 			break
 		} else {
 			headers.PushBack(h)

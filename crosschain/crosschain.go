@@ -16,7 +16,7 @@ import (
 )
 
 type CrossChain interface {
-	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, header *types.Header)
+	Init(datadir string, ethdb ethdb.Database, statedb state.Database, chainConfig *params.ChainConfig, blockContext vm.BlockContext, statefn cccommon.StateFn, headerfn cccommon.GetHeaderByNumberFn, headerByHashfn cccommon.GetHeaderByHashFn, header *types.Header)
 	SetCoinbase(addr common.Address)
 	SetFuncs(getNonce cccommon.GetNonceFn, getPrice cccommon.GetPriceFn, addLocalTx cccommon.AddLocalTxFn)
 	SetSignTx(signTx cccommon.SignTxFn)
@@ -29,10 +29,17 @@ type CrossChain interface {
 
 	EventHeader(header *types.Header)
 
-	// TODO remove cosmos info
-	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
+	//// TODO remove cosmos info
+	//GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
+	//HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
+
+	GetSignatures(hash common.Hash) []ct.CommitSig
+	HandleSignatures(h *types.Header, sigs []ct.CommitSig) (*types.CosmosVote, error)
+
+	SignHeader(h *types.Header) (*types.CosmosVote, error)
 	HandleVote(vote *types.CosmosVote) error
+
+	// collect cosmos votes
 	CheckVotes(height uint64, hash common.Hash, h *types.Header) *types.CosmosLackedVoteIndexs //(*types.CosmosVotesList, *types.CosmosLackedVoteIndexs)
 	HandleVotesQuery(idxs *types.CosmosLackedVoteIndexs) (*types.CosmosVotesList, error)
 	HandleVotesList(votes *types.CosmosVotesList) error

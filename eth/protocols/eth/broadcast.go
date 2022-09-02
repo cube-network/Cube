@@ -32,14 +32,14 @@ const (
 // blockPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
 type blockPropagation struct {
-	block *types.Block //core.BlockAndCosmosHeader
+	block *types.Block //core.BlockAndCosmosVotes
 	td    *big.Int
 }
 
 // blockAndHeaderPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
 type blockAndHeaderPropagation struct {
-	blockAndHeader *types.BlockAndCosmosHeader
+	blockAndHeader *types.BlockAndCosmosVotes
 	td             *big.Int
 }
 

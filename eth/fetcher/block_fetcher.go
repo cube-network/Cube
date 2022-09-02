@@ -92,10 +92,10 @@ type headerVerifierFn func(header *types.Header) error
 // blockBroadcasterFn is a callback type for broadcasting a block to connected peers.
 type blockBroadcasterFn func(block *types.Block, propagate bool)
 
-type cosmosHeaderRetrievalFn func(height uint64, hash common.Hash) *ct.SignedHeader
+type cosmosVotesRetrievalFn func(hash common.Hash) []ct.CommitSig
 
-// blockAndHeaderBroadcasterFn is a callback type for broadcasting a block to connected peers.
-type blockAndHeaderBroadcasterFn func(blockAndHeader *types.BlockAndCosmosHeader, propagate bool)
+// blockAndCosmosVotesBroadcasterFn is a callback type for broadcasting a block to connected peers.
+type blockAndCosmosVotesBroadcasterFn func(blockAndHeader *types.BlockAndCosmosVotes, propagate bool)
 
 // chainHeightFn is a callback type to retrieve the current chain height.
 type chainHeightFn func() uint64
@@ -137,7 +137,7 @@ type headerFilterTask struct {
 //// twoHeadersFilterTask represents a batch of headers needing fetcher filtering.
 //type twoHeadersFilterTask struct {
 //	peer    string                      // The source peer of block headers
-//	headers []*core.CubeAndCosmosHeader // Collection of headers to filter
+//	headers []*core.CubeAndCosmosVotes // Collection of headers to filter
 //	time    time.Time                   // Arrival time of the headers
 //}
 
@@ -203,17 +203,17 @@ type BlockFetcher struct {
 	queued map[common.Hash]*blockOrHeaderInject // Set of already queued blocks (to dedup imports)
 
 	// Callbacks
-	getHeader               HeaderRetrievalFn  // Retrieves a header from the local chain
-	getBlock                blockRetrievalFn   // Retrieves a block from the local chain
-	verifyHeader            headerVerifierFn   // Checks if a block's headers have a valid proof of work
-	broadcastBlock          blockBroadcasterFn // Broadcasts a block to connected peers
-	getCosmosHeader         cosmosHeaderRetrievalFn
-	broadcastBlockAndHeader blockAndHeaderBroadcasterFn // Broadcasts a block and a cosmos header to connected peers
-	chainHeight             chainHeightFn               // Retrieves the current chain's height
-	insertHeaders           headersInsertFn             // Injects a batch of headers into the chain
-	insertChain             chainInsertFn               // Injects a batch of blocks into the chain
-	dropPeer                peerDropFn                  // Drops a peer for misbehaving
-	continousInturn         continousInturnFn           // Gets continous blocks in turn number
+	getHeader                    HeaderRetrievalFn  // Retrieves a header from the local chain
+	getBlock                     blockRetrievalFn   // Retrieves a block from the local chain
+	verifyHeader                 headerVerifierFn   // Checks if a block's headers have a valid proof of work
+	broadcastBlock               blockBroadcasterFn // Broadcasts a block to connected peers
+	getCosmosVotes               cosmosVotesRetrievalFn
+	broadcastBlockAndCosmosVotes blockAndCosmosVotesBroadcasterFn // Broadcasts a block and a cosmos header to connected peers
+	chainHeight                  chainHeightFn                    // Retrieves the current chain's height
+	insertHeaders                headersInsertFn                  // Injects a batch of headers into the chain
+	insertChain                  chainInsertFn                    // Injects a batch of blocks into the chain
+	dropPeer                     peerDropFn                       // Drops a peer for misbehaving
+	continousInturn              continousInturnFn                // Gets continous blocks in turn number
 
 	// Testing hooks
 	announceChangeHook func(common.Hash, bool)           // Method to call upon adding or deleting a hash from the blockAnnounce list
@@ -224,34 +224,34 @@ type BlockFetcher struct {
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, getCosmosHeader cosmosHeaderRetrievalFn, broadcastBlockAndHeader blockAndHeaderBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
+func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, getCosmosHeader cosmosVotesRetrievalFn, broadcastBlockAndHeader blockAndCosmosVotesBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
 	return &BlockFetcher{
-		light:                   light,
-		notify:                  make(chan *blockAnnounce),
-		inject:                  make(chan *blockOrHeaderInject),
-		headerFilter:            make(chan chan *headerFilterTask),
-		bodyFilter:              make(chan chan *bodyFilterTask),
-		done:                    make(chan common.Hash),
-		quit:                    make(chan struct{}),
-		announces:               make(map[string]int),
-		announced:               make(map[common.Hash][]*blockAnnounce),
-		fetching:                make(map[common.Hash]*blockAnnounce),
-		fetched:                 make(map[common.Hash][]*blockAnnounce),
-		completing:              make(map[common.Hash]*blockAnnounce),
-		queue:                   prque.New(nil),
-		queues:                  make(map[string]int),
-		queued:                  make(map[common.Hash]*blockOrHeaderInject),
-		getHeader:               getHeader,
-		getBlock:                getBlock,
-		verifyHeader:            verifyHeader,
-		broadcastBlock:          broadcastBlock,
-		getCosmosHeader:         getCosmosHeader,
-		broadcastBlockAndHeader: broadcastBlockAndHeader,
-		chainHeight:             chainHeight,
-		insertHeaders:           insertHeaders,
-		insertChain:             insertChain,
-		dropPeer:                dropPeer,
-		continousInturn:         continousInturn,
+		light:                        light,
+		notify:                       make(chan *blockAnnounce),
+		inject:                       make(chan *blockOrHeaderInject),
+		headerFilter:                 make(chan chan *headerFilterTask),
+		bodyFilter:                   make(chan chan *bodyFilterTask),
+		done:                         make(chan common.Hash),
+		quit:                         make(chan struct{}),
+		announces:                    make(map[string]int),
+		announced:                    make(map[common.Hash][]*blockAnnounce),
+		fetching:                     make(map[common.Hash]*blockAnnounce),
+		fetched:                      make(map[common.Hash][]*blockAnnounce),
+		completing:                   make(map[common.Hash]*blockAnnounce),
+		queue:                        prque.New(nil),
+		queues:                       make(map[string]int),
+		queued:                       make(map[common.Hash]*blockOrHeaderInject),
+		getHeader:                    getHeader,
+		getBlock:                     getBlock,
+		verifyHeader:                 verifyHeader,
+		broadcastBlock:               broadcastBlock,
+		getCosmosVotes:               getCosmosHeader,
+		broadcastBlockAndCosmosVotes: broadcastBlockAndHeader,
+		chainHeight:                  chainHeight,
+		insertHeaders:                insertHeaders,
+		insertChain:                  insertChain,
+		dropPeer:                     dropPeer,
+		continousInturn:              continousInturn,
 	}
 }
 
@@ -347,7 +347,7 @@ func (f *BlockFetcher) FilterHeaders(peer string, headers []*types.Header, time 
 	}
 }
 
-//func (f *BlockFetcher) FilterTwoHeaders(peer string, headers []*core.CubeAndCosmosHeader, time time.Time) []*core.CubeAndCosmosHeader {
+//func (f *BlockFetcher) FilterTwoHeaders(peer string, headers []*core.CubeAndCosmosVotes, time time.Time) []*core.CubeAndCosmosVotes {
 //	log.Trace("Filtering headers", "peer", peer, "headers", len(headers))
 //
 //	// Send the filter channel to the fetcher
@@ -685,7 +685,7 @@ func (f *BlockFetcher) loop() {
 		//
 		//	// Split the batch of headers into unknown ones (to return to the caller),
 		//	// known incomplete ones (requiring body retrievals) and completed blocks.
-		//	unknown, incomplete, complete, lightHeaders := []*core.CubeAndCosmosHeader{}, []*blockAnnounce{}, []*types.Block{}, []*blockAnnounce{}
+		//	unknown, incomplete, complete, lightHeaders := []*core.CubeAndCosmosVotes{}, []*blockAnnounce{}, []*types.Block{}, []*blockAnnounce{}
 		//	for _, twoHeaders := range task.headers {
 		//		header := twoHeaders.Header
 		//		hash := header.Hash()
@@ -974,13 +974,13 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			// All ok, quickly propagate to our peers
 			blockBroadcastOutTimer.UpdateSince(block.ReceivedAt)
 			// todo: get cosmos header
-			//go f.broadcastBlock(&core.BlockAndCosmosHeader{
+			//go f.broadcastBlock(&core.BlockAndCosmosVotes{
 			//	Block: block,
 			//}, true)
-			sh := f.getCosmosHeader(block.NumberU64(), block.Header().Hash())
-			if sh != nil {
-				bsh := &types.BlockAndCosmosHeader{Block: block, CosmosHeader: types.CosmosHeaderFromSignedHeader(sh)}
-				go f.broadcastBlockAndHeader(bsh, true)
+			sigs := f.getCosmosVotes(block.Header().Hash())
+			if len(sigs) > 0 {
+				bsh := &types.BlockAndCosmosVotes{Block: block, Signatures: sigs}
+				go f.broadcastBlockAndCosmosVotes(bsh, true)
 			} else {
 				go f.broadcastBlock(block, true)
 			}
@@ -1002,7 +1002,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 		// If import succeeded, broadcast the block
 		blockAnnounceOutTimer.UpdateSince(block.ReceivedAt)
 		// todo: get cosmos header
-		//go f.broadcastBlock(&core.BlockAndCosmosHeader{
+		//go f.broadcastBlock(&core.BlockAndCosmosVotes{
 		//	Block: block,
 		//}, false)
 		go f.broadcastBlock(block, false)

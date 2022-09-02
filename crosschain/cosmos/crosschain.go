@@ -54,6 +54,7 @@ func (c *Cosmos) Init(datadir string,
 	blockContext vm.BlockContext,
 	statefn cccommon.StateFn,
 	headerfn cccommon.GetHeaderByNumberFn,
+	headerByHashfn cccommon.GetHeaderByHashFn,
 	header *types.Header) {
 
 	c.callmu.Lock()
@@ -77,7 +78,7 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, ethdb)
+		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, headerByHashfn, ethdb)
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
@@ -182,7 +183,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	sh := c.chain.getSignedHeader(header.Hash())
 	if sh == nil {
-		csh := c.chain.makeCosmosSignedHeader(header)
+		csh, _, _ := c.chain.makeCosmosSignedHeader(header)
 		if csh == nil {
 			log.Warn("make cosmos signed header fail!")
 			return
@@ -216,16 +217,6 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	return c.chain.getSignedHeader(hash)
 }
 
-// func (c *Cosmos) GetSignedHeaderWithSealHash(height uint64, sealHash common.Hash, hash common.Hash) *ct.SignedHeader {
-// 	c.querymu.Lock()
-// 	defer c.querymu.Unlock()
-// 	if !IsEnable(c.config, big.NewInt(int64(height))) {
-// 		log.Debug("cosmos not enable yet", strconv.FormatUint(height, 10))
-// 		return nil
-// 	}
-// 	return c.chain.getSignedHeaderWithSealHash(height, sealHash, hash)
-// }
-
 func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) (*types.CosmosVote, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
@@ -240,6 +231,31 @@ func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) (*types.Cos
 	}
 
 	return c.chain.handleSignedHeader(h, header)
+}
+
+func (c *Cosmos) GetSignatures(hash common.Hash) []ct.CommitSig {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.getSignatures(hash)
+}
+
+func (c *Cosmos) HandleSignatures(h *types.Header, sigs []ct.CommitSig) (*types.CosmosVote, error) {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	return c.chain.handleSignatures(h, sigs)
+}
+
+func (c *Cosmos) SignHeader(h *types.Header) (*types.CosmosVote, error) {
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
+	if h == nil {
+		return nil, errors.New("missing cube header")
+	}
+
+	return c.chain.signHeader(h)
 }
 
 func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {

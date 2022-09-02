@@ -6,10 +6,8 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/contracts/system"
-	"github.com/tendermint/tendermint/privval"
-
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/system"
 	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
@@ -17,8 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	lru "github.com/hashicorp/golang-lru"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -43,8 +44,10 @@ type MsgRegisterValidator struct {
 }
 
 type ValidatorsMgr struct {
-	AddrValMap map[common.Address]*types.Validator // cube address => cosmos validator
-
+	blockContext vm.BlockContext
+	statefn      cccommon.StateFn
+	// AddrValMap        map[common.Address]*types.Validator // cube address => cosmos validator
+	AddrValMapCache   *lru.ARCCache
 	config            *params.ChainConfig
 	getHeaderByNumber cccommon.GetHeaderByNumberFn
 	getNonce          cccommon.GetNonceFn
@@ -56,16 +59,17 @@ type ValidatorsMgr struct {
 	//registered bool
 }
 
-func NewValidatorsMgr(config *params.ChainConfig, privVal *privval.FilePV, headerfn cccommon.GetHeaderByNumberFn) *ValidatorsMgr {
+func NewValidatorsMgr(blockContext vm.BlockContext, config *params.ChainConfig, privVal *privval.FilePV, headerfn cccommon.GetHeaderByNumberFn, statefn cccommon.StateFn) *ValidatorsMgr {
 	valMgr := &ValidatorsMgr{
-		AddrValMap:        make(map[common.Address]*types.Validator, 0),
+		blockContext: blockContext,
+		statefn:      statefn,
+		// AddrValMap:        make(map[common.Address]*types.Validator, 0),
 		config:            config,
 		privVal:           privVal,
 		getHeaderByNumber: headerfn,
 	}
 
-	// TODO initAddrValMap from contract
-	// TODO initAddrValMap with version(cubeheader.hash)
+	valMgr.AddrValMapCache, _ = lru.NewARC(32)
 
 	return valMgr
 }
@@ -149,14 +153,22 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 	for i := 0; i < count; i++ {
 		// val := vmgr.AddrValMap[addrs[i]]
 		vals := vmgr.getAddrValMap(vheight)
+		if vals == nil {
+			log.Warn("getAddrValMap is nil")
+			return []common.Address{}, nil
+		}
 		val := vals[addrs[i]]
 		if val == nil {
 			// log.Info("count ", strconv.Itoa(count))
 			// log.Info("header extra ", hex.EncodeToString(vh.Extra), " height ", strconv.Itoa(int(vheight)), " addr ", addrs[i].Hex(), " index ", strconv.Itoa(i))
 			// //panic("validator is nil")
 			// return []common.Address{}, nil
-			log.Debug("getValidators val is nil", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
-			validators[i] = nil
+			log.Debug("getValidators val is nil, fill with default", "index", i, "cubeAddr", addrs[i].String())
+
+			pubkeyBytes := make([]byte, ed25519.PubKeySize)
+			pk := ed25519.PubKey(pubkeyBytes)
+			tVal := types.NewValidator(pk, 0)
+			validators[i] = tVal
 		} else {
 			tVal := types.NewValidator(val.PubKey, val.VotingPower)
 			validators[i] = tVal
@@ -166,12 +178,49 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 	return addrs, types.NewValidatorSet(validators)
 }
 
-func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address) *types.Validator {
-	return vmgr.AddrValMap[cubeAddr]
+func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address, height uint64) *types.Validator {
+	m := vmgr.getAddrValMap(height)
+	return m[cubeAddr]
 }
 
 func (vmgr *ValidatorsMgr) getAddrValMap(height uint64) map[common.Address]*types.Validator {
-	return vmgr.AddrValMap
+	if m, ok := vmgr.AddrValMapCache.Get(height); ok {
+		return m.(map[common.Address]*types.Validator)
+	}
+
+	header := vmgr.getHeaderByNumber(height)
+	if header == nil {
+		log.Warn("getAddrValMap header is nil ", strconv.Itoa(int(height)))
+		return nil
+	}
+
+	statedb, err := vmgr.statefn(header.Root)
+	if err != nil {
+		log.Warn("getAddrValMap make statedb fail! ", header.Root.Hex())
+		return nil
+	}
+
+	ctx := vmgr.blockContext
+	vm := makeContext(ctx, vmgr.config, header, statedb)
+	addrs, vals, err := systemcontract.GetAllValidators(vm)
+	if err != nil {
+		log.Warn("getAddrValMap read cosmos pk from contract fail!")
+		return nil
+	}
+
+	AddrValMap := make(map[common.Address]*types.Validator, 0)
+	for i := 0; i < len(addrs); i++ {
+		tmpVal := &types.Validator{}
+		err = tmjson.Unmarshal([]byte(vals[i]), tmpVal)
+		if err != nil {
+			log.Error("getAddrValMap Unmarshal validator failed")
+			return nil
+		}
+		AddrValMap[addrs[i]] = tmpVal
+	}
+
+	vmgr.AddrValMapCache.Add(height, AddrValMap)
+	return AddrValMap
 }
 
 func getAddressesFromHeader(h *et.Header, isCosmosEnable bool) []common.Address {
@@ -192,9 +241,9 @@ func getAddressesFromHeader(h *et.Header, isCosmosEnable bool) []common.Address 
 	return addresses
 }
 
-func (vmgr *ValidatorsMgr) registerValidator(cubeAddr common.Address, privVal *privval.FilePV, chainID *big.Int) {
+func (vmgr *ValidatorsMgr) registerValidator(cubeAddr common.Address, privVal *privval.FilePV, chainID *big.Int, height uint64) {
 	// todo: check whether this node is registered
-	if vmgr.getValidator(cubeAddr) != nil {
+	if vmgr.getValidator(cubeAddr, height) != nil {
 		return
 	}
 
@@ -294,6 +343,6 @@ func (vmgr *ValidatorsMgr) doRegisterValidator(evm *vm.EVM, data []byte) {
 	}
 	log.Info("register validator succeed", "cubeAddr", common.BytesToAddress(rvMsg.Address).Hex(), "cosmosAddr", tmpVal.PubKey.Address().String())
 
-	tVal := types.NewValidator(rvMsg.PubKey, rvMsg.VotingPower)
-	vmgr.AddrValMap[addr] = tVal
+	// tVal := types.NewValidator(rvMsg.PubKey, rvMsg.VotingPower)
+	// vmgr.AddrValMap[addr] = tVal
 }

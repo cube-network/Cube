@@ -202,10 +202,10 @@ func RegisterValidator(evm *vm.EVM, address common.Address, pubkey string) ([]by
 	return callContract(evm, system.AddrToPubkeyMapContract, "registerValidator", address, pubkey)
 }
 
-func GetAllValidators(ctx sdk.Context) ([]common.Address, []string, error) { //map[common.Address]*crosschain.Validator
+func GetAllValidators(evm *vm.EVM) ([]common.Address, []string, error) { //map[common.Address]*crosschain.Validator
 	contract := system.AddrToPubkeyMapContract
 	method := "getAllValidators"
-	result, err := callContract(ctx.EVM(), contract, method)
+	result, err := callContract(evm, contract, method)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	et "github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	cccommon "github.com/ethereum/go-ethereum/crosschain/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -28,10 +29,11 @@ import (
 // validator index,pubkey
 
 type CosmosChain struct {
-	config  *params.ChainConfig
-	ethdb   ethdb.Database
-	ChainID string
-	mu      sync.Mutex
+	config       *params.ChainConfig
+	ethdb        ethdb.Database
+	ChainID      string
+	blockContext vm.BlockContext
+	mu           sync.Mutex
 	// signedHeader map[common.Hash]*ct.SignedHeader // cache only for demo, write/read db instead later
 	signedHeader *lru.ARCCache
 	//valsMgr     []*ct.Validator // fixed for demo; full validator set, fixed validator set for demo,
@@ -44,18 +46,21 @@ type CosmosChain struct {
 	best_block_height uint64
 
 	getHeaderByNumber cccommon.GetHeaderByNumberFn
+	statefn           cccommon.StateFn
 	// vote_cache        map[string][]*et.CosmosVote // TODO clean later，avoid OOM
 	vote_cache *lru.ARCCache
 }
 
 // priv_validator_addr: chaos.validator
-func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn, ethdb ethdb.Database) *CosmosChain {
+func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn, ethdb ethdb.Database, blockContext vm.BlockContext, statefn cccommon.StateFn) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
 	c.config = config
 	c.ethdb = ethdb
 	// c.ChainID = "ibc-1"
 	c.ChainID = config.ChainID.String()
+	c.blockContext = blockContext
+	c.statefn = statefn
 	// c.vote_cache = make(map[string][]*et.CosmosVote)
 	c.vote_cache, _ = lru.NewARC(4096)
 	// c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
@@ -69,7 +74,7 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	c.getHeaderByNumber = headerfn
 
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
-	c.valsMgr = NewValidatorsMgr(config, c.privValidator, headerfn)
+	c.valsMgr = NewValidatorsMgr(blockContext, config, c.privValidator, headerfn, statefn)
 
 	// TODO load best block
 	psh := ct.PartSetHeader{Total: 1, Hash: make([]byte, 32)}
@@ -79,11 +84,11 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	return c
 }
 
-func (c *CosmosChain) generateRegisterValidatorTx() {
+func (c *CosmosChain) generateRegisterValidatorTx(height uint64) {
 	if len(c.cubeAddr.Bytes()) > 0 {
 		chainid := new(big.Int)
 		chainid.SetString(c.ChainID, 10)
-		c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid)
+		c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid, height)
 	}
 }
 
@@ -102,9 +107,9 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	//lastpsh := ct.PartSetHeader{Total: 1, Hash: h.ParentHash}
 	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
-	v := c.valsMgr.getValidator(c.cubeAddr)
+	v := c.valsMgr.getValidator(c.cubeAddr, h.Number.Uint64())
 	if v == nil {
-		c.generateRegisterValidatorTx()
+		c.generateRegisterValidatorTx(h.Number.Uint64())
 	}
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
@@ -321,7 +326,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 
 	// check proposer
 	if valsetSize > 0 {
-		proposer := c.valsMgr.getValidator(h.Coinbase)
+		proposer := c.valsMgr.getValidator(h.Coinbase, h.Number.Uint64())
 		if proposer == nil {
 			return nil, fmt.Errorf("Cannot get proposer. number=%d coinbase=%s hash=%s\n", h.Number.Int64(), h.Coinbase, h.Hash())
 		}

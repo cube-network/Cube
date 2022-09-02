@@ -64,11 +64,12 @@ func (n *proofList) Delete(key []byte) error {
 // * Contracts
 // * Accounts
 type StateDB struct {
-	db           Database
-	prefetcher   *triePrefetcher
-	originalRoot common.Hash // The pre-state root, before any changes were made
-	trie         Trie
-	hasher       crypto.KeccakState
+	db             Database
+	prefetcher     *triePrefetcher
+	originalRoot   common.Hash // The pre-state root, before any changes were made
+	trie           Trie
+	hasher         crypto.KeccakState
+	dirtyTrieNodes *trie.HashCache // use to cache <hash, trieNode> inside a block
 
 	snaps         *snapshot.Tree
 	snap          snapshot.Snapshot
@@ -128,13 +129,17 @@ type StateDB struct {
 
 // New creates a new state from a given trie.
 func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) {
-	tr, err := db.OpenTrie(root)
+	// tr, err := db.OpenTrie(root)
+	dirtyHashCache := trie.NewHashCache()
+	tr, err := db.OpenTrieWithCache(root, dirtyHashCache)
+
 	if err != nil {
 		return nil, err
 	}
 	sdb := &StateDB{
 		db:                  db,
 		trie:                tr,
+		dirtyTrieNodes:      dirtyHashCache,
 		originalRoot:        root,
 		snaps:               snaps,
 		stateObjects:        make(map[common.Address]*stateObject),
@@ -760,6 +765,7 @@ func (s *StateDB) Copy() *StateDB {
 	state := &StateDB{
 		db:                  s.db,
 		trie:                s.db.CopyTrie(s.trie),
+		dirtyTrieNodes:      s.dirtyTrieNodes,
 		stateObjects:        make(map[common.Address]*stateObject, len(s.journal.dirties)),
 		stateObjectsPending: make(map[common.Address]struct{}, len(s.stateObjectsPending)),
 		stateObjectsDirty:   make(map[common.Address]struct{}, len(s.journal.dirties)),
@@ -1235,7 +1241,8 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		}
 	}
 
-	s.db.TrieDB().WaitAndPrepareNextCommit(s.trie.TrieNodeHashCache())
+	// s.db.TrieDB().WaitAndPrepareNextCommit(s.trie.TrieNodeHashCache())
+	s.db.TrieDB().WaitAndPrepareNextCommit(s.dirtyTrieNodes)
 	go func(s *StateDB) {
 		defer s.db.TrieDB().DoneAsyncCommit()
 		// Commit objects to the trie, measuring the elapsed time

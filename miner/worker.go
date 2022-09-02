@@ -705,30 +705,31 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			sigs := crosschain.GetCrossChain().GetSignatures(hash)
-			//if cosmosHeader != nil {
-			log.Info("BroadcastBlockAndCosmosVotes", "number", block.NumberU64(), "hash", hash)
-			w.mux.Post(core.NewMinedBlockAndCosmosVotesEvent{BlockAndVotes: &types.BlockAndCosmosVotes{
-				Block:      block,
-				Signatures: sigs,
-			}})
-			//} else {
-			//	log.Info("GetSignedHeader but nil")
-			//	if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-			//		panic("cosmos header not found!")
-			//	}
-			//}
-			//// cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
-			//// if cosmosHeader != nil {
-			//// 	log.Info("BroadcastBlockAndCosmosVotes", "number", block.NumberU64(), "hash", hash)
-			//// 	w.mux.Post(core.NewMinedBlockAndCosmosVotesEvent{&core.BlockAndCosmosVotes{
-			//// 		block,
-			//// 		core.CosmosHeaderFromSignedHeader(cosmosHeader),
-			//// 	}})
-			//// } else {
-			////log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
-			////w.mux.Post(core.NewMinedBlockEvent{block})
-			//// }
+
+			if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
+				sigs := crosschain.GetCrossChain().GetSignatures(hash)
+				//if cosmosHeader != nil {
+				log.Info("BroadcastBlockAndCosmosVotes", "number", block.NumberU64(), "hash", hash)
+				w.mux.Post(core.NewMinedBlockAndCosmosVotesEvent{BlockAndVotes: &types.BlockAndCosmosVotes{
+					Block:      block,
+					Signatures: sigs,
+				}})
+			} else {
+				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+				w.mux.Post(core.NewMinedBlockEvent{block})
+
+			}
+			// cosmosHeader := crosschain.GetCrossChain().GetSignedHeaderWithSealHash(block.NumberU64(), sealhash, hash)
+			// if cosmosHeader != nil {
+			// 	log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
+			// 	w.mux.Post(core.NewMinedBlockAndHeaderEvent{&core.BlockAndCosmosHeader{
+			// 		block,
+			// 		core.CosmosHeaderFromSignedHeader(cosmosHeader),
+			// 	}})
+			// } else {
+			// 	log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
+			// 	w.mux.Post(core.NewMinedBlockEvent{block})
+			// }
 
 			crosschain.GetCrossChain().FreeExecutor(task.crosschain)
 			// Insert the block into the set of pending ones to resultLoop for confirmations

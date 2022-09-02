@@ -33,11 +33,15 @@ type Cosmos struct {
 	blockContext vm.BlockContext
 	statefn      cccommon.StateFn
 	headerfn     cccommon.GetHeaderByNumberFn
+	headerhashfn cccommon.GetHeaderByHashFn
 
 	querymu       sync.Mutex
 	queryExecutor *Executor
 	callmu        sync.Mutex
 	callExectors  *list.List
+
+	headersmu sync.Mutex
+	headers   *list.List
 
 	chain *CosmosChain
 
@@ -54,7 +58,7 @@ func (c *Cosmos) Init(datadir string,
 	blockContext vm.BlockContext,
 	statefn cccommon.StateFn,
 	headerfn cccommon.GetHeaderByNumberFn,
-	headerByHashfn cccommon.GetHeaderByHashFn,
+	headerhashfn cccommon.GetHeaderByHashFn,
 	header *types.Header) {
 
 	c.callmu.Lock()
@@ -68,17 +72,19 @@ func (c *Cosmos) Init(datadir string,
 		c.blockContext = blockContext
 		c.statefn = statefn
 		c.headerfn = headerfn
+		c.headerhashfn = headerhashfn
 		c.header = header
 
 		c.codec = MakeEncodingConfig()
 
 		c.callExectors = list.New()
+		c.headers = list.New()
 
 		statedb, err := state.New(header.Root, c.sdb, nil)
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, headerByHashfn, ethdb)
+		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, headerhashfn, ethdb)
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
@@ -174,8 +180,8 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, header.Number) {
-		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64(), 10))
+	if !IsEnable(c.config, big.NewInt(header.Number.Int64()-1)) {
+		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64()-1, 10))
 		return
 	}
 
@@ -188,22 +194,49 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 			log.Warn("make cosmos signed header fail!")
 			return
 		}
+	}
 
+	c.headersmu.Lock()
+	defer c.headersmu.Unlock()
+	c.headers.PushFront(header)
+
+	headers := list.New()
+	for h := c.headers.Front(); h != nil; h = h.Next() {
+		ch := h.Value.(*et.Header)
+		log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
+		if c.eventHeader(ch) {
+			c.headers = list.New()
+			break
+		} else {
+			headers.PushBack(h)
+		}
+	}
+	c.headers = headers
+}
+
+func (c *Cosmos) eventHeader(header *types.Header) bool {
+	p := c.headerhashfn(header.ParentHash)
+	if p == nil {
+		log.Error("can not find header.parent ", header.ParentHash.Hex(), " number ", header.Number.Uint64(), " hash ", header.Hash().Hex())
+		return false
 	}
 
 	var statedb *state.StateDB
 	var err error
 	if c.statefn != nil {
-		statedb, err = c.statefn(header.Root)
+		// statedb, err = c.statefn(header.Root)
+		statedb, err = c.statefn(p.Root)
 	} else {
-		statedb, err = state.New(header.Root, c.sdb, nil)
+		// statedb, err = state.New(header.Root, c.sdb, nil)
+		statedb, err = state.New(p.Root, c.sdb, nil)
 	}
 
 	if err != nil {
-		log.Warn("cosmos event header state root not found, maybe reorg...")
-		return
+		log.Warn("cosmos event header state root not found, ", err.Error())
+		return false
 	}
-	c.queryExecutor.BeginBlock(header, statedb)
+	c.queryExecutor.BeginBlock(p, statedb)
+	return true
 }
 
 func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader {

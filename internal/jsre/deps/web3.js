@@ -5360,6 +5360,13 @@ var methods = function () {
         outputFormatter: formatters.outputTransactionReceiptFormatter
     });
 
+    var getTransactionReceiptExt = new Method({
+      name: 'getTransactionReceiptExt',
+      call: 'eth_getTransactionReceiptExt',
+      params: 1,
+      outputFormatter: formatters.outputTransactionReceiptFormatter
+    });
+
     var getTransactionCount = new Method({
         name: 'getTransactionCount',
         call: 'eth_getTransactionCount',
@@ -5453,6 +5460,7 @@ var methods = function () {
         getTransaction,
         getTransactionFromBlock,
         getTransactionReceipt,
+        getTransactionReceiptExt,
         getTransactionCount,
         call,
         estimateGas,

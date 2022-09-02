@@ -72,6 +72,11 @@ type Receipt struct {
 	TransactionIndex uint        `json:"transactionIndex"`
 }
 
+type ReceiptExt struct {
+	Receipt
+	PredictStatus uint8 `json:"predictStatus"`
+}
+
 type receiptMarshaling struct {
 	Type              hexutil.Uint64
 	PostState         hexutil.Bytes

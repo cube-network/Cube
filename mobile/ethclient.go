@@ -104,6 +104,11 @@ func (ec *EthereumClient) GetTransactionReceipt(ctx *Context, hash *Hash) (recei
 	return &Receipt{rawReceipt}, err
 }
 
+func (ec *EthereumClient) GetTransactionReceiptExt(ctx *Context, hash *Hash) (receipt *ReceiptExt, _ error) {
+	rawReceipt, err := ec.client.TransactionReceiptExt(ctx.context, hash.hash)
+	return &ReceiptExt{rawReceipt}, err
+}
+
 // SyncProgress retrieves the current progress of the sync algorithm. If there's
 // no sync currently running, it returns nil.
 func (ec *EthereumClient) SyncProgress(ctx *Context) (progress *SyncProgress, _ error) {

@@ -46,13 +46,14 @@ type CosmosChain struct {
 	best_block_height uint64
 
 	getHeaderByNumber cccommon.GetHeaderByNumberFn
+	getHeaderByHash   cccommon.GetHeaderByHashFn
 	statefn           cccommon.StateFn
 	// vote_cache        map[string][]*et.CosmosVote // TODO clean later，avoid OOM
 	vote_cache *lru.ARCCache
 }
 
 // priv_validator_addr: chaos.validator
-func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn, ethdb ethdb.Database, blockContext vm.BlockContext, statefn cccommon.StateFn) *CosmosChain {
+func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_validator_state_file string, headerfn cccommon.GetHeaderByNumberFn, headerhashfn cccommon.GetHeaderByHashFn, ethdb ethdb.Database, blockContext vm.BlockContext, statefn cccommon.StateFn) *CosmosChain {
 	log.Debug("MakeCosmosChain")
 	c := &CosmosChain{}
 	c.config = config
@@ -72,9 +73,10 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.privValidator.GetAddress().String())
 
 	c.getHeaderByNumber = headerfn
+	c.getHeaderByHash = headerhashfn
 
 	// TODO load validator set, should use contract to deal with validators getting changed in the future
-	c.valsMgr = NewValidatorsMgr(blockContext, config, c.privValidator, headerfn, statefn)
+	c.valsMgr = NewValidatorsMgr(ethdb, blockContext, config, c.privValidator, headerfn, headerhashfn, statefn)
 
 	// TODO load best block
 	psh := ct.PartSetHeader{Total: 1, Hash: make([]byte, 32)}
@@ -84,11 +86,15 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	return c
 }
 
-func (c *CosmosChain) generateRegisterValidatorTx(height uint64) {
+func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {
 	if len(c.cubeAddr.Bytes()) > 0 {
 		chainid := new(big.Int)
 		chainid.SetString(c.ChainID, 10)
-		c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid, height)
+
+		p := c.getHeaderByHash(header.ParentHash)
+		if p != nil {
+			c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid, p)
+		}
 	}
 }
 
@@ -107,10 +113,13 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	//lastpsh := ct.PartSetHeader{Total: 1, Hash: h.ParentHash}
 	//lastBlockID = ct.BlockID{Hash: header.Hash(), PartSetHeader: psh}
 
-	v := c.valsMgr.getValidator(c.cubeAddr, h.Number.Uint64())
-	if v == nil {
-		c.generateRegisterValidatorTx(h.Number.Uint64())
-	}
+	c.valsMgr.storeValidatorSet(h)
+
+	// TODO 200 check?
+	// v := c.valsMgr.getValidator(c.cubeAddr, h)
+	// if v == nil {
+	// 	c.generateRegisterValidatorTx(h)
+	// }
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
 	var valsetHash []byte
@@ -326,7 +335,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 
 	// check proposer
 	if valsetSize > 0 {
-		proposer := c.valsMgr.getValidator(h.Coinbase, h.Number.Uint64())
+		proposer := c.valsMgr.getValidator(h.Coinbase, h)
 		if proposer == nil {
 			return nil, fmt.Errorf("Cannot get proposer. number=%d coinbase=%s hash=%s\n", h.Number.Int64(), h.Coinbase, h.Hash())
 		}
@@ -362,6 +371,10 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		}
 	}
 
+	if c.getSignedHeader(h.Hash()) == nil {
+		c.valsMgr.storeValidatorSet(h)
+	}
+
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
 
@@ -392,6 +405,18 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 	return nil, nil
 }
 
+func makeSignedHeaderKey(hash common.Hash) []byte {
+	key := "crosschain_cosmos_header_"
+	key += hash.Hex()
+	return []byte(key)
+}
+
+func makeValidatorKey(hash common.Hash) []byte {
+	key := "crosschain_cosmos_validator_"
+	key += hash.Hex()
+	return []byte(key)
+}
+
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
 	// c.mu.Lock()
 	// defer c.mu.Unlock()
@@ -402,7 +427,7 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 
 	ph := header.ToProto()
 	bz, _ := ph.Marshal()
-	err := c.ethdb.Put(hash[:], bz)
+	err := c.ethdb.Put(makeSignedHeaderKey(hash)[:], bz)
 	if err != nil {
 		log.Error("storeSignedHeader db put fail ", hash.Hex())
 	}
@@ -421,6 +446,7 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 	}
 
 	log.Info("storeSignedHeader", "number", header.Height, "hash", hash, "header", header.Hash())
+
 }
 
 func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
@@ -431,7 +457,7 @@ func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
 	h, ok := c.signedHeader.Get(hash)
 
 	if !ok {
-		bz, err := c.ethdb.Get(hash[:])
+		bz, err := c.ethdb.Get(makeSignedHeaderKey(hash)[:])
 		if err == nil {
 			tsh := &tmproto.SignedHeader{}
 			// TODO handler unmarshal error

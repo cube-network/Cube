@@ -2,6 +2,7 @@ package cosmos
 
 import (
 	"bytes"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -140,6 +141,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 	} else {
 		nextValsetHash = nextValset.Hash()
 	}
+
+	log.Debug("validator hash ", hex.EncodeToString(valsetHash))
 
 	// make header
 	header := &ct.Header{
@@ -327,6 +330,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		//return nil, fmt.Errorf("Verify getValidators failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
 	}
 	if !bytes.Equal(header.ValidatorsHash, valsetHash) {
+		log.Debug("ValidatorsHash not match ", header.ValidatorsHash.String(), "  ", hex.EncodeToString(valsetHash))
 		return nil, fmt.Errorf("Verify validatorsHash failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
 	}
 	if valsetSize != len(header.Commit.Signatures) {
@@ -340,6 +344,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 			return nil, fmt.Errorf("Cannot get proposer. number=%d coinbase=%s hash=%s\n", h.Number.Int64(), h.Coinbase, h.Hash())
 		}
 		if !bytes.Equal(proposer.Address, header.ProposerAddress) {
+			log.Debug("proposer not match ", proposer.Address.String(), "  ", header.ProposerAddress.String(), " coinbase ", h.Coinbase.Hex())
 			return nil, fmt.Errorf("Verify proposer failed. number=%d hash=%s\n", h.Number.Int64(), h.Hash())
 		}
 

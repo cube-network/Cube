@@ -341,7 +341,7 @@ func (h *ethHandler) handleBlockAndHeaderBroadcast(peer *eth.Peer, blockAndHeade
 		}
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
-			return err
+			// return err
 		}
 	}
 

@@ -139,6 +139,7 @@ func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *
 }
 
 func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
+	log.Debug("getValidators ", strconv.Itoa(int(height)))
 	var vheight uint64 = 0
 	if height < 400 {
 		vheight = 0
@@ -166,7 +167,7 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 	for i := 0; i < count; i++ {
 		val := vals[addrs[i]]
 		if val == nil {
-			log.Debug("getValidatorsImpl getValidators val is nil, fill with default", "index", i, "cubeAddr", addrs[i].String())
+			log.Debug("getValidatorsImpl getValidators val is nil, fill with default, height ", strconv.Itoa(int(vheight)), " index ", i, "cubeAddr", addrs[i].String())
 
 			pubkeyBytes := make([]byte, ed25519.PubKeySize)
 			copy(pubkeyBytes, []byte(strconv.Itoa(i)))
@@ -176,7 +177,7 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 		} else {
 			tVal := types.NewValidator(val.PubKey, val.VotingPower)
 			validators[i] = tVal
-			//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
+			log.Debug("getValidators height ", strconv.Itoa(int(vheight)), " index ", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 		}
 	}
 	// return addrs, types.NewValidatorSet(validators)
@@ -284,8 +285,13 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 			return nil
 		}
 		AddrValMap[addrs[i]] = tmpVal
-		log.Info("getAddrValMapFromContract register validator addr ", addrs[i].Hex(), " cosmos addr ", tmpVal.Address.String(), "cosmosAddr", tmpVal.PubKey.Address().String())
+		log.Info("getAddrValMapFromContract register validator height ", strconv.Itoa(int(header.Number.Uint64())), " addr ", addrs[i].Hex(), " cosmos addr ", tmpVal.Address.String(), "cosmosAddr", tmpVal.PubKey.Address().String())
 	}
+
+	for k, v := range AddrValMap {
+		log.Debug("k ", k.Hex(), " v ", v.Address.String())
+	}
+
 	return AddrValMap
 }
 
@@ -317,7 +323,7 @@ func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
 		} else {
 			tVal := types.NewValidator(val.PubKey, val.VotingPower)
 			validators[i] = tVal
-			log.Debug("storeValidatorSet", "index", i, "cubeAddr", addrs[i].String(), " cosmos addr ", val.Address.String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
+			log.Debug("storeValidatorSet height ", strconv.Itoa(int(header.Number.Uint64())), " index ", i, "cubeAddr", addrs[i].String(), " cosmos addr ", val.Address.String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 		}
 	}
 	vs := &types.ValidatorSet{}

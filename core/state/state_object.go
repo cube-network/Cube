@@ -163,7 +163,7 @@ func (s *stateObject) getTrie(db Database) Trie {
 		if s.data.Root != emptyRoot && s.db.prefetcher != nil {
 			// When the miner is creating the pending state, there is no
 			// prefetcher
-			s.trie = s.db.prefetcher.trie(s.data.Root)
+			s.trie = s.db.prefetcher.trieWithCache(s.data.Root, s.db.dirtyTrieNodes)
 		}
 		if s.trie == nil {
 			var err error

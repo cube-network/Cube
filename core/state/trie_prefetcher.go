@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 var (
@@ -181,6 +182,16 @@ func (p *triePrefetcher) trie(root common.Hash) Trie {
 		return nil
 	}
 	return trie
+}
+
+// trie returns the trie matching the root hash with given hash cache or nil if the
+// prefetcher doesn't have it.
+func (p *triePrefetcher) trieWithCache(root common.Hash, dirtyNodeCache *trie.HashCache) Trie {
+	t := p.trie(root)
+	if t != nil {
+		t.UpdateDirtyNodeCache(dirtyNodeCache)
+	}
+	return t
 }
 
 // used marks a batch of state items used to allow creating statistics as to

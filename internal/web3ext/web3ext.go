@@ -645,6 +645,12 @@ web3._extend({
 				return statusBlockInfo;
 			}
 		}),
+		new web3._extend.Method({
+			name: 'getTransactionReceiptExt',
+			call: 'eth_getTransactionReceiptExt',
+			params: 1,
+			outputFormatter: web3._extend.formatters.outputTransactionReceiptFormatter
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

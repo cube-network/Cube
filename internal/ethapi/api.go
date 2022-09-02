@@ -1838,6 +1838,24 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	return fields, nil
 }
 
+func (s *PublicTransactionPoolAPI) GetTransactionReceiptExt(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
+	fields, err := s.GetTransactionReceipt(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, nil
+	}
+	blockHash := fields["blockHash"].(common.Hash)
+	blockNumber := rpc.BlockNumber(fields["blockNumber"].(hexutil.Uint64))
+	status, err := s.b.BlockPredictStatus(ctx, blockHash, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	fields["predictStatus"] = status
+	return fields, nil
+}
+
 // sign is a helper function that signs a transaction with the private key of the given address.
 func (s *PublicTransactionPoolAPI) sign(addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
 	// Look up the wallet containing the requested signer

@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"math/big"
 	"strconv"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -170,8 +169,9 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 			log.Debug("getValidatorsImpl getValidators val is nil, fill with default", "index", i, "cubeAddr", addrs[i].String())
 
 			pubkeyBytes := make([]byte, ed25519.PubKeySize)
+			copy(pubkeyBytes, []byte(strconv.Itoa(i)))
 			pk := ed25519.PubKey(pubkeyBytes)
-			tVal := types.NewValidator(pk, 0)
+			tVal := types.NewValidator(pk, 100)
 			validators[i] = tVal
 		} else {
 			tVal := types.NewValidator(val.PubKey, val.VotingPower)
@@ -179,17 +179,38 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 			//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 		}
 	}
-	return addrs, types.NewValidatorSet(validators)
+	// return addrs, types.NewValidatorSet(validators)
+
+	vs := &types.ValidatorSet{}
+	vs.Validators = validators
+	vs.Proposer = validators[0]
+	return addrs, vs
 }
 
 func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address, header *et.Header) *types.Validator {
-	m := vmgr.getAddrValMap(header)
-	return m[cubeAddr]
+	var vheight uint64 = 0
+	if header.Number.Uint64() < 400 {
+		vheight = 0
+	} else {
+		vheight = header.Number.Uint64() - 200 - header.Number.Uint64()%200
+	}
+
+	vh := vmgr.getHeaderByNumber(vheight)
+	if vh == nil {
+		log.Warn("getValidatorsImpl get header is nil ", strconv.Itoa(int(vheight)))
+		return nil
+	}
+	m := vmgr.getAddrValMap(vh)
+	if m != nil {
+		return m[cubeAddr]
+	} else {
+		return nil
+	}
 }
 
 func (vmgr *ValidatorsMgr) getAddrValMap(header *et.Header) map[common.Address]*types.Validator {
 	// TODO lock ???
-	if m, ok := vmgr.AddrValMapCache.Get(header.Hash()); ok {
+	if m, ok := vmgr.AddrValMapCache.Get(header.Number.Uint64()); ok {
 		return m.(map[common.Address]*types.Validator)
 	}
 
@@ -219,12 +240,14 @@ func (vmgr *ValidatorsMgr) getAddrValMap(header *et.Header) map[common.Address]*
 		return nil
 	}
 
+	log.Debug("ethdb validator set size ", strconv.Itoa(len(addrs)))
 	AddrValMap := make(map[common.Address]*types.Validator, 0)
 	for i := 0; i < len(addrs); i++ {
 		AddrValMap[addrs[i]] = vs.Validators[i]
+		log.Info("getAddrValMap from ethdb height ", strconv.Itoa(int(header.Number.Uint64())), " addr ", addrs[i].Hex(), " cosmos addr ", vs.Validators[i].Address.String(), "cosmosAddr", vs.Validators[i].PubKey.Address().String())
 	}
 
-	vmgr.AddrValMapCache.Add(header.Hash(), AddrValMap)
+	vmgr.AddrValMapCache.Add(header.Number.Uint64(), AddrValMap)
 	return AddrValMap
 }
 
@@ -237,15 +260,9 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 
 	var statedb *state.StateDB = nil
 	var err error = nil
-	for i := 0; i < 100; i++ {
-		statedb, err = vmgr.statefn(header.Root)
-		if err != nil {
-			log.Warn("getAddrValMap make statedb fail! ", header.Root.Hex())
-		}
-		time.Sleep(time.Millisecond * 10)
-	}
-	if statedb == nil {
-		log.Error("try make statedb but fail!")
+	statedb, err = vmgr.statefn(header.Root)
+	if err != nil {
+		log.Warn("getAddrValMap make statedb fail! ", header.Root.Hex())
 		return nil
 	}
 
@@ -257,6 +274,7 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 		return nil
 	}
 
+	log.Debug("contract val size ", strconv.Itoa(len(addrs)))
 	AddrValMap := make(map[common.Address]*types.Validator, 0)
 	for i := 0; i < len(addrs); i++ {
 		tmpVal := &types.Validator{}
@@ -266,6 +284,7 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 			return nil
 		}
 		AddrValMap[addrs[i]] = tmpVal
+		log.Info("getAddrValMapFromContract register validator addr ", addrs[i].Hex(), " cosmos addr ", tmpVal.Address.String(), "cosmosAddr", tmpVal.PubKey.Address().String())
 	}
 	return AddrValMap
 }
@@ -281,7 +300,7 @@ func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
 		return
 	}
 
-	addrs := getAddressesFromHeader(header, IsEnable(vmgr.config, header.Number)) // make([]common.Address, 1) //
+	addrs := getAddressesFromHeader(header, IsEnable(vmgr.config, header.Number))
 	count := len(addrs)
 	validators := make([]*types.Validator, count)
 
@@ -291,27 +310,38 @@ func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
 			log.Debug("getValidators val is nil, fill with default", "index", i, "cubeAddr", addrs[i].String())
 
 			pubkeyBytes := make([]byte, ed25519.PubKeySize)
+			copy(pubkeyBytes, []byte(strconv.Itoa(i)))
 			pk := ed25519.PubKey(pubkeyBytes)
-			tVal := types.NewValidator(pk, 0)
+			tVal := types.NewValidator(pk, 100)
 			validators[i] = tVal
 		} else {
 			tVal := types.NewValidator(val.PubKey, val.VotingPower)
 			validators[i] = tVal
-			//log.Debug("getValidators", "index", i, "cubeAddr", addrs[i].String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
+			log.Debug("storeValidatorSet", "index", i, "cubeAddr", addrs[i].String(), " cosmos addr ", val.Address.String(), "cosmosAddr", val.PubKey.Address().String(), " pk ", val.PubKey.Address().String())
 		}
 	}
-	vs := types.NewValidatorSet(validators)
-	tpvs, _ := vs.ToProto()
-	bz, _ := tpvs.Marshal()
+	vs := &types.ValidatorSet{}
+	vs.Validators = validators
+	vs.Proposer = validators[0]
+	// vs := types.NewValidatorSet(validators)
+	tpvs, err := vs.ToProto()
+	if err != nil {
+		log.Error("store validator set to proto ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex(), " err ", err.Error())
+		return
+	}
+	bz, err := tpvs.Marshal()
+	if err != nil {
+		log.Error("store validator set marshal ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex(), " err ", err.Error())
+		return
+	}
 	key := makeValidatorKey(header.Hash())
 
-	err := vmgr.ethdb.Put(key, bz)
+	err = vmgr.ethdb.Put(key, bz)
 	if err != nil {
-		log.Error("store validator fail ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex())
+		log.Error("store validator fail ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex(), " err ", err.Error())
 		return
 	}
 
-	// vmgr.AddrValMapCache.Add(header.Hash(), vs)
 	log.Debug("store validator number ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex())
 
 	// // // TODO prune validator set

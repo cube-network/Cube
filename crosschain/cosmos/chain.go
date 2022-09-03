@@ -100,7 +100,7 @@ func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {
 }
 
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
-	log.Info("makeCosmosSignedHeader", "height", h.Number, "hash", h.Hash())
+	log.Info("makeCosmosSignedHeader", "height", strconv.Itoa(int(h.Number.Int64())), "hash", h.Hash())
 	// TODO find_cosmos_parent_header(h.parent_hash) {return c.cube_cosmos_header[parent_hash]}
 	// todo: cannot use header to update validators as validators are only updated every Epoch length to reset votes and checkpoint. see more info from chaos.Prepare()
 
@@ -142,7 +142,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) *ct.SignedHeader {
 		nextValsetHash = nextValset.Hash()
 	}
 
-	log.Debug("validator hash ", hex.EncodeToString(valsetHash))
+	log.Debug("cosmos height", strconv.Itoa(int(h.Number.Int64())), "validator hash ", hex.EncodeToString(valsetHash), " next ", hex.EncodeToString(nextValsetHash))
 
 	// make header
 	header := &ct.Header{
@@ -450,7 +450,7 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 		log.Info("CosmosVotesAllCollected", "number", header.Height, "hash", hash)
 	}
 
-	log.Info("storeSignedHeader", "number", header.Height, "hash", hash, "header", header.Hash())
+	log.Info("storeSignedHeader", "number", strconv.Itoa(int(header.Height)), "hash", hash, "header", header.Hash(), "validator hash ", hex.EncodeToString(header.ValidatorsHash), " next ", hex.EncodeToString(header.NextValidatorsHash), " vote ", strconv.Itoa(counter))
 
 }
 

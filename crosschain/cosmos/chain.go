@@ -382,6 +382,21 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
+	var vote_cache []*et.CosmosVote = nil
+	{
+		c.mu.Lock()
+		if vc, ok := c.vote_cache.Get(h.Hash()); ok {
+			vote_cache = vc.([]*et.CosmosVote)
+			c.vote_cache.Remove(h.Hash())
+		}
+		c.mu.Unlock()
+	}
+
+	if vote_cache != nil {
+		for i := 0; i < len(vote_cache); i++ {
+			c.handleVote(vote_cache[i])
+		}
+	}
 
 	// vote
 	if valsetSize > 0 {

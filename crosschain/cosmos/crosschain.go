@@ -187,14 +187,14 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
-	sh := c.chain.getSignedHeader(header.Hash())
-	if sh == nil {
-		csh := c.chain.makeCosmosSignedHeader(header)
-		if csh == nil {
-			log.Warn("make cosmos signed header fail!")
-			return
-		}
+	// sh := c.chain.getSignedHeader(header.Hash())
+	// if sh == nil {
+	csh := c.chain.makeCosmosSignedHeader(header)
+	if csh == nil {
+		log.Warn("make cosmos signed header fail!")
+		return
 	}
+	// }
 
 	c.headersmu.Lock()
 	defer c.headersmu.Unlock()

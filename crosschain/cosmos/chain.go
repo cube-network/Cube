@@ -291,6 +291,11 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		return nil, errors.New("missing commit")
 	}
 
+	p := c.getHeaderByHash(h.ParentHash)
+	if p == nil {
+		log.Warn("handleSignedHeader parent header not found ", strconv.Itoa(int(h.Number.Int64())), " hash ", h.Hash().Hex())
+	}
+
 	if err := header.Header.ValidateBasic(); err != nil {
 		return nil, fmt.Errorf("invalid header: %w", err)
 	}
@@ -376,7 +381,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		}
 	}
 
-	c.valsMgr.storeValidatorSet(h)
+	// c.valsMgr.storeValidatorSet(h)
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
 	var vote_cache []*et.CosmosVote = nil
@@ -447,6 +452,15 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 	err := c.ethdb.Put(makeSignedHeaderKey(hash)[:], bz)
 	if err != nil {
 		log.Error("storeSignedHeader db put fail ", hash.Hex())
+	}
+
+	if h := c.getSignedHeader(hash); h != nil {
+		// TODO lock
+		for i := 0; i < len(header.Commit.Signatures); i++ {
+			if h.Commit.Signatures[i].BlockIDFlag == ct.BlockIDFlagCommit {
+				header.Commit.Signatures[i] = h.Commit.Signatures[i]
+			}
+		}
 	}
 
 	// c.signedHeader[hash] = header

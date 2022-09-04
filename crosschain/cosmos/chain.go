@@ -376,10 +376,7 @@ func (c *CosmosChain) handleSignedHeader(h *et.Header, header *ct.SignedHeader) 
 		}
 	}
 
-	if c.getSignedHeader(h.Hash()) == nil {
-		c.valsMgr.storeValidatorSet(h)
-	}
-
+	c.valsMgr.storeValidatorSet(h)
 	// store header
 	c.storeSignedHeader(h.Hash(), header)
 	var vote_cache []*et.CosmosVote = nil

@@ -150,6 +150,7 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *type
 }
 
 func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, *types.ValidatorSet) {
+	log.Debug("getValidatorsImpl ", strconv.Itoa(int(vheight)))
 	vh := vmgr.getHeaderByNumber(vheight)
 	if vh == nil {
 		log.Warn("getValidatorsImpl get header is nil ", strconv.Itoa(int(vheight)))
@@ -157,7 +158,7 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 	}
 	vals := vmgr.getAddrValMap(vh)
 	if vals == nil {
-		log.Warn("getValidatorsImpl getAddrValMap is nil")
+		log.Warn("getValidatorsImpl getAddrValMap is nil", strconv.Itoa(int(vheight)))
 		return []common.Address{}, nil
 	}
 
@@ -215,33 +216,35 @@ func (vmgr *ValidatorsMgr) getAddrValMap(header *et.Header) map[common.Address]*
 		return m.(map[common.Address]*types.Validator)
 	}
 
+	log.Debug("getAddrValMap height ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex())
+
 	addrs := getAddressesFromHeader(header, IsEnable(vmgr.config, header.Number))
 
 	key := makeValidatorKey(header.Hash())
 	bz, err := vmgr.ethdb.Get(key)
 	if err != nil {
-		log.Warn("getAddrValMap read addr map fail ", err.Error())
+		log.Warn("getAddrValMap read addr map fail ", err.Error(), strconv.Itoa(int(header.Number.Int64())), " key ", string(key))
 		return nil
 	}
 	if len(bz) == 0 {
-		log.Warn("getAddrValMap readd addr map is nil")
+		log.Warn("getAddrValMap read addr map is nil", strconv.Itoa(int(header.Number.Int64())), " key ", string(key))
 		return nil
 	}
 
 	tvs := &tmproto.ValidatorSet{}
 	err = tvs.Unmarshal(bz)
 	if err != nil {
-		log.Warn("getAddrValMap unmarshal validator set fail ", err.Error())
+		log.Warn("getAddrValMap unmarshal validator set fail ", err.Error(), strconv.Itoa(int(header.Number.Int64())), " key ", string(key))
 		return nil
 	}
 
 	vs, _ := types.ValidatorSetFromProto(tvs)
 	if len(addrs) != len(vs.Validators) {
-		log.Warn("getAddrValMap addr/ validator size not match")
+		log.Warn("getAddrValMap addr/ validator size not match", strconv.Itoa(int(header.Number.Int64())), " key ", string(key))
 		return nil
 	}
 
-	log.Debug("ethdb validator set size ", strconv.Itoa(len(addrs)))
+	log.Debug("ethdb validator set size ", strconv.Itoa(len(addrs)), " key ", string(key))
 	AddrValMap := make(map[common.Address]*types.Validator, 0)
 	for i := 0; i < len(addrs); i++ {
 		AddrValMap[addrs[i]] = vs.Validators[i]
@@ -255,7 +258,7 @@ func (vmgr *ValidatorsMgr) getAddrValMap(header *et.Header) map[common.Address]*
 func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Address]*types.Validator {
 	header := vmgr.getHeaderByHash(h.ParentHash)
 	if header == nil {
-		log.Warn("getAddrValMap header is nil ", h.ParentHash.Hex())
+		log.Warn("getAddrValMap header is nil ", h.ParentHash.Hex(), strconv.Itoa(int(header.Number.Int64())))
 		return nil
 	}
 
@@ -263,7 +266,7 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 	var err error = nil
 	statedb, err = vmgr.statefn(header.Root)
 	if err != nil {
-		log.Warn("getAddrValMap make statedb fail! ", header.Root.Hex())
+		log.Warn("getAddrValMap make statedb fail! ", header.Root.Hex(), strconv.Itoa(int(header.Number.Int64())))
 		return nil
 	}
 
@@ -271,17 +274,17 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 	vm := makeContext(ctx, vmgr.config, header, statedb)
 	addrs, vals, err := systemcontract.GetAllValidators(vm)
 	if err != nil {
-		log.Warn("getAddrValMap read cosmos pk from contract fail!")
+		log.Warn("getAddrValMap read cosmos pk from contract fail!", strconv.Itoa(int(header.Number.Int64())))
 		return nil
 	}
 
-	log.Debug("contract val size ", strconv.Itoa(len(addrs)))
+	log.Debug("contract val size ", strconv.Itoa(len(addrs)), strconv.Itoa(int(header.Number.Int64())))
 	AddrValMap := make(map[common.Address]*types.Validator, 0)
 	for i := 0; i < len(addrs); i++ {
 		tmpVal := &types.Validator{}
 		err = tmjson.Unmarshal([]byte(vals[i]), tmpVal)
 		if err != nil {
-			log.Error("getAddrValMap Unmarshal validator failed")
+			log.Error("getAddrValMap Unmarshal validator failed", strconv.Itoa(int(header.Number.Int64())))
 			return nil
 		}
 		AddrValMap[addrs[i]] = tmpVal
@@ -348,7 +351,7 @@ func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
 		return
 	}
 
-	log.Debug("store validator number ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex())
+	log.Debug("store validator number ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex(), " key ", string(key), " val ", hex.EncodeToString(bz))
 
 	// // // TODO prune validator set
 	// if header.Number.Int64() > 200*5+vmgr.config.CrosschainCosmosBlock.Int64() {

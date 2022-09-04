@@ -109,6 +109,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		return nil, nil //, -1, ct.CommitSig{}
 	}
 
+	c.valsMgr.storeValidatorSet(h)
+
 	var app_hash common.Hash
 	app_hash.SetBytes(h.Extra[32:64])
 
@@ -120,17 +122,6 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 	//addr := pubkey.Address()
 	addr := val.Address
 	//c.valsMgr.updateValidators(h, h.Number.Int64())
-
-	parentHeader := c.getSignedHeader(h.ParentHash)
-	var lastBlockID types.BlockID
-	if parentHeader != nil {
-		lastpsh := ct.PartSetHeader{Total: 1, Hash: parentHeader.Hash()}
-		lastBlockID = ct.BlockID{Hash: parentHeader.Hash(), PartSetHeader: lastpsh}
-	} else if h.Number.Int64() < c.config.CrosschainCosmosBlock.Int64() {
-		return nil, nil //, -1, ct.CommitSig{} //errors.New("cannot get signedheader")
-	}
-
-	c.valsMgr.storeValidatorSet(h)
 
 	// TODO 200 check?
 	// v := c.valsMgr.getValidator(c.cubeAddr, h)
@@ -158,7 +149,16 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		nextValsetHash = nextValset.Hash()
 	}
 
-	log.Debug("cosmos height", strconv.Itoa(int(h.Number.Int64())), "validator hash ", hex.EncodeToString(valsetHash), " next ", hex.EncodeToString(nextValsetHash))
+	log.Debug("cosmos", "height", strconv.Itoa(int(h.Number.Int64())), "validator hash ", hex.EncodeToString(valsetHash), " next ", hex.EncodeToString(nextValsetHash))
+
+	parentHeader := c.getSignedHeader(h.ParentHash)
+	var lastBlockID types.BlockID
+	if parentHeader != nil {
+		lastpsh := ct.PartSetHeader{Total: 1, Hash: parentHeader.Hash()}
+		lastBlockID = ct.BlockID{Hash: parentHeader.Hash(), PartSetHeader: lastpsh}
+		//} else if h.Number.Int64() < c.config.CrosschainCosmosBlock.Int64() {
+		//	return nil, nil //, -1, ct.CommitSig{} //errors.New("cannot get signedheader")
+	}
 
 	// make header
 	header := &ct.Header{
@@ -654,7 +654,7 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 		log.Info("CosmosVotesAllCollected", "number", header.Height, "hash", hash)
 	}
 
-	log.Info("storeSignedHeader", "number", strconv.Itoa(int(header.Height)), "hash", hash, "header", header.Hash(), "validator hash ", hex.EncodeToString(header.ValidatorsHash), " next ", hex.EncodeToString(header.NextValidatorsHash), " vote ", strconv.Itoa(counter))
+	log.Info("storeSignedHeader", "vote", strconv.Itoa(counter), "number", strconv.Itoa(int(header.Height)), "hash", hash, "header", header.Hash(), "validatorHash", hex.EncodeToString(header.ValidatorsHash), "nextValHash", hex.EncodeToString(header.NextValidatorsHash))
 
 }
 

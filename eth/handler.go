@@ -50,6 +50,7 @@ const (
 	naChanSize  = 4096
 	njfChanSize = 4096
 	lcvChanSize = 4096
+	cvChanSize  = 4096
 )
 
 var (
@@ -127,6 +128,8 @@ type handler struct {
 	minedBlockSub               *event.TypeMuxSubscription
 	minedBlockAndCosmosVotesSub *event.TypeMuxSubscription
 	cosmosVoteSub               *event.TypeMuxSubscription
+	cvCh                        chan core.NewCosmosVoteEvent
+	cvSub                       event.Subscription
 	cosmosVotesListSub          *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
@@ -453,9 +456,15 @@ func (h *handler) Start(maxPeers int) {
 	h.minedBlockAndCosmosVotesSub = h.eventMux.Subscribe(core.NewMinedBlockAndCosmosVotesEvent{})
 	go h.minedBlockAndCosmosVotesBroadcastLoop()
 
-	// broadcast cosmos vote
+	// broadcast cosmos vote from others
 	h.wg.Add(1)
 	h.cosmosVoteSub = h.eventMux.Subscribe(core.NewCosmosVoteEvent{})
+	go h.cosmosVoteBroadcastLoop()
+
+	// broadcast cosmos vote from self
+	h.wg.Add(1)
+	h.cvCh = make(chan core.NewCosmosVoteEvent, cvChanSize)
+	h.cvSub = h.chain.SubscribeNewCosmosVotesEvent(h.cvCh)
 	go h.newCosmosVoteBroadcastLoop()
 
 	// broadcast self-built attestation
@@ -486,8 +495,9 @@ func (h *handler) Stop() {
 	h.minedBlockSub.Unsubscribe()               // quits blockBroadcastLoop
 	h.minedBlockAndCosmosVotesSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
 	h.cosmosVoteSub.Unsubscribe()               // quits newCosmosVoteBroadcastLoop
-	h.naSub.Unsubscribe()                       // quits newAttestationBroadcastLoop
-	h.njfSub.Unsubscribe()                      // quits newJustifiedOrFinalizedBlockBroadcastLoop
+	h.cvSub.Unsubscribe()
+	h.naSub.Unsubscribe()  // quits newAttestationBroadcastLoop
+	h.njfSub.Unsubscribe() // quits newJustifiedOrFinalizedBlockBroadcastLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -703,7 +713,7 @@ func (h *handler) minedBlockAndCosmosVotesBroadcastLoop() {
 	}
 }
 
-func (h *handler) newCosmosVoteBroadcastLoop() {
+func (h *handler) cosmosVoteBroadcastLoop() {
 	defer h.wg.Done()
 
 	for obj := range h.cosmosVoteSub.Chan() {
@@ -757,6 +767,18 @@ func (h *handler) requestCosmosVotesBroadcastLoop() {
 		case lcv := <-h.lcvCh:
 			h.BroadcastGetCosmosVotes(lcv.Idxs)
 		case <-h.lcvSub.Err():
+			return
+		}
+	}
+}
+
+func (h *handler) newCosmosVoteBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case cv := <-h.cvCh:
+			h.BroadcastCosmosVote(cv.CosmosVote)
+		case <-h.cvSub.Err():
 			return
 		}
 	}

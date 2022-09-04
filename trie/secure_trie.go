@@ -202,6 +202,11 @@ func (t *SecureTrie) NodeIterator(start []byte) NodeIterator {
 	return t.trie.NodeIterator(start)
 }
 
+// UpdateDirtyNodeCache updates the dirtyNodeCache in the interal trie
+func (t *SecureTrie) UpdateDirtyNodeCache(dirtyNodeCache *HashCache) {
+	t.trie.dirtyNodeCache = dirtyNodeCache
+}
+
 // hashKey returns the hash of key as an ephemeral buffer.
 // The caller must not hold onto the return value because it will become
 // invalid on the next call to hashKey or secKey.

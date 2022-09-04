@@ -367,7 +367,7 @@ func (h *ethHandler) handleBlockAndCosmosVotesBroadcast(peer *eth.Peer, blockAnd
 		}
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
-			return err
+			// return err
 		}
 	}
 

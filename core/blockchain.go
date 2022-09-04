@@ -1362,6 +1362,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 	}
 
+	// TODO topvalidators for nextvalidatorhash
+
 	// Commit all cached state changes into underlying memory database async.
 	if err = state.AsyncCommit(bc.chainConfig.IsEIP158(block.Number()), afterCommit); err != nil {
 		return NonStatTy, err

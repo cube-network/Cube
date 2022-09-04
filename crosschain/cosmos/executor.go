@@ -240,7 +240,7 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	//chainid := new(big.Int)
 	//chainid.SetString(c.chain.ChainID, 10)
 	//c.chain.valsMgr.registerValidator(c.coinbase, c.chain.privValidator, chainid)
-	c.chain.generateRegisterValidatorTx()
+	c.chain.generateRegisterValidatorTx(c.header)
 
 	// c.is_start_crosschain = true
 }

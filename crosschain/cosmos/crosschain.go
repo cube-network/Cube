@@ -84,7 +84,7 @@ func (c *Cosmos) Init(datadir string,
 		if err != nil {
 			panic("cosmos init state root not found")
 		}
-		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, headerhashfn, ethdb)
+		c.chain = MakeCosmosChain(config, datadir+"/priv_validator_key.json", datadir+"/priv_validator_state.json", headerfn, headerhashfn, ethdb, blockContext, statefn)
 		c.queryExecutor = NewCosmosExecutor(c.datadir, c.config, c.codec, c.chain.getHeader, c.blockContext, statedb, c.header, common.Address{}, nil, true)
 	})
 }
@@ -187,14 +187,14 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 
 	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
-	sh := c.chain.getSignedHeader(header.Hash())
-	if sh == nil {
-		csh, _, _ := c.chain.makeCosmosSignedHeader(header)
-		if csh == nil {
-			log.Warn("make cosmos signed header fail!")
-			return
-		}
+	// sh := c.chain.getSignedHeader(header.Hash())
+	// if sh == nil {
+	csh := c.chain.makeCosmosSignedHeader(header)
+	if csh == nil {
+		log.Warn("make cosmos signed header fail!")
+		return
 	}
+	// }
 
 	c.headersmu.Lock()
 	defer c.headersmu.Unlock()
@@ -205,7 +205,6 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		ch := h.Value.(*et.Header)
 		log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
 		if c.eventHeader(ch) {
-			c.headers = list.New()
 			break
 		} else {
 			headers.PushBack(h)

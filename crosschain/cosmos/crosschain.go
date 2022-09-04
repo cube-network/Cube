@@ -2,7 +2,6 @@ package cosmos
 
 import (
 	"container/list"
-	"errors"
 	"math/big"
 	"strconv"
 	"sync"
@@ -176,23 +175,23 @@ func (c *Cosmos) Seal(exec vm.CrossChain) {
 	executor.EndBlock()
 }
 
-func (c *Cosmos) EventHeader(header *types.Header) {
+func (c *Cosmos) EventHeader(header *types.Header) *types.CosmosVote {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
 	if !IsEnable(c.config, big.NewInt(header.Number.Int64()-1)) {
 		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64()-1, 10))
-		return
+		return nil
 	}
 
 	log.Info("event header", "number", header.Number.Int64(), " hash ", header.Hash().Hex(), " root ", header.Root.Hex(), " coinbase ", header.Coinbase.Hex(), " diffculty ", header.Difficulty.Int64())
 
 	// sh := c.chain.getSignedHeader(header.Hash())
 	// if sh == nil {
-	csh := c.chain.makeCosmosSignedHeader(header)
+	csh, vote := c.chain.makeCosmosSignedHeader(header)
 	if csh == nil {
 		log.Warn("make cosmos signed header fail!")
-		return
+		return nil
 	}
 	// }
 
@@ -211,6 +210,7 @@ func (c *Cosmos) EventHeader(header *types.Header) {
 		}
 	}
 	c.headers = headers
+	return vote
 }
 
 func (c *Cosmos) eventHeader(header *types.Header) bool {
@@ -249,21 +249,21 @@ func (c *Cosmos) GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHead
 	return c.chain.getSignedHeader(hash)
 }
 
-func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) (*types.CosmosVote, error) {
-	c.querymu.Lock()
-	defer c.querymu.Unlock()
-
-	//if !IsEnable(c.config, h.Number) {
-	//	log.Debug("cosmos not enable yet", "number", strconv.FormatUint(h.Number.Uint64(), 10))
-	//	return nil, nil
-	//}
-
-	if header == nil {
-		return nil, errors.New("missing cosmos header")
-	}
-
-	return c.chain.handleSignedHeader(h, header)
-}
+//func (c *Cosmos) HandleHeader(h *et.Header, header *ct.SignedHeader) (*types.CosmosVote, error) {
+//	c.querymu.Lock()
+//	defer c.querymu.Unlock()
+//
+//	//if !IsEnable(c.config, h.Number) {
+//	//	log.Debug("cosmos not enable yet", "number", strconv.FormatUint(h.Number.Uint64(), 10))
+//	//	return nil, nil
+//	//}
+//
+//	if header == nil {
+//		return nil, errors.New("missing cosmos header")
+//	}
+//
+//	return c.chain.handleSignedHeader(h, header)
+//}
 
 func (c *Cosmos) GetSignatures(hash common.Hash) []ct.CommitSig {
 	c.querymu.Lock()
@@ -272,23 +272,23 @@ func (c *Cosmos) GetSignatures(hash common.Hash) []ct.CommitSig {
 	return c.chain.getSignatures(hash)
 }
 
-func (c *Cosmos) HandleSignatures(h *types.Header, sigs []ct.CommitSig) (*types.CosmosVote, error) {
+func (c *Cosmos) HandleSignatures(h *types.Header, sigs []ct.CommitSig) error { //(*types.CosmosVote, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
 	return c.chain.handleSignatures(h, sigs)
 }
 
-func (c *Cosmos) SignHeader(h *types.Header) (*types.CosmosVote, error) {
-	c.querymu.Lock()
-	defer c.querymu.Unlock()
-
-	if h == nil {
-		return nil, errors.New("missing cube header")
-	}
-
-	return c.chain.signHeader(h)
-}
+//func (c *Cosmos) SignHeader(h *types.Header) (*types.CosmosVote, error) {
+//	c.querymu.Lock()
+//	defer c.querymu.Unlock()
+//
+//	if h == nil {
+//		return nil, errors.New("missing cube header")
+//	}
+//
+//	return c.chain.signHeader(h)
+//}
 
 func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {
 	c.querymu.Lock()
@@ -297,11 +297,11 @@ func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {
 	return c.chain.handleVote(vote)
 }
 
-func (c *Cosmos) CheckVotes(height uint64, hash common.Hash, h *et.Header) *types.CosmosLackedVoteIndexs { // (*types.CosmosVotesList, *types.CosmosLackedVoteIndexs) {
+func (c *Cosmos) CheckVotes(height uint64, hash common.Hash) *types.CosmosLackedVoteIndexs { // (*types.CosmosVotesList, *types.CosmosLackedVoteIndexs) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	return c.chain.checkVotes(height, hash, h)
+	return c.chain.checkVotes(height, hash)
 }
 
 func (c *Cosmos) HandleVotesQuery(idxs *types.CosmosLackedVoteIndexs) (*types.CosmosVotesList, error) {

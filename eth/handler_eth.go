@@ -173,21 +173,21 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			log.Debug("Failed to deliver headers", "err", err)
 		}
 	}
-	if crosschain.GetCrossChain() != nil {
-		//votes := make([]*types.CosmosVote, 0)
-		for _, th := range headers {
-			v, err := crosschain.GetCrossChain().SignHeader(th)
-			if v != nil {
-				log.Info("BroadcastCosmosVote 2", "index", v.Index, "headerHash", v.HeaderHash)
-				h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: v})
-				//votes = append(votes, v)
-			}
-			if err != nil {
-				log.Error("SignHeader failed", "peer", p.ID(), "err", err)
-				// return err
-			}
-		}
-	}
+	//if crosschain.GetCrossChain() != nil {
+	//	//votes := make([]*types.CosmosVote, 0)
+	//	for _, th := range headers {
+	//		v, err := crosschain.GetCrossChain().SignHeader(th)
+	//		if v != nil {
+	//			log.Info("BroadcastCosmosVote 2", "index", v.Index, "headerHash", v.HeaderHash)
+	//			h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: v})
+	//			//votes = append(votes, v)
+	//		}
+	//		if err != nil {
+	//			log.Error("SignHeader failed", "peer", p.ID(), "err", err)
+	//			// return err
+	//		}
+	//	}
+	//}
 	return nil
 }
 
@@ -220,17 +220,15 @@ func (h *ethHandler) handleCubeHeaderAndCosmosVotes(peer *eth.Peer, headers []*t
 		log.Info("handleCubeHeaderAndCosmosVotes", "index", i, "count", len(chs))
 		//chs = append(chs, th.Header)
 		chs[i] = th.Header
-		// todo: verify cosmos header
-		if h.chain.Config().IsCrosschainCosmos(th.Header.Number) &&crosschain.GetCrossChain() != nil {
-			vote, err := crosschain.GetCrossChain().HandleSignatures(th.Header, th.Signatures)
-			if vote != nil {
-				log.Info("BroadcastCosmosVote 2", "index", vote.Index, "headerHash", vote.HeaderHash)
-				h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
-			}
+		if h.chain.Config().IsCrosschainCosmos(th.Header.Number) && crosschain.GetCrossChain() != nil {
+			err := crosschain.GetCrossChain().HandleSignatures(th.Header, th.Signatures)
+			//if vote != nil {
+			//	log.Info("BroadcastCosmosVote 2", "index", vote.Index, "headerHash", vote.HeaderHash)
+			//	h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
+			//}
 			if err != nil {
 				log.Error("HandleHeader failed", "peer", p.ID(), "err", err)
-				// TODO NOT return
-				// return err
+				return err
 			}
 		}
 	}
@@ -316,17 +314,17 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
 	log.Info("handleBlockBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 
-	if crosschain.GetCrossChain() != nil {
-		vote, err := crosschain.GetCrossChain().SignHeader(block.Header())
-		if vote != nil {
-			log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
-			h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
-		}
-		if err != nil {
-			log.Error("handle cosmos header failed", "err", err)
-			return err
-		}
-	}
+	//if crosschain.GetCrossChain() != nil {
+	//	vote, err := crosschain.GetCrossChain().SignHeader(block.Header())
+	//	if vote != nil {
+	//		log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
+	//		h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
+	//	}
+	//	if err != nil {
+	//		log.Error("handle cosmos header failed", "err", err)
+	//		return err
+	//	}
+	//}
 
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
@@ -360,11 +358,11 @@ func (h *ethHandler) handleBlockAndCosmosVotesBroadcast(peer *eth.Peer, blockAnd
 	// todo: deal with cosmos header
 	if h.chain.Config().IsCrosschainCosmos(block.Number()) && crosschain.GetCrossChain() != nil {
 		//sh := types.SignedHeaderFromCosmosHeader(blockAndVotes.CosmosHeader)
-		vote, err := crosschain.GetCrossChain().HandleSignatures(block.Header(), blockAndVotes.Signatures)
-		if vote != nil {
-			log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
-			h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
-		}
+		err := crosschain.GetCrossChain().HandleSignatures(block.Header(), blockAndVotes.Signatures)
+		//if vote != nil {
+		//	log.Info("BroadcastCosmosVote 1", "index", vote.Index, "headerHash", vote.HeaderHash)
+		//	h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
+		//}
 		if err != nil {
 			log.Error("handle cosmos header failed", "err", err)
 			// return err
@@ -397,6 +395,7 @@ func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.Cosmo
 
 	if crosschain.GetCrossChain() != nil {
 		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		// todo: do some basic validation
 		if err := crosschain.GetCrossChain().HandleVote(vote); err != nil {
 			return err
 		}

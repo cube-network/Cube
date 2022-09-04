@@ -13,7 +13,7 @@ import (
 
 func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status uint8) error {
 	if status == types.BasJustified {
-		idxs := crosschain.GetCrossChain().CheckVotes(num.Uint64(), hash, nil)
+		idxs := crosschain.GetCrossChain().CheckVotes(num.Uint64(), hash)
 		if idxs != nil {
 			// request lacked votes
 			bc.BroadcastGetCosmosVotesFromOtherNodes(idxs)

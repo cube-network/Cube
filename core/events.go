@@ -29,8 +29,8 @@ type NewMinedBlockEvent struct {
 	Block *types.Block
 }
 
-type NewMinedBlockAndHeaderEvent struct {
-	BlockAndHeader *types.BlockAndCosmosHeader
+type NewMinedBlockAndCosmosVotesEvent struct {
+	BlockAndVotes *types.BlockAndCosmosVotes
 }
 
 type NewCosmosVoteEvent struct {

@@ -66,8 +66,8 @@ const (
 	PooledTransactionsMsg         = 0x13
 	NewBlockAndHeaderMsg          = 0x14
 	NewCosmosVoteMsg              = 0x15
-	GetCubeAndCosmosHeadersMsg    = 0x16
-	CubeAndCosmosHeadersMsg       = 0x17
+	GetCubeAndCosmosVotesMsg      = 0x16
+	CubeAndCosmosVotesMsg         = 0x17
 	GetCosmosVotesMsg             = 0x18
 	CosmosVotesMsg                = 0x19
 )
@@ -130,7 +130,7 @@ type GetBlockHeadersPacket struct {
 	Reverse bool         // Query direction (false = rising towards latest, true = falling towards genesis)
 }
 
-type GetCubeAndCosmosHeadersPacket struct {
+type GetCubeAndCosmosVotesPacket struct {
 	Origin  HashOrNumber // Block from which to retrieve headers
 	Amount  uint64       // Maximum number of headers to retrieve
 	Skip    uint64       // Blocks to skip between consecutive headers
@@ -143,9 +143,9 @@ type GetBlockHeadersPacket66 struct {
 	*GetBlockHeadersPacket
 }
 
-type GetCubeAndCosmosHeadersPacket66 struct {
+type GetCubeAndCosmosVotesPacket66 struct {
 	RequestId uint64
-	*GetCubeAndCosmosHeadersPacket
+	*GetCubeAndCosmosVotesPacket
 }
 
 // HashOrNumber is a combined field for specifying an origin block.
@@ -193,11 +193,11 @@ type BlockHeadersPacket66 struct {
 	BlockHeadersPacket
 }
 
-type CubeAndCosmosHeadersPacket []*types.CubeAndCosmosHeader
+type CubeAndCosmosVotesPacket []*types.CubeAndCosmosVotes
 
-type CubeAndCosmosHeadersPacket66 struct {
+type CubeAndCosmosVotesPacket66 struct {
 	RequestId uint64
-	CubeAndCosmosHeadersPacket
+	CubeAndCosmosVotesPacket
 }
 
 type GetCosmosVotesPacket struct {
@@ -222,7 +222,7 @@ type CosmosVotesPacket66 struct {
 
 // NewBlockPacket is the network packet for the block propagation message.
 type NewBlockPacket struct {
-	//BlockAndHeader *core.BlockAndCosmosHeader
+	//BlockAndVotes *core.BlockAndCosmosVotes
 	Block *types.Block
 	TD    *big.Int
 }
@@ -244,18 +244,18 @@ func (request *NewBlockPacket) sanityCheck() error {
 }
 
 // NewBlockPacket is the network packet for the block propagation message.
-type NewBlockAndHeaderPacket struct {
-	BlockAndHeader *types.BlockAndCosmosHeader
+type NewBlockAndCosmosVotesPacket struct {
+	BlockAndVotes *types.BlockAndCosmosVotes
 	//Block *types.Block
 	TD *big.Int
 }
 
 // sanityCheck verifies that the values are reasonable, as a DoS protection
-func (request *NewBlockAndHeaderPacket) sanityCheck() error {
-	if request.BlockAndHeader == nil || request.BlockAndHeader.Block == nil {
+func (request *NewBlockAndCosmosVotesPacket) sanityCheck() error {
+	if request.BlockAndVotes == nil || request.BlockAndVotes.Block == nil {
 		return fmt.Errorf("block is empty")
 	}
-	if err := request.BlockAndHeader.Block.SanityCheck(); err != nil {
+	if err := request.BlockAndVotes.Block.SanityCheck(); err != nil {
 		return err
 	}
 	//TD at mainnet block #7753254 is 76 bits. If it becomes 100 million times
@@ -406,14 +406,14 @@ func (*TransactionsPacket) Kind() byte   { return TransactionsMsg }
 func (*GetBlockHeadersPacket) Name() string { return "GetBlockHeaders" }
 func (*GetBlockHeadersPacket) Kind() byte   { return GetBlockHeadersMsg }
 
-func (*GetCubeAndCosmosHeadersPacket) Name() string { return "GetCubeAndCosmosHeadersPacket" }
-func (*GetCubeAndCosmosHeadersPacket) Kind() byte   { return GetCubeAndCosmosHeadersMsg }
+func (*GetCubeAndCosmosVotesPacket) Name() string { return "GetCubeAndCosmosVotesPacket" }
+func (*GetCubeAndCosmosVotesPacket) Kind() byte   { return GetCubeAndCosmosVotesMsg }
 
 func (*BlockHeadersPacket) Name() string { return "BlockHeaders" }
 func (*BlockHeadersPacket) Kind() byte   { return BlockHeadersMsg }
 
-func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
-func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }
+func (*CubeAndCosmosVotesPacket) Name() string { return "CubeAndCosmosVotesPacket" }
+func (*CubeAndCosmosVotesPacket) Kind() byte   { return CubeAndCosmosVotesMsg }
 
 func (*GetCosmosVotesPacket) Name() string { return "GetCosmosVotesPacket" }
 func (*GetCosmosVotesPacket) Kind() byte   { return GetCosmosVotesMsg }
@@ -430,14 +430,11 @@ func (*BlockBodiesPacket) Kind() byte   { return BlockBodiesMsg }
 func (*NewBlockPacket) Name() string { return "NewBlock" }
 func (*NewBlockPacket) Kind() byte   { return NewBlockMsg }
 
-func (*NewBlockAndHeaderPacket) Name() string { return "NewBlockAndHeader" }
-func (*NewBlockAndHeaderPacket) Kind() byte   { return NewBlockAndHeaderMsg }
+func (*NewBlockAndCosmosVotesPacket) Name() string { return "NewBlockAndHeader" }
+func (*NewBlockAndCosmosVotesPacket) Kind() byte   { return NewBlockAndHeaderMsg }
 
 func (*NewCosmosVotePacket) Name() string { return "NewCosmosVote" }
 func (*NewCosmosVotePacket) Kind() byte   { return NewCosmosVoteMsg }
-
-//func (*CubeAndCosmosHeadersPacket) Name() string { return "CubeAndCosmosHeadersPacket" }
-//func (*CubeAndCosmosHeadersPacket) Kind() byte   { return CubeAndCosmosHeadersMsg }
 
 func (*GetNodeDataPacket) Name() string { return "GetNodeData" }
 func (*GetNodeDataPacket) Kind() byte   { return GetNodeDataMsg }

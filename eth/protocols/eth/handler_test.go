@@ -312,27 +312,27 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 	// Create a batch of tests for various scenarios
 	limit := uint64(maxHeadersServe)
 	tests := []struct {
-		query  *GetCubeAndCosmosHeadersPacket // The query to execute for header retrieval
-		expect []common.Hash                  // The hashes of the block whose headers are expected
+		query  *GetCubeAndCosmosVotesPacket // The query to execute for header retrieval
+		expect []common.Hash                // The hashes of the block whose headers are expected
 	}{
 		// A single random block should be retrievable by hash and number too
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(limit / 2).Hash()}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(limit / 2).Hash()}, Amount: 1},
 			[]common.Hash{backend.chain.GetBlockByNumber(limit / 2).Hash()},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 1},
 			[]common.Hash{backend.chain.GetBlockByNumber(limit / 2).Hash()},
 		},
 		// Multiple headers should be retrievable in both directions
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 3},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 3},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(limit / 2).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 + 1).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 + 2).Hash(),
 			},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 3, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: limit / 2}, Amount: 3, Reverse: true},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(limit / 2).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 - 1).Hash(),
@@ -341,14 +341,14 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		},
 		// Multiple headers with skip lists should be retrievable
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: limit / 2}, Skip: 3, Amount: 3},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: limit / 2}, Skip: 3, Amount: 3},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(limit / 2).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 + 4).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 + 8).Hash(),
 			},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: limit / 2}, Skip: 3, Amount: 3, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: limit / 2}, Skip: 3, Amount: 3, Reverse: true},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(limit / 2).Hash(),
 				backend.chain.GetBlockByNumber(limit/2 - 4).Hash(),
@@ -357,26 +357,26 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		},
 		// The chain endpoints should be retrievable
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: 0}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: 0}, Amount: 1},
 			[]common.Hash{backend.chain.GetBlockByNumber(0).Hash()},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64()}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64()}, Amount: 1},
 			[]common.Hash{backend.chain.CurrentBlock().Hash()},
 		},
 		// Ensure protocol limits are honored
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 1}, Amount: limit + 10, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 1}, Amount: limit + 10, Reverse: true},
 			getHashes(backend.chain.CurrentBlock().NumberU64(), limit),
 		},
 		// Check that requesting more than available is handled gracefully
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 4}, Skip: 3, Amount: 3},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 4}, Skip: 3, Amount: 3},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(backend.chain.CurrentBlock().NumberU64() - 4).Hash(),
 				backend.chain.GetBlockByNumber(backend.chain.CurrentBlock().NumberU64()).Hash(),
 			},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: 4}, Skip: 3, Amount: 3, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: 4}, Skip: 3, Amount: 3, Reverse: true},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(4).Hash(),
 				backend.chain.GetBlockByNumber(0).Hash(),
@@ -384,13 +384,13 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		},
 		// Check that requesting more than available is handled gracefully, even if mid skip
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 4}, Skip: 2, Amount: 3},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() - 4}, Skip: 2, Amount: 3},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(backend.chain.CurrentBlock().NumberU64() - 4).Hash(),
 				backend.chain.GetBlockByNumber(backend.chain.CurrentBlock().NumberU64() - 1).Hash(),
 			},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: 4}, Skip: 2, Amount: 3, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: 4}, Skip: 2, Amount: 3, Reverse: true},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(4).Hash(),
 				backend.chain.GetBlockByNumber(1).Hash(),
@@ -398,7 +398,7 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		},
 		// Check a corner case where requesting more can iterate past the endpoints
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: 2}, Amount: 5, Reverse: true},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: 2}, Amount: 5, Reverse: true},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(2).Hash(),
 				backend.chain.GetBlockByNumber(1).Hash(),
@@ -407,46 +407,46 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		},
 		// Check a corner case where skipping overflow loops back into the chain start
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(3).Hash()}, Amount: 2, Reverse: false, Skip: math.MaxUint64 - 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(3).Hash()}, Amount: 2, Reverse: false, Skip: math.MaxUint64 - 1},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(3).Hash(),
 			},
 		},
 		// Check a corner case where skipping overflow loops back to the same header
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(1).Hash()}, Amount: 2, Reverse: false, Skip: math.MaxUint64},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Hash: backend.chain.GetBlockByNumber(1).Hash()}, Amount: 2, Reverse: false, Skip: math.MaxUint64},
 			[]common.Hash{
 				backend.chain.GetBlockByNumber(1).Hash(),
 			},
 		},
 		// Check that non existing headers aren't returned
 		{
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Hash: unknown}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Hash: unknown}, Amount: 1},
 			[]common.Hash{},
 		}, {
-			&GetCubeAndCosmosHeadersPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() + 1}, Amount: 1},
+			&GetCubeAndCosmosVotesPacket{Origin: HashOrNumber{Number: backend.chain.CurrentBlock().NumberU64() + 1}, Amount: 1},
 			[]common.Hash{},
 		},
 	}
 	// Run each of the tests and verify the results against the chain
 	for i, tt := range tests {
 		// Collect the headers to expect in the response
-		var headers []*types.CubeAndCosmosHeader
+		var headers []*types.CubeAndCosmosVotes
 		for _, hash := range tt.expect {
-			tmp := &types.CubeAndCosmosHeader{
+			tmp := &types.CubeAndCosmosVotes{
 				Header:       backend.chain.GetBlockByHash(hash).Header(),
 				CosmosHeader: &types.CosmosHeaderForP2P{},
 			}
 			headers = append(headers, tmp)
 		}
 		// Send the hash request and verify the response
-		p2p.Send(peer.app, GetCubeAndCosmosHeadersMsg, GetCubeAndCosmosHeadersPacket66{
-			RequestId:                     123,
-			GetCubeAndCosmosHeadersPacket: tt.query,
+		p2p.Send(peer.app, GetCubeAndCosmosVotesMsg, GetCubeAndCosmosVotesPacket66{
+			RequestId:                   123,
+			GetCubeAndCosmosVotesPacket: tt.query,
 		})
-		if err := p2p.ExpectMsg(peer.app, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
-			RequestId:                  123,
-			CubeAndCosmosHeadersPacket: headers,
+		if err := p2p.ExpectMsg(peer.app, CubeAndCosmosVotesMsg, CubeAndCosmosVotesPacket66{
+			RequestId:                123,
+			CubeAndCosmosVotesPacket: headers,
 		}); err != nil {
 			t.Errorf("test %d: headers mismatch: %v", i, err)
 		}
@@ -455,13 +455,13 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 			if origin := backend.chain.GetBlockByNumber(tt.query.Origin.Number); origin != nil {
 				tt.query.Origin.Hash, tt.query.Origin.Number = origin.Hash(), 0
 
-				p2p.Send(peer.app, GetCubeAndCosmosHeadersMsg, GetCubeAndCosmosHeadersPacket66{
-					RequestId:                     456,
-					GetCubeAndCosmosHeadersPacket: tt.query,
+				p2p.Send(peer.app, GetCubeAndCosmosVotesMsg, GetCubeAndCosmosVotesPacket66{
+					RequestId:                   456,
+					GetCubeAndCosmosVotesPacket: tt.query,
 				})
-				if err := p2p.ExpectMsg(peer.app, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
-					RequestId:                  456,
-					CubeAndCosmosHeadersPacket: headers,
+				if err := p2p.ExpectMsg(peer.app, CubeAndCosmosVotesMsg, CubeAndCosmosVotesPacket66{
+					RequestId:                456,
+					CubeAndCosmosVotesPacket: headers,
 				}); err != nil {
 					t.Errorf("test %d: headers mismatch: %v", i, err)
 				}

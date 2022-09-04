@@ -21,8 +21,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/crosschain"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -258,21 +256,19 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		// scenario will most often crop up in private and hackathon networks with
 		// degenerate connectivity, but it should be healthy for the mainnet too to
 		// more reliably update peers or the local TD state.
-		//h.BroadcastBlock(&core.BlockAndCosmosHeader{
-		//	Block: head,
-		//}, false)
-		if h.chain.Config().IsCrosschainCosmos(head.Number()) && crosschain.GetCrossChain() != nil {
-			sh := crosschain.GetCrossChain().GetSignedHeader(head.NumberU64(), head.Hash())
-			if sh != nil {
-				bah := &types.BlockAndCosmosHeader{
-					CosmosHeader: types.CosmosHeaderFromSignedHeader(sh),
-					Block:        head,
-				}
-				h.BroadcastBlockAndHeader(bah, false)
-				return nil
-			}
-		}
 		h.BroadcastBlock(head, false)
+		//if crosschain.GetCrossChain() != nil {
+		//	sigs := crosschain.GetCrossChain().GetSignatures(head.Hash())
+		//	if sigs != nil {
+		//		bah := &types.BlockAndCosmosVotes{
+		//			Block:      head,
+		//			Signatures: sigs,
+		//		}
+		//		h.BroadcastBlockAndCosmosVotes(bah, false)
+		//		return nil
+		//	}
+		//}
+		//h.BroadcastBlock(head, false)
 	}
 	return nil
 }

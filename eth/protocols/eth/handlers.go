@@ -127,27 +127,27 @@ func answerGetBlockHeadersQuery(backend Backend, query *GetBlockHeadersPacket, p
 	return headers
 }
 
-func handleGetCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+func handleGetCubeAndCosmosVotes66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the complex header query
-	var query GetCubeAndCosmosHeadersPacket66
+	var query GetCubeAndCosmosVotesPacket66
 	if err := msg.Decode(&query); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	response := answerGetCubeAndCosmosHeadersQuery(backend, query.GetCubeAndCosmosHeadersPacket, peer)
-	return peer.ReplyCubeAndCosmosHeaders(query.RequestId, response)
+	response := answerGetCubeAndCosmosVotesQuery(backend, query.GetCubeAndCosmosVotesPacket, peer)
+	return peer.ReplyCubeAndCosmosVotes(query.RequestId, response)
 }
 
-func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmosHeadersPacket, peer *Peer) []*types.CubeAndCosmosHeader {
+func answerGetCubeAndCosmosVotesQuery(backend Backend, query *GetCubeAndCosmosVotesPacket, peer *Peer) []*types.CubeAndCosmosVotes {
 	hashMode := query.Origin.Hash != (common.Hash{})
 	first := true
 	maxNonCanonical := uint64(100)
-	log.Info("answer GetCubeAndCosmosHeaders", "count", query.Amount, "fromhash", query.Origin, "skip", query.Skip, "reverse", query.Reverse, "id", peer.ID())
+	log.Info("answer GetCubeAndCosmosVotes", "count", query.Amount, "fromhash", query.Origin, "skip", query.Skip, "reverse", query.Reverse, "id", peer.ID())
 
 	// Gather headers until the fetch or network limits is reached
 	var (
 		bytes common.StorageSize
 		//headers []*types.Header
-		headers []*types.CubeAndCosmosHeader
+		headers []*types.CubeAndCosmosVotes
 		unknown bool
 		lookups int
 	)
@@ -173,17 +173,17 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 			break
 		}
 		log.Debug("query ori hash ", "hash", origin.Hash().Hex(), " number ", origin.Number.Uint64())
-		var signedHeader *ct.SignedHeader
+		var sigs []ct.CommitSig
 		if crosschain.GetCrossChain() != nil {
-			signedHeader = crosschain.GetCrossChain().GetSignedHeader(origin.Number.Uint64(), origin.Hash())
+			sigs = crosschain.GetCrossChain().GetSignatures(origin.Hash())
 		}
-		h := &types.CubeAndCosmosHeader{
-			Header:       origin,
-			CosmosHeader: types.CosmosHeaderFromSignedHeader(signedHeader),
+		h := &types.CubeAndCosmosVotes{
+			Header:     origin,
+			Signatures: sigs,
 		}
 		headers = append(headers, h)
 		// todo:
-		if signedHeader == nil {
+		if len(sigs) == 0 {
 			bytes += estHeaderSize
 		} else {
 			bytes += estHeaderSize * 2
@@ -237,7 +237,7 @@ func answerGetCubeAndCosmosHeadersQuery(backend Backend, query *GetCubeAndCosmos
 		}
 	}
 	if len(headers) != int(query.Amount) {
-		log.Error("answer GetCubeAndCosmosHeaders error", "required", query.Amount, "given", len(headers))
+		log.Error("answer GetCubeAndCosmosVotes error", "required", query.Amount, "given", len(headers))
 	}
 	return headers
 }
@@ -395,7 +395,7 @@ func handleNewBlock(backend Backend, msg Decoder, peer *Peer) error {
 func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
 	// Retrieve and decode the propagated block
 	log.Info("handleNewBlockAndHeader")
-	ann := new(NewBlockAndHeaderPacket)
+	ann := new(NewBlockAndCosmosVotesPacket)
 	if err := msg.Decode(ann); err != nil {
 		log.Info("handleNewBlockAndHeader failed", "err", err)
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
@@ -405,7 +405,7 @@ func handleNewBlockAndHeader(backend Backend, msg Decoder, peer *Peer) error {
 		return err
 	}
 
-	block := ann.BlockAndHeader.Block
+	block := ann.BlockAndVotes.Block
 	if hash := types.CalcUncleHash(block.Uncles()); hash != block.UncleHash() {
 		log.Warn("Propagated block has invalid uncles", "have", hash, "exp", block.UncleHash())
 		return nil // TODO(karalabe): return error eventually, but wait a few releases
@@ -439,14 +439,14 @@ func handleNewCosmosVote(backend Backend, msg Decoder, peer *Peer) error {
 
 func handleNewCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	// Retrieve and decode the propagated block
-	res := new(CubeAndCosmosHeadersPacket66)
+	res := new(CubeAndCosmosVotesPacket66)
 	if err := msg.Decode(res); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
-	requestTracker.Fulfil(peer.id, peer.version, CubeAndCosmosHeadersMsg, res.RequestId)
-	log.Info("handle CubeAndCosmosHeadersPacket66", "peer", peer.id)
+	requestTracker.Fulfil(peer.id, peer.version, CubeAndCosmosVotesMsg, res.RequestId)
+	log.Info("handle CubeAndCosmosVotesPacket66", "peer", peer.id)
 
-	return backend.Handle(peer, &res.CubeAndCosmosHeadersPacket)
+	return backend.Handle(peer, &res.CubeAndCosmosVotesPacket)
 }
 
 func handleBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {

@@ -50,6 +50,7 @@ const (
 	naChanSize  = 4096
 	njfChanSize = 4096
 	lcvChanSize = 4096
+	cvChanSize  = 4096
 )
 
 var (
@@ -115,18 +116,21 @@ type handler struct {
 	txFetcher    *fetcher.TxFetcher
 	peers        *peerSet
 
-	eventMux               *event.TypeMux
-	txsCh                  chan core.NewTxsEvent
-	txsSub                 event.Subscription
-	naCh                   chan core.NewAttestationEvent
-	naSub                  event.Subscription
-	njfCh                  chan core.NewJustifiedOrFinalizedBlockEvent
-	njfSub                 event.Subscription
-	lcvCh                  chan core.RequestCosmosVotesEvent
-	lcvSub                 event.Subscription
-	minedBlockSub          *event.TypeMuxSubscription
-	minedBlockAndHeaderSub *event.TypeMuxSubscription
-	cosmosVoteSub          *event.TypeMuxSubscription
+	eventMux                    *event.TypeMux
+	txsCh                       chan core.NewTxsEvent
+	txsSub                      event.Subscription
+	naCh                        chan core.NewAttestationEvent
+	naSub                       event.Subscription
+	njfCh                       chan core.NewJustifiedOrFinalizedBlockEvent
+	njfSub                      event.Subscription
+	lcvCh                       chan core.RequestCosmosVotesEvent
+	lcvSub                      event.Subscription
+	minedBlockSub               *event.TypeMuxSubscription
+	minedBlockAndCosmosVotesSub *event.TypeMuxSubscription
+	cosmosVoteSub               *event.TypeMuxSubscription
+	cvCh                        chan core.NewCosmosVoteEvent
+	cvSub                       event.Subscription
+	cosmosVotesListSub          *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
 
@@ -232,9 +236,9 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return n, err
 	}
 	if crosschain.GetCrossChain() != nil {
-		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, crosschain.GetCrossChain().GetSignedHeader, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, crosschain.GetCrossChain().GetSignatures, h.BroadcastBlockAndCosmosVotes, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
 	} else {
-		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, nil, h.BroadcastBlockAndHeader, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
+		h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, nil, h.BroadcastBlockAndCosmosVotes, heighter, nil, inserter, h.removePeer, h.chain.Config().ChaosContinuousInturn)
 	}
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
@@ -449,12 +453,18 @@ func (h *handler) Start(maxPeers int) {
 
 	// broadcast mined blocks
 	h.wg.Add(1)
-	h.minedBlockAndHeaderSub = h.eventMux.Subscribe(core.NewMinedBlockAndHeaderEvent{})
-	go h.minedBlockAndHeaderBroadcastLoop()
+	h.minedBlockAndCosmosVotesSub = h.eventMux.Subscribe(core.NewMinedBlockAndCosmosVotesEvent{})
+	go h.minedBlockAndCosmosVotesBroadcastLoop()
 
-	// broadcast cosmos vote
+	// broadcast cosmos vote from others
 	h.wg.Add(1)
 	h.cosmosVoteSub = h.eventMux.Subscribe(core.NewCosmosVoteEvent{})
+	go h.cosmosVoteBroadcastLoop()
+
+	// broadcast cosmos vote from self
+	h.wg.Add(1)
+	h.cvCh = make(chan core.NewCosmosVoteEvent, cvChanSize)
+	h.cvSub = h.chain.SubscribeNewCosmosVotesEvent(h.cvCh)
 	go h.newCosmosVoteBroadcastLoop()
 
 	// broadcast self-built attestation
@@ -481,12 +491,13 @@ func (h *handler) Start(maxPeers int) {
 }
 
 func (h *handler) Stop() {
-	h.txsSub.Unsubscribe()                 // quits txBroadcastLoop
-	h.minedBlockSub.Unsubscribe()          // quits blockBroadcastLoop
-	h.minedBlockAndHeaderSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
-	h.cosmosVoteSub.Unsubscribe()          // quits newCosmosVoteBroadcastLoop
-	h.naSub.Unsubscribe()                  // quits newAttestationBroadcastLoop
-	h.njfSub.Unsubscribe()                 // quits newJustifiedOrFinalizedBlockBroadcastLoop
+	h.txsSub.Unsubscribe()                      // quits txBroadcastLoop
+	h.minedBlockSub.Unsubscribe()               // quits blockBroadcastLoop
+	h.minedBlockAndCosmosVotesSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
+	h.cosmosVoteSub.Unsubscribe()               // quits newCosmosVoteBroadcastLoop
+	h.cvSub.Unsubscribe()
+	h.naSub.Unsubscribe()  // quits newAttestationBroadcastLoop
+	h.njfSub.Unsubscribe() // quits newJustifiedOrFinalizedBlockBroadcastLoop
 
 	// Quit chainSync and txsync64.
 	// After this is done, no new peers will be accepted.
@@ -542,11 +553,11 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastBlockAndHeader(blockAndHeader *types.BlockAndCosmosHeader, propagate bool) {
+func (h *handler) BroadcastBlockAndCosmosVotes(blockAndHeader *types.BlockAndCosmosVotes, propagate bool) {
 	block := blockAndHeader.Block
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
-	log.Info("Broadcast BlockAndHeader", "peers", len(peers), "number", block.NumberU64(), "hash", block.Hash())
+	log.Info("Broadcast BlockAndVotes", "peers", len(peers), "number", block.NumberU64(), "hash", block.Hash())
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
@@ -691,18 +702,18 @@ func (h *handler) minedBroadcastLoop() {
 }
 
 // minedBroadcastLoop sends mined blocks to connected peers.
-func (h *handler) minedBlockAndHeaderBroadcastLoop() {
+func (h *handler) minedBlockAndCosmosVotesBroadcastLoop() {
 	defer h.wg.Done()
 
-	for obj := range h.minedBlockAndHeaderSub.Chan() {
-		if ev, ok := obj.Data.(core.NewMinedBlockAndHeaderEvent); ok {
-			h.BroadcastBlockAndHeader(ev.BlockAndHeader, true)  // First propagate block to peers
-			h.BroadcastBlockAndHeader(ev.BlockAndHeader, false) // Only then announce to the rest
+	for obj := range h.minedBlockAndCosmosVotesSub.Chan() {
+		if ev, ok := obj.Data.(core.NewMinedBlockAndCosmosVotesEvent); ok {
+			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, true)  // First propagate block to peers
+			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, false) // Only then announce to the rest
 		}
 	}
 }
 
-func (h *handler) newCosmosVoteBroadcastLoop() {
+func (h *handler) cosmosVoteBroadcastLoop() {
 	defer h.wg.Done()
 
 	for obj := range h.cosmosVoteSub.Chan() {
@@ -756,6 +767,18 @@ func (h *handler) requestCosmosVotesBroadcastLoop() {
 		case lcv := <-h.lcvCh:
 			h.BroadcastGetCosmosVotes(lcv.Idxs)
 		case <-h.lcvSub.Err():
+			return
+		}
+	}
+}
+
+func (h *handler) newCosmosVoteBroadcastLoop() {
+	defer h.wg.Done()
+	for {
+		select {
+		case cv := <-h.cvCh:
+			h.BroadcastCosmosVote(cv.CosmosVote)
+		case <-h.cvSub.Err():
 			return
 		}
 	}

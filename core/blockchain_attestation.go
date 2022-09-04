@@ -554,6 +554,10 @@ func (bc *BlockChain) BroadcastGetCosmosVotesFromOtherNodes(idxs *types.CosmosLa
 	bc.requestCosmosVotesFeed.Send(RequestCosmosVotesEvent{idxs})
 }
 
+func (bc *BlockChain) BroadcastCosmosVotesToOtherNodes(vote *types.CosmosVote) {
+	bc.newCosmosVoteFeed.Send(NewCosmosVoteEvent{CosmosVote: vote})
+}
+
 func (bc *BlockChain) CalculateCurrentEpochIndex(number uint64) uint64 {
 	return number / bc.chainConfig.Chaos.Epoch
 }

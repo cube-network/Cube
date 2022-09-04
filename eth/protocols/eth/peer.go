@@ -312,21 +312,21 @@ func (p *Peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 }
 
 // SendNewBlockAndHeader propagates an entire block to a remote peer.
-func (p *Peer) SendNewBlockAndHeader(blockHeader *types.BlockAndCosmosHeader, td *big.Int) error {
+func (p *Peer) SendNewBlockAndHeader(blockHeader *types.BlockAndCosmosVotes, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
 	block := blockHeader.Block
 	p.knownBlocks.Add(block.Hash())
 	p.knownCosmosVotes.Add(block.Hash())
 	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr(), "id", p.ID())
-	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndHeaderPacket{
-		BlockAndHeader: blockHeader,
-		TD:             td,
+	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndCosmosVotesPacket{
+		BlockAndVotes: blockHeader,
+		TD:            td,
 	})
 }
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *types.BlockAndCosmosHeader, td *big.Int) {
+func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *types.BlockAndCosmosVotes, td *big.Int) {
 	block := blockHeader.Block
 	select {
 	case p.queuedBlockAndHeaders <- &blockAndHeaderPropagation{blockAndHeader: blockHeader, td: td}:
@@ -402,10 +402,10 @@ func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
 	})
 }
 
-func (p *Peer) ReplyCubeAndCosmosHeaders(id uint64, headers []*types.CubeAndCosmosHeader) error {
-	return p2p.Send(p.rw, CubeAndCosmosHeadersMsg, CubeAndCosmosHeadersPacket66{
-		RequestId:                  id,
-		CubeAndCosmosHeadersPacket: headers,
+func (p *Peer) ReplyCubeAndCosmosVotes(id uint64, headers []*types.CubeAndCosmosVotes) error {
+	return p2p.Send(p.rw, CubeAndCosmosVotesMsg, CubeAndCosmosVotesPacket66{
+		RequestId:                id,
+		CubeAndCosmosVotesPacket: headers,
 	})
 }
 
@@ -465,10 +465,10 @@ func (p *Peer) RequestOneTwoHeaders(hash common.Hash) error {
 	p.Log().Debug("RequestOneTwoHeaders", "hash", hash)
 	id := rand.Uint64()
 
-	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
-	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
 		RequestId: id,
-		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
 			Origin:  HashOrNumber{Hash: hash},
 			Amount:  uint64(1),
 			Skip:    uint64(0),
@@ -499,10 +499,10 @@ func (p *Peer) RequestTwoHeadersByHash(origin common.Hash, amount int, skip int,
 	p.Log().Debug("RequestTwoHeadersByHash", "count", amount, "fromhash", origin, "skip", skip, "reverse", reverse, "id", p.ID())
 	id := rand.Uint64()
 
-	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
-	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
 		RequestId: id,
-		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
 			Origin:  HashOrNumber{Hash: origin},
 			Amount:  uint64(amount),
 			Skip:    uint64(skip),
@@ -533,10 +533,10 @@ func (p *Peer) RequestTwoHeadersByNumber(origin uint64, amount int, skip int, re
 	p.Log().Debug("RequestTwoHeadersByNumber", "count", amount, "fromnum", origin, "skip", skip, "reverse", reverse)
 	id := rand.Uint64()
 
-	requestTracker.Track(p.id, p.version, GetCubeAndCosmosHeadersMsg, CubeAndCosmosHeadersMsg, id)
-	return p2p.Send(p.rw, GetCubeAndCosmosHeadersMsg, &GetCubeAndCosmosHeadersPacket66{
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
 		RequestId: id,
-		GetCubeAndCosmosHeadersPacket: &GetCubeAndCosmosHeadersPacket{
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
 			Origin:  HashOrNumber{Number: origin},
 			Amount:  uint64(amount),
 			Skip:    uint64(skip),

@@ -707,14 +707,13 @@ func (w *worker) resultLoop() {
 			// Broadcast the block and announce chain insertion event
 
 			if w.chainConfig.IsCrosschainCosmos(block.Header().Number) {
-				cosmosHeader := crosschain.GetCrossChain().GetSignedHeader(block.NumberU64(), hash)
-				if cosmosHeader != nil {
-					log.Info("BroadcastBlockAndHeader", "number", block.NumberU64(), "hash", hash)
-					w.mux.Post(core.NewMinedBlockAndHeaderEvent{&types.BlockAndCosmosHeader{block,
-						types.CosmosHeaderFromSignedHeader(cosmosHeader)}})
-				} else {
-					log.Warn("BroadcastBlockAndHeader is nil ", "number", block.NumberU64(), "hash", hash)
-				}
+				sigs := crosschain.GetCrossChain().GetSignatures(hash)
+				//if cosmosHeader != nil {
+				log.Info("BroadcastBlockAndCosmosVotes", "number", block.NumberU64(), "hash", hash)
+				w.mux.Post(core.NewMinedBlockAndCosmosVotesEvent{BlockAndVotes: &types.BlockAndCosmosVotes{
+					Block:      block,
+					Signatures: sigs,
+				}})
 			} else {
 				log.Info("BroadcastBlock", "number", block.NumberU64(), "hash", block.Hash())
 				w.mux.Post(core.NewMinedBlockEvent{block})

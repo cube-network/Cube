@@ -27,13 +27,20 @@ type CrossChain interface {
 	FreeExecutor(exec vm.CrossChain)
 	Seal(exec vm.CrossChain)
 
-	EventHeader(header *types.Header)
+	EventHeader(header *types.Header) *types.CosmosVote
 
-	// TODO remove cosmos info
-	GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
-	HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
+	//// TODO remove cosmos info
+	//GetSignedHeader(height uint64, hash common.Hash) *ct.SignedHeader
+	//HandleHeader(h *types.Header, header *ct.SignedHeader) (*types.CosmosVote, error)
+
+	GetSignatures(hash common.Hash) []ct.CommitSig
+	HandleSignatures(h *types.Header, sigs []ct.CommitSig) error //(*types.CosmosVote, error)
+
+	//SignHeader(h *types.Header) (*types.CosmosVote, error)
 	HandleVote(vote *types.CosmosVote) error
-	CheckVotes(height uint64, hash common.Hash, h *types.Header) *types.CosmosLackedVoteIndexs //(*types.CosmosVotesList, *types.CosmosLackedVoteIndexs)
+
+	// collect cosmos votes
+	CheckVotes(height uint64, hash common.Hash) *types.CosmosLackedVoteIndexs //(*types.CosmosVotesList, *types.CosmosLackedVoteIndexs)
 	HandleVotesQuery(idxs *types.CosmosLackedVoteIndexs) (*types.CosmosVotesList, error)
 	HandleVotesList(votes *types.CosmosVotesList) error
 }

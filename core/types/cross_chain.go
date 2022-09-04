@@ -11,9 +11,10 @@ import (
 	ct "github.com/tendermint/tendermint/types"
 )
 
-type BlockAndCosmosHeader struct {
-	Block        *Block
-	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
+type BlockAndCosmosVotes struct {
+	Block      *Block
+	Signatures []ct.CommitSig `json:"signatures"`
+	//CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
 }
 
 type CosmosHeader struct {
@@ -21,9 +22,10 @@ type CosmosHeader struct {
 	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
 }
 
-type CubeAndCosmosHeader struct {
-	Header       *Header
-	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
+type CubeAndCosmosVotes struct {
+	Header     *Header
+	Signatures []ct.CommitSig `json:"signatures"`
+	//CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
 }
 
 type CosmosVote struct {

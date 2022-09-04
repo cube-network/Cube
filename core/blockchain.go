@@ -185,6 +185,7 @@ type BlockChain struct {
 	newAttestationFeed               event.Feed
 	newJustifiedOrFinalizedBlockFeed event.Feed
 	requestCosmosVotesFeed           event.Feed
+	newCosmosVoteFeed                event.Feed
 	scope                            event.SubscriptionScope
 	genesisBlock                     *types.Block
 
@@ -1430,7 +1431,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	bc.futureBlocks.Remove(block.Hash())
 
 	log.Debug("ChainHeadEvent", "number", block.Header().Number.Uint64())
-	crosschain.GetCrossChain().EventHeader(block.Header())
+	vote := crosschain.GetCrossChain().EventHeader(block.Header())
+	if vote != nil {
+		// broadcast cosmos vote
+		bc.BroadcastCosmosVotesToOtherNodes(vote)
+	}
 
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})

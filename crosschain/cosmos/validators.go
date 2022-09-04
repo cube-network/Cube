@@ -258,7 +258,7 @@ func (vmgr *ValidatorsMgr) getAddrValMap(header *et.Header) map[common.Address]*
 func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Address]*types.Validator {
 	header := vmgr.getHeaderByHash(h.ParentHash)
 	if header == nil {
-		log.Warn("getAddrValMap header is nil ", h.ParentHash.Hex(), strconv.Itoa(int(header.Number.Int64())))
+		log.Warn("getAddrValMap header is nil ", h.ParentHash.Hex(), strconv.Itoa(int(h.Number.Int64())))
 		return nil
 	}
 

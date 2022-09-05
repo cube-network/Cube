@@ -567,10 +567,10 @@ func (s *Ethereum) StartMining(threads int) error {
 				return fmt.Errorf("signer missing: %v", err)
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
-			crosschain.GetCrossChain().SetSignTx(wallet.SignTx)
+			// crosschain.GetCrossChain().SetSignTx(wallet.SignTx)
 		}
 		crosschain.GetCrossChain().SetCoinbase(eb)
-		crosschain.GetCrossChain().SetFuncs(s.txPool.Nonce, s.txPool.GasPrice, s.txPool.AddLocal)
+		// crosschain.GetCrossChain().SetFuncs(s.txPool.Nonce, s.txPool.GasPrice, s.txPool.AddLocal)
 
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.

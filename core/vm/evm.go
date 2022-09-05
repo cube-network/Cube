@@ -207,10 +207,10 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	p, isPrecompile := evm.precompile(addr)
 
 	isCrossChain := false
-	isRegisterValidator := false
+	// isRegisterValidator := false
 	if evm.Context.Crosschain != nil {
 		isCrossChain = evm.Context.Crosschain.IsCrossChainContract(addr)
-		isRegisterValidator = evm.Context.Crosschain.IsRegisterValidatorContract(addr)
+		// isRegisterValidator = evm.Context.Crosschain.IsRegisterValidatorContract(addr)
 	}
 
 	if !evm.StateDB.Exist(addr) {
@@ -251,8 +251,8 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
 	} else if isCrossChain {
 		ret, gas, err = evm.Context.Crosschain.RunCrossChainContract(evm, input, gas)
-	} else if isRegisterValidator {
-		ret, gas, err = evm.Context.Crosschain.RunRegisterValidatorContract(evm, input, gas)
+		// } else if isRegisterValidator {
+		// 	ret, gas, err = evm.Context.Crosschain.RunRegisterValidatorContract(evm, input, gas)
 	} else {
 		// Initialise a new contract and set the code that is to be used by the EVM.
 		// The contract is a scoped environment for this execution context only.

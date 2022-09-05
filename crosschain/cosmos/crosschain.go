@@ -88,20 +88,20 @@ func (c *Cosmos) Init(datadir string,
 	})
 }
 
-func (c *Cosmos) SetFuncs(getNonce cccommon.GetNonceFn, getPrice cccommon.GetPriceFn, addLocalTx cccommon.AddLocalTxFn) {
-	c.chain.valsMgr.getNonce = getNonce
-	c.chain.valsMgr.getPrice = getPrice
-	c.chain.valsMgr.addLocalTx = addLocalTx
-}
+// func (c *Cosmos) SetFuncs(getNonce cccommon.GetNonceFn, getPrice cccommon.GetPriceFn, addLocalTx cccommon.AddLocalTxFn) {
+// 	c.chain.valsMgr.getNonce = getNonce
+// 	c.chain.valsMgr.getPrice = getPrice
+// 	c.chain.valsMgr.addLocalTx = addLocalTx
+// }
 
 func (c *Cosmos) SetCoinbase(addr common.Address) {
 	c.coinbase = addr
 	c.chain.cubeAddr = addr
 }
 
-func (c *Cosmos) SetSignTx(signTx cccommon.SignTxFn) {
-	c.chain.valsMgr.signTx = signTx
-}
+// func (c *Cosmos) SetSignTx(signTx cccommon.SignTxFn) {
+// 	c.chain.valsMgr.signTx = signTx
+// }
 
 func (c *Cosmos) APIs() []rpc.API {
 	c.callmu.Lock()

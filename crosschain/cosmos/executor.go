@@ -126,9 +126,9 @@ func (c *Executor) IsCrossChainContract(addr common.Address) bool {
 	return addr.String() == system.CrossChainCosmosContract.String()
 }
 
-func (c *Executor) IsRegisterValidatorContract(addr common.Address) bool {
-	return addr.String() == system.AddrToPubkeyMapContract.String()
-}
+// func (c *Executor) IsRegisterValidatorContract(addr common.Address) bool {
+// 	return addr.String() == system.AddrToPubkeyMapContract.String()
+// }
 
 func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
 	gasCost := c.RequiredGas(input)
@@ -140,15 +140,15 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 	return output, suppliedGas, err
 }
 
-func (c *Executor) RunRegisterValidatorContract(evm *vm.EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
-	gasCost := c.RequiredGas(input)
-	if suppliedGas < gasCost {
-		return nil, 0, vm.ErrOutOfGas
-	}
-	suppliedGas -= gasCost
-	output, err := c.RegisterValidator(evm, input)
-	return output, suppliedGas, err
-}
+// func (c *Executor) RunRegisterValidatorContract(evm *vm.EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error) {
+// 	gasCost := c.RequiredGas(input)
+// 	if suppliedGas < gasCost {
+// 		return nil, 0, vm.ErrOutOfGas
+// 	}
+// 	suppliedGas -= gasCost
+// 	output, err := c.RegisterValidator(evm, input)
+// 	return output, suppliedGas, err
+// }
 
 func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 	// log.Debug(string(debug.Stack()))
@@ -235,14 +235,9 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	c.app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: c.config.ChainID.String(), InitialHeight: init_block_height})
 	c.app.mm.InitGenesis(c.app.GetContextForDeliverTx([]byte{}), c.codec.Marshaler, genesisState)
 
-	//c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
+	c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
 
-	//chainid := new(big.Int)
-	//chainid.SetString(c.chain.ChainID, 10)
-	//c.chain.valsMgr.registerValidator(c.coinbase, c.chain.privValidator, chainid)
-	c.chain.generateRegisterValidatorTx(c.header)
-
-	// c.is_start_crosschain = true
+	// c.chain.generateRegisterValidatorTx(c.header)
 }
 
 // TODO get cube block header instead
@@ -385,30 +380,30 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Executor) RegisterValidator(evm *vm.EVM, input []byte) ([]byte, error) {
-	//log.Info("before unpack", "input", string(input))
+// func (c *Executor) RegisterValidator(evm *vm.EVM, input []byte) ([]byte, error) {
+// 	//log.Info("before unpack", "input", string(input))
 
-	// TODO estimate gas ??
-	_, msg, err := UnpackInput(input)
-	if err != nil {
-		log.Warn("tx unpack input fail", "err", err.Error())
-		return nil, vm.ErrExecutionReverted
-	}
-	//log.Info("after unpack", "msg", msg)
+// 	// TODO estimate gas ??
+// 	_, msg, err := UnpackInput(input)
+// 	if err != nil {
+// 		log.Warn("tx unpack input fail", "err", err.Error())
+// 		return nil, vm.ErrExecutionReverted
+// 	}
+// 	//log.Info("after unpack", "msg", msg)
 
-	msgBytes, err := hex.DecodeString(msg)
-	if err != nil {
-		log.Warn("tx decode arg fail", "err", err.Error())
-		return nil, vm.ErrExecutionReverted
-	}
-	//log.Info("after decode", "msgBytes", string(msgBytes))
+// 	msgBytes, err := hex.DecodeString(msg)
+// 	if err != nil {
+// 		log.Warn("tx decode arg fail", "err", err.Error())
+// 		return nil, vm.ErrExecutionReverted
+// 	}
+// 	//log.Info("after decode", "msgBytes", string(msgBytes))
 
-	c.chain.valsMgr.doRegisterValidator(evm, msgBytes)
+// 	c.chain.valsMgr.doRegisterValidator(evm, msgBytes)
 
-	txMsgData := &sdk.TxMsgData{}
-	data, _ := proto.Marshal(txMsgData)
-	return data, nil
-}
+// 	txMsgData := &sdk.TxMsgData{}
+// 	data, _ := proto.Marshal(txMsgData)
+// 	return data, nil
+// }
 
 func (app *Executor) GetMsgs(argbin []byte) ([]sdk.Msg, error) {
 	var body tx.TxBody

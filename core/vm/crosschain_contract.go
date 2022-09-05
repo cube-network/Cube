@@ -6,7 +6,7 @@ import (
 
 type CrossChain interface {
 	IsCrossChainContract(addr common.Address) bool
-	IsRegisterValidatorContract(addr common.Address) bool
+	// IsRegisterValidatorContract(addr common.Address) bool
 	RunCrossChainContract(evm *EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error)
-	RunRegisterValidatorContract(evm *EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error)
+	// RunRegisterValidatorContract(evm *EVM, input []byte, suppliedGas uint64) (ret []byte, remainingGas uint64, err error)
 }

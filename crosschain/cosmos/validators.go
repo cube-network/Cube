@@ -5,9 +5,7 @@ import (
 	"math/big"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/system"
 	"github.com/ethereum/go-ethereum/core/state"
 	et "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -81,48 +79,57 @@ func NewValidatorsMgr(ethdb ethdb.Database, blockContext vm.BlockContext, config
 	return valMgr
 }
 
-//func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) error {
-//	var vals []Validator
-//	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &vals); err != nil {
-//		panic(err)
-//	}
-//
-//	validators := make([]*types.Validator, len(vals))
-//	vmgr.AddrValMap = make(map[common.Address]*types.Validator, len(vals))
-//	//ctx := sdk.Context{}.WithEvm(evm)
-//	for i, val := range vals {
-//		sVal := &SimplifiedValidator{PubKey: val.PubKey, VotingPower: val.VotingPower}
-//		valBytes, err := tmjson.Marshal(sVal)
-//		if err != nil {
-//			panic("Marshal validator failed")
-//		}
-//		log.Info("Marshal", "result", string(valBytes))
-//
-//		_, err = systemcontract.RegisterValidator(evm, val.CubeAddr, string(valBytes))
-//		if err != nil {
-//			log.Error("RegisterValidator failed", "err", err)
-//		}
-//		result, err := systemcontract.GetValidator(evm, val.CubeAddr)
-//		if err != nil {
-//			log.Error("GetValidator failed", "err", err)
-//		}
-//		log.Info("GetValidator", "result", result)
-//		var tmpVal types.Validator
-//		err = tmjson.Unmarshal([]byte(result), &tmpVal)
-//		if err != nil {
-//			panic("Unmarshal validator failed")
-//		}
-//		if !tmpVal.PubKey.Equals(val.PubKey) {
-//			panic("Conversion failed")
-//		}
-//
-//		tVal := types.NewValidator(val.PubKey, val.VotingPower)
-//		validators[i] = tVal
-//		vmgr.AddrValMap[val.CubeAddr] = tVal
-//	}
-//
-//	return nil
-//}
+func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) error {
+	var ValidatorsConfig string
+	if vmgr.config.ChainID.Cmp(params.MainnetChainConfig.ChainID) == 0 {
+		ValidatorsConfig = MainNetValidatorsConfig
+	} else if vmgr.config.ChainID.Cmp(params.TestnetChainConfig.ChainID) == 0 {
+		ValidatorsConfig = TestNetValidatorsConfig
+	} else {
+		ValidatorsConfig = TestFourValidatorsConfig
+	}
+
+	var vals []Validator
+	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &vals); err != nil {
+		panic(err)
+	}
+
+	validators := make([]*types.Validator, len(vals))
+	AddrValMap := make(map[common.Address]*types.Validator, len(vals))
+	//ctx := sdk.Context{}.WithEvm(evm)
+	for i, val := range vals {
+		sVal := &SimplifiedValidator{PubKey: val.PubKey, VotingPower: val.VotingPower}
+		valBytes, err := tmjson.Marshal(sVal)
+		if err != nil {
+			panic("Marshal validator failed")
+		}
+		log.Info("Marshal", "result", string(valBytes))
+
+		_, err = systemcontract.RegisterValidator(evm, val.CubeAddr, string(valBytes))
+		if err != nil {
+			log.Error("RegisterValidator failed", "err", err)
+		}
+		result, err := systemcontract.GetValidator(evm, val.CubeAddr)
+		if err != nil {
+			log.Error("GetValidator failed", "err", err)
+		}
+		log.Info("GetValidator", "result", result)
+		var tmpVal types.Validator
+		err = tmjson.Unmarshal([]byte(result), &tmpVal)
+		if err != nil {
+			panic("Unmarshal validator failed")
+		}
+		if !tmpVal.PubKey.Equals(val.PubKey) {
+			panic("Conversion failed")
+		}
+
+		tVal := types.NewValidator(val.PubKey, val.VotingPower)
+		validators[i] = tVal
+		AddrValMap[val.CubeAddr] = tVal
+	}
+
+	return nil
+}
 
 func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
 	if height%200 != 199 {
@@ -383,108 +390,108 @@ func getAddressesFromHeader(h *et.Header, isCosmosEnable bool) []common.Address 
 	return addresses
 }
 
-func (vmgr *ValidatorsMgr) registerValidator(cubeAddr common.Address, privVal *privval.FilePV, chainID *big.Int, header *et.Header) {
-	// todo: check whether this node is registered
-	if vmgr.getValidator(cubeAddr, header) != nil {
-		return
-	}
+// func (vmgr *ValidatorsMgr) registerValidator(cubeAddr common.Address, privVal *privval.FilePV, chainID *big.Int, header *et.Header) {
+// 	// todo: check whether this node is registered
+// 	if vmgr.getValidator(cubeAddr, header) != nil {
+// 		return
+// 	}
 
-	if vmgr.getNonce == nil || vmgr.getPrice == nil || vmgr.signTx == nil || vmgr.addLocalTx == nil {
-		log.Error("Basic functions are missing")
-		return
-	}
+// 	if vmgr.getNonce == nil || vmgr.getPrice == nil || vmgr.signTx == nil || vmgr.addLocalTx == nil {
+// 		log.Error("Basic functions are missing")
+// 		return
+// 	}
 
-	log.Info("generate register validator tx", "cubeAddr", cubeAddr.Hex(), "cosmosAddr", privVal.GetAddress().String())
+// 	log.Info("generate register validator tx", "cubeAddr", cubeAddr.Hex(), "cosmosAddr", privVal.GetAddress().String())
 
-	// make cosmos tx
-	pubkey, _ := privVal.GetPubKey()
-	sVal := &MsgRegisterValidator{Address: cubeAddr.Bytes(), PubKey: pubkey, VotingPower: 100}
-	valBytes, err := tmjson.Marshal(sVal)
-	if err != nil {
-		log.Error("Marshal validator failed", "err", err)
-		return
-	}
+// 	// make cosmos tx
+// 	pubkey, _ := privVal.GetPubKey()
+// 	sVal := &MsgRegisterValidator{Address: cubeAddr.Bytes(), PubKey: pubkey, VotingPower: 100}
+// 	valBytes, err := tmjson.Marshal(sVal)
+// 	if err != nil {
+// 		log.Error("Marshal validator failed", "err", err)
+// 		return
+// 	}
 
-	//msg := &MsgRegisterValidator{
-	//	address: cubeAddr.Bytes(), // common.BytesToAddress()
-	//	pubkey:  string(valBytes),
-	//}
-	//msgBytes, err := json.Marshal(msg)
-	//if err != nil {
-	//	log.Error("Marshal msg failed", "err", err)
-	//}
-	//log.Info("after marshal", hex.EncodeToString(valBytes))
+// 	//msg := &MsgRegisterValidator{
+// 	//	address: cubeAddr.Bytes(), // common.BytesToAddress()
+// 	//	pubkey:  string(valBytes),
+// 	//}
+// 	//msgBytes, err := json.Marshal(msg)
+// 	//if err != nil {
+// 	//	log.Error("Marshal msg failed", "err", err)
+// 	//}
+// 	//log.Info("after marshal", hex.EncodeToString(valBytes))
 
-	// make geth tx
-	nonce := vmgr.getNonce(cubeAddr)
+// 	// make geth tx
+// 	nonce := vmgr.getNonce(cubeAddr)
 
-	value := big.NewInt(0) // in wei (0 eth)
-	gasPrice := vmgr.getPrice()
+// 	value := big.NewInt(0) // in wei (0 eth)
+// 	gasPrice := vmgr.getPrice()
 
-	toAddress := system.AddrToPubkeyMapContract
+// 	toAddress := system.AddrToPubkeyMapContract
 
-	data, _ := PackInput("", hex.EncodeToString(valBytes))
-	//log.Info("after pack", "tx.data", string(data))
-	//gasLimit, err := cc.Client.EstimateGas(context.Background(), ethereum.CallMsg{
-	//	To:   &toAddress,
-	//	Data: data,
-	//})
-	//if err != nil {
-	//	return //nil, err
-	//}
-	gasLimit := uint64(3000000)
+// 	data, _ := PackInput("", hex.EncodeToString(valBytes))
+// 	//log.Info("after pack", "tx.data", string(data))
+// 	//gasLimit, err := cc.Client.EstimateGas(context.Background(), ethereum.CallMsg{
+// 	//	To:   &toAddress,
+// 	//	Data: data,
+// 	//})
+// 	//if err != nil {
+// 	//	return //nil, err
+// 	//}
+// 	gasLimit := uint64(3000000)
 
-	log.Debug("NewTransaction", "gasPrice", gasPrice.Int64())
-	tx := et.NewTransaction(nonce, toAddress, value, gasLimit, gasPrice, data)
+// 	log.Debug("NewTransaction", "gasPrice", gasPrice.Int64())
+// 	tx := et.NewTransaction(nonce, toAddress, value, gasLimit, gasPrice, data)
 
-	// sign tx
-	signedTx, err := vmgr.signTx(accounts.Account{Address: cubeAddr}, tx, chainID)
-	if err != nil {
-		log.Error("signTx failed", "err", err)
-		return //nil, err
-	}
+// 	// sign tx
+// 	signedTx, err := vmgr.signTx(accounts.Account{Address: cubeAddr}, tx, chainID)
+// 	if err != nil {
+// 		log.Error("signTx failed", "err", err)
+// 		return //nil, err
+// 	}
 
-	// put tx into tx pool
-	if err := vmgr.addLocalTx(signedTx); err != nil {
-		log.Error("addLocalTx failed", "err", err)
-	}
-}
+// 	// put tx into tx pool
+// 	if err := vmgr.addLocalTx(signedTx); err != nil {
+// 		log.Error("addLocalTx failed", "err", err)
+// 	}
+// }
 
-func (vmgr *ValidatorsMgr) doRegisterValidator(evm *vm.EVM, data []byte) {
-	log.Info("doRegisterValidator")
+// func (vmgr *ValidatorsMgr) doRegisterValidator(evm *vm.EVM, data []byte) {
+// 	log.Info("doRegisterValidator")
 
-	var rvMsg MsgRegisterValidator
-	if err := tmjson.Unmarshal(data, &rvMsg); err != nil {
-		log.Error("unmarshal data failed", "err", err)
-		return
-	}
+// 	var rvMsg MsgRegisterValidator
+// 	if err := tmjson.Unmarshal(data, &rvMsg); err != nil {
+// 		log.Error("unmarshal data failed", "err", err)
+// 		return
+// 	}
 
-	sVal := &SimplifiedValidator{PubKey: rvMsg.PubKey, VotingPower: rvMsg.VotingPower}
-	valBytes, err := tmjson.Marshal(sVal)
-	if err != nil {
-		panic("Marshal validator failed")
-	}
+// 	sVal := &SimplifiedValidator{PubKey: rvMsg.PubKey, VotingPower: rvMsg.VotingPower}
+// 	valBytes, err := tmjson.Marshal(sVal)
+// 	if err != nil {
+// 		panic("Marshal validator failed")
+// 	}
 
-	addr := common.BytesToAddress(rvMsg.Address)
-	_, err = systemcontract.RegisterValidator(evm, addr, string(valBytes))
-	if err != nil {
-		log.Error("RegisterValidator failed", "err", err)
-	}
-	result, err := systemcontract.GetValidator(evm, addr)
-	if err != nil {
-		log.Error("GetValidator failed", "err", err)
-	}
-	log.Info("GetValidator", "result", result)
-	var tmpVal types.Validator
-	err = tmjson.Unmarshal([]byte(result), &tmpVal)
-	if err != nil {
-		log.Error("Unmarshal validator failed")
-	}
-	if !tmpVal.PubKey.Equals(rvMsg.PubKey) {
-		panic("Conversion failed")
-	}
-	log.Info("register validator succeed", "cubeAddr", common.BytesToAddress(rvMsg.Address).Hex(), "cosmosAddr", tmpVal.PubKey.Address().String())
+// 	addr := common.BytesToAddress(rvMsg.Address)
+// 	_, err = systemcontract.RegisterValidator(evm, addr, string(valBytes))
+// 	if err != nil {
+// 		log.Error("RegisterValidator failed", "err", err)
+// 	}
+// 	result, err := systemcontract.GetValidator(evm, addr)
+// 	if err != nil {
+// 		log.Error("GetValidator failed", "err", err)
+// 	}
+// 	log.Info("GetValidator", "result", result)
+// 	var tmpVal types.Validator
+// 	err = tmjson.Unmarshal([]byte(result), &tmpVal)
+// 	if err != nil {
+// 		log.Error("Unmarshal validator failed")
+// 	}
+// 	if !tmpVal.PubKey.Equals(rvMsg.PubKey) {
+// 		panic("Conversion failed")
+// 	}
+// 	log.Info("register validator succeed", "cubeAddr", common.BytesToAddress(rvMsg.Address).Hex(), "cosmosAddr", tmpVal.PubKey.Address().String())
 
-	// tVal := types.NewValidator(rvMsg.PubKey, rvMsg.VotingPower)
-	// vmgr.AddrValMap[addr] = tVal
-}
+// 	// tVal := types.NewValidator(rvMsg.PubKey, rvMsg.VotingPower)
+// 	// vmgr.AddrValMap[addr] = tVal
+// }

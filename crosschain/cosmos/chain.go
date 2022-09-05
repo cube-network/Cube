@@ -89,17 +89,17 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	return c
 }
 
-func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {
-	if len(c.cubeAddr.Bytes()) > 0 {
-		chainid := new(big.Int)
-		chainid.SetString(c.ChainID, 10)
+// func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {
+// 	if len(c.cubeAddr.Bytes()) > 0 {
+// 		chainid := new(big.Int)
+// 		chainid.SetString(c.ChainID, 10)
 
-		p := c.getHeaderByHash(header.ParentHash)
-		if p != nil {
-			c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid, p)
-		}
-	}
-}
+// 		p := c.getHeaderByHash(header.ParentHash)
+// 		if p != nil {
+// 			c.valsMgr.registerValidator(c.cubeAddr, c.privValidator, chainid, p)
+// 		}
+// 	}
+// }
 
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *et.CosmosVote) { //(*ct.SignedHeader, int, ct.CommitSig) {
 	log.Info("makeCosmosSignedHeader", "height", strconv.Itoa(int(h.Number.Int64())), "hash", h.Hash())
@@ -118,16 +118,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		log.Warn("makeCosmosSignedHeader getValidator is nil")
 		return nil, nil //, -1, ct.CommitSig{}
 	}
-	//pubkey, _ := c.privValidator.GetPubKey()
-	//addr := pubkey.Address()
+	
 	addr := val.Address
-	//c.valsMgr.updateValidators(h, h.Number.Int64())
-
-	// TODO 200 check?
-	// v := c.valsMgr.getValidator(c.cubeAddr, h)
-	// if v == nil {
-	// 	c.generateRegisterValidatorTx(h)
-	// }
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
 	var valsetHash []byte

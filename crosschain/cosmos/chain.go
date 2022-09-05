@@ -103,11 +103,10 @@ func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {
 
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *et.CosmosVote) { //(*ct.SignedHeader, int, ct.CommitSig) {
 	log.Info("makeCosmosSignedHeader", "height", strconv.Itoa(int(h.Number.Int64())), "hash", h.Hash())
-	// TODO find_cosmos_parent_header(h.parent_hash) {return c.cube_cosmos_header[parent_hash]}
 	// todo: cannot use header to update validators as validators are only updated every Epoch length to reset votes and checkpoint. see more info from chaos.Prepare()
-	if h == nil || h.Number.Int64() < c.config.CrosschainCosmosBlock.Int64() {
-		return nil, nil //, -1, ct.CommitSig{}
-	}
+	// if h == nil || h.Number.Int64() < c.config.CrosschainCosmosBlock.Int64() {
+	// 	return nil, nil //, -1, ct.CommitSig{}
+	// }
 
 	c.valsMgr.storeValidatorSet(h)
 
@@ -116,6 +115,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 
 	val := c.valsMgr.getValidator(h.Coinbase, h)
 	if val == nil {
+		log.Warn("makeCosmosSignedHeader getValidator is nil")
 		return nil, nil //, -1, ct.CommitSig{}
 	}
 	//pubkey, _ := c.privValidator.GetPubKey()

@@ -39,8 +39,8 @@ type Cosmos struct {
 	callmu        sync.Mutex
 	callExectors  *list.List
 
-	headersmu sync.Mutex
-	headers   *list.List
+	// headersmu sync.Mutex
+	// headers   *list.List
 
 	chain *CosmosChain
 
@@ -77,7 +77,7 @@ func (c *Cosmos) Init(datadir string,
 		c.codec = MakeEncodingConfig()
 
 		c.callExectors = list.New()
-		c.headers = list.New()
+		// c.headers = list.New()
 
 		statedb, err := state.New(header.Root, c.sdb, nil)
 		if err != nil {
@@ -179,7 +179,7 @@ func (c *Cosmos) EventHeader(header *types.Header) *types.CosmosVote {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	if !IsEnable(c.config, big.NewInt(header.Number.Int64()-1)) {
+	if !IsEnable(c.config, big.NewInt(header.Number.Int64())) {
 		log.Debug("cosmos not enable yet", "number", strconv.FormatUint(header.Number.Uint64()-1, 10))
 		return nil
 	}
@@ -195,46 +195,49 @@ func (c *Cosmos) EventHeader(header *types.Header) *types.CosmosVote {
 	}
 	// }
 
-	c.headersmu.Lock()
-	defer c.headersmu.Unlock()
-	c.headers.PushFront(header)
+	c.eventHeader(header)
 
-	headers := list.New()
-	for h := c.headers.Front(); h != nil; h = h.Next() {
-		ch := h.Value.(*et.Header)
-		log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
-		if c.eventHeader(ch) {
-			break
-		} else {
-			headers.PushBack(h)
-		}
-	}
-	c.headers = headers
+	// c.headersmu.Lock()
+	// defer c.headersmu.Unlock()
+	// c.headers.PushFront(header)
+
+	// headers := list.New()
+	// for h := c.headers.Front(); h != nil; h = h.Next() {
+	// 	ch := h.Value.(*et.Header)
+	// 	log.Debug("try make query ctx ", ch.Number.Uint64(), " hash ", ch.Hash().Hex())
+	// 	if c.eventHeader(ch) {
+	// 		break
+	// 	} else {
+	// 		headers.PushBack(h)
+	// 	}
+	// }
+	// c.headers = headers
 	return vote
 }
 
 func (c *Cosmos) eventHeader(header *types.Header) bool {
-	p := c.headerhashfn(header.ParentHash)
-	if p == nil {
-		log.Error("can not find header.parent ", header.ParentHash.Hex(), " number ", header.Number.Uint64(), " hash ", header.Hash().Hex())
-		return false
-	}
+	// p := c.headerhashfn(header.ParentHash)
+	// if p == nil {
+	// 	log.Error("can not find header.parent ", header.ParentHash.Hex(), " number ", header.Number.Uint64(), " hash ", header.Hash().Hex())
+	// 	return false
+	// }
 
 	var statedb *state.StateDB
 	var err error
 	if c.statefn != nil {
-		// statedb, err = c.statefn(header.Root)
-		statedb, err = c.statefn(p.Root)
+		statedb, err = c.statefn(header.Root)
+		// statedb, err = c.statefn(p.Root)
 	} else {
-		// statedb, err = state.New(header.Root, c.sdb, nil)
-		statedb, err = state.New(p.Root, c.sdb, nil)
+		statedb, err = state.New(header.Root, c.sdb, nil)
+		// statedb, err = state.New(p.Root, c.sdb, nil)
 	}
 
 	if err != nil {
 		log.Warn("cosmos event header state root not found, ", err.Error())
 		return false
 	}
-	c.queryExecutor.BeginBlock(p, statedb)
+	// c.queryExecutor.BeginBlock(p, statedb)
+	c.queryExecutor.BeginBlock(header, statedb)
 	return true
 }
 

@@ -118,7 +118,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		log.Warn("makeCosmosSignedHeader getValidator is nil")
 		return nil, nil //, -1, ct.CommitSig{}
 	}
-	
+
 	addr := val.Address
 
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
@@ -548,6 +548,7 @@ func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig) error 
 		if err := realVote.Verify(c.ChainID, val.PubKey); err != nil {
 			return fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s: %w", c.ChainID, val.PubKey, err)
 		}
+		sig.Timestamp = header.Time
 		commit.Signatures[i] = sig
 	}
 
@@ -734,7 +735,7 @@ func (c *CosmosChain) IsLightBlockValid(light_block *ct.LightBlock, vals []commo
 		// Validate signature.
 		voteSignBytes := light_block.Commit.VoteSignBytes(c.config.ChainID.String(), int32(idx))
 		if !val.PubKey.VerifySignature(voteSignBytes, commitSig.Signature) {
-			log.Warn("wrong signature (#%d): %X", idx, commitSig.Signature)
+			log.Warn("IsLightBlockValid wrong signature (#%d): %X", idx, commitSig.Signature)
 			return false
 		}
 
@@ -843,7 +844,7 @@ func (c *CosmosChain) checkVotes(height uint64, hash common.Hash) *et.CosmosLack
 		// Validate signature.
 		voteSignBytes := sh.Commit.VoteSignBytes(c.config.ChainID.String(), int32(idx))
 		if !val.PubKey.VerifySignature(voteSignBytes, commitSig.Signature) {
-			log.Warn("wrong signature (#%d): %X", idx, commitSig.Signature)
+			log.Warn("checkVotes wrong signature (#%d): %X", idx, commitSig.Signature)
 			// todo: remove signature
 			lackIdx = append(lackIdx, big.NewInt(int64(idx)))
 			continue

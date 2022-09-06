@@ -192,7 +192,9 @@ func (c *Executor) EndBlock() {
 }
 
 func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_number int64) {
-	statedb.SetNonce(system.CrossChainCosmosContract, statedb.GetNonce(system.CrossChainCosmosContract)+1)
+	// if statedb.GetNonce(system.CrossChainCosmosContract) == 0 {
+	// 	statedb.SetNonce(system.CrossChainCosmosContract, statedb.GetNonce(system.CrossChainCosmosContract)+1)
+	// }
 	app_hash_last := statedb.GetState(system.CrossChainCosmosContract, state_app_hash_cur)
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_last, app_hash_last)
 	statedb.SetState(system.CrossChainCosmosContract, state_app_hash_cur, app_hash)
@@ -209,6 +211,10 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 
 	// cosmos state contract
 	log.Debug("init statedb with code/account")
+
+	evm.StateDB.CreateAccount(system.CrossChainCosmosContract)
+	evm.StateDB.SetNonce(system.CrossChainCosmosContract, 1)
+
 	evm.StateDB.CreateAccount(system.CrossChainCosmosStateContract)
 	code, _ := hex.DecodeString(StateContractCode)
 	evm.StateDB.SetCode(system.CrossChainCosmosStateContract, code)

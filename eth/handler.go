@@ -116,21 +116,21 @@ type handler struct {
 	txFetcher    *fetcher.TxFetcher
 	peers        *peerSet
 
-	eventMux                    *event.TypeMux
-	txsCh                       chan core.NewTxsEvent
-	txsSub                      event.Subscription
-	naCh                        chan core.NewAttestationEvent
-	naSub                       event.Subscription
-	njfCh                       chan core.NewJustifiedOrFinalizedBlockEvent
-	njfSub                      event.Subscription
-	lcvCh                       chan core.RequestCosmosVotesEvent
-	lcvSub                      event.Subscription
-	minedBlockSub               *event.TypeMuxSubscription
-	minedBlockAndCosmosVotesSub *event.TypeMuxSubscription
-	cosmosVoteSub               *event.TypeMuxSubscription
-	cvCh                        chan core.NewCosmosVoteEvent
-	cvSub                       event.Subscription
-	cosmosVotesListSub          *event.TypeMuxSubscription
+	eventMux      *event.TypeMux
+	txsCh         chan core.NewTxsEvent
+	txsSub        event.Subscription
+	naCh          chan core.NewAttestationEvent
+	naSub         event.Subscription
+	njfCh         chan core.NewJustifiedOrFinalizedBlockEvent
+	njfSub        event.Subscription
+	lcvCh         chan core.RequestCosmosVotesEvent
+	lcvSub        event.Subscription
+	minedBlockSub *event.TypeMuxSubscription
+	//minedBlockAndCosmosVotesSub *event.TypeMuxSubscription
+	cosmosVoteSub      *event.TypeMuxSubscription
+	cvCh               chan core.NewCosmosVoteEvent
+	cvSub              event.Subscription
+	cosmosVotesListSub *event.TypeMuxSubscription
 
 	whitelist map[uint64]common.Hash
 
@@ -451,10 +451,10 @@ func (h *handler) Start(maxPeers int) {
 	h.minedBlockSub = h.eventMux.Subscribe(core.NewMinedBlockEvent{})
 	go h.minedBroadcastLoop()
 
-	// broadcast mined blocks
-	h.wg.Add(1)
-	h.minedBlockAndCosmosVotesSub = h.eventMux.Subscribe(core.NewMinedBlockAndCosmosVotesEvent{})
-	go h.minedBlockAndCosmosVotesBroadcastLoop()
+	//// broadcast mined blocks
+	//h.wg.Add(1)
+	//h.minedBlockAndCosmosVotesSub = h.eventMux.Subscribe(core.NewMinedBlockAndCosmosVotesEvent{})
+	//go h.minedBlockAndCosmosVotesBroadcastLoop()
 
 	// broadcast cosmos vote from others
 	h.wg.Add(1)
@@ -491,10 +491,10 @@ func (h *handler) Start(maxPeers int) {
 }
 
 func (h *handler) Stop() {
-	h.txsSub.Unsubscribe()                      // quits txBroadcastLoop
-	h.minedBlockSub.Unsubscribe()               // quits blockBroadcastLoop
-	h.minedBlockAndCosmosVotesSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
-	h.cosmosVoteSub.Unsubscribe()               // quits newCosmosVoteBroadcastLoop
+	h.txsSub.Unsubscribe()        // quits txBroadcastLoop
+	h.minedBlockSub.Unsubscribe() // quits blockBroadcastLoop
+	//h.minedBlockAndCosmosVotesSub.Unsubscribe() // quits blockAndHeaderBroadcastLoop
+	h.cosmosVoteSub.Unsubscribe() // quits newCosmosVoteBroadcastLoop
 	h.cvSub.Unsubscribe()
 	h.naSub.Unsubscribe()  // quits newAttestationBroadcastLoop
 	h.njfSub.Unsubscribe() // quits newJustifiedOrFinalizedBlockBroadcastLoop
@@ -701,17 +701,17 @@ func (h *handler) minedBroadcastLoop() {
 	}
 }
 
-// minedBroadcastLoop sends mined blocks to connected peers.
-func (h *handler) minedBlockAndCosmosVotesBroadcastLoop() {
-	defer h.wg.Done()
-
-	for obj := range h.minedBlockAndCosmosVotesSub.Chan() {
-		if ev, ok := obj.Data.(core.NewMinedBlockAndCosmosVotesEvent); ok {
-			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, true)  // First propagate block to peers
-			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, false) // Only then announce to the rest
-		}
-	}
-}
+//// minedBroadcastLoop sends mined blocks to connected peers.
+//func (h *handler) minedBlockAndCosmosVotesBroadcastLoop() {
+//	defer h.wg.Done()
+//
+//	for obj := range h.minedBlockAndCosmosVotesSub.Chan() {
+//		if ev, ok := obj.Data.(core.NewMinedBlockAndCosmosVotesEvent); ok {
+//			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, true)  // First propagate block to peers
+//			h.BroadcastBlockAndCosmosVotes(ev.BlockAndVotes, false) // Only then announce to the rest
+//		}
+//	}
+//}
 
 func (h *handler) cosmosVoteBroadcastLoop() {
 	defer h.wg.Done()

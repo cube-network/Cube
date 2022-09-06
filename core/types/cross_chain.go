@@ -17,10 +17,10 @@ type BlockAndCosmosVotes struct {
 	//CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
 }
 
-type CosmosHeader struct {
-	Hash         common.Hash
-	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
-}
+//type CosmosHeader struct {
+//	Hash         common.Hash
+//	CosmosHeader *CosmosHeaderForP2P `rlp:"nil"` //ct.SignedHeader
+//}
 
 type CubeAndCosmosVotes struct {
 	Header     *Header

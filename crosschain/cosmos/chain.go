@@ -183,8 +183,8 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 
 	var cv *et.CosmosVote = nil
 	index, vote, _ := c.voteSignedHeader(signedHeader, valset)
-	pk, err := c.privValidator.GetPubKey()
-	if index >= 0 && err == nil && !bytes.Equal(val.Bytes(), pk.Bytes()) {
+	//pk, err := c.privValidator.GetPubKey()
+	if index >= 0 { //&& err == nil && !bytes.Equal(val.Bytes(), pk.Bytes()) {
 		cv = &et.CosmosVote{
 			Number:     h.Number,
 			HeaderHash: h.Hash(),

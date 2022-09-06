@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -81,6 +82,18 @@ func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, to
 	}
 	if toAddr == nil {
 		toAddr = cbk.moduleAccs["transfer"]
+	}
+	balancefrom, errfrom := systemcontract.GetBalance(ctx, fromAddr, amt[0])
+	if errfrom == nil {
+		log.Debug("from bal ", strconv.Itoa(int(balancefrom.Int64())))
+	} else {
+		log.Debug("from bal err ", errfrom.Error())
+	}
+	balanceto, errto := systemcontract.GetBalance(ctx, toAddr, amt[0])
+	if errto == nil {
+		log.Debug("to bal ", strconv.Itoa(int(balanceto.Int64())))
+	} else {
+		log.Debug("to bal err ", errto.Error())
 	}
 	log.Debug("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
 	if !ctx.EVM().Context.CanTransfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), amt[0].Amount.BigInt()) {

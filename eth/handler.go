@@ -573,7 +573,7 @@ func (h *handler) BroadcastBlockAndCosmosVotes(blockAndHeader *types.BlockAndCos
 		transfer := peers[:int(math.Sqrt(float64(len(peers))))]
 		for _, peer := range transfer {
 			log.Info("metric", "method", "broadcastBlock", "peer", peer.ID(), "hash", block.Header().Hash().String(), "number", block.Header().Number.Uint64(), "fullBlock", true)
-			peer.AsyncSendNewBlockAndHeader(blockAndHeader, td)
+			peer.AsyncSendNewBlockAndCosmosVotes(blockAndHeader, td)
 		}
 		log.Trace("Propagated block", "hash", hash, "recipients", len(transfer), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 		return

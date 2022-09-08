@@ -224,7 +224,7 @@ type BlockFetcher struct {
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, getCosmosHeader cosmosVotesRetrievalFn, broadcastBlockAndHeader blockAndCosmosVotesBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
+func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, getCosmosHeader cosmosVotesRetrievalFn, broadcastBlockAndVotes blockAndCosmosVotesBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, continousInturn continousInturnFn) *BlockFetcher {
 	return &BlockFetcher{
 		light:                        light,
 		notify:                       make(chan *blockAnnounce),
@@ -246,7 +246,7 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		verifyHeader:                 verifyHeader,
 		broadcastBlock:               broadcastBlock,
 		getCosmosVotes:               getCosmosHeader,
-		broadcastBlockAndCosmosVotes: broadcastBlockAndHeader,
+		broadcastBlockAndCosmosVotes: broadcastBlockAndVotes,
 		chainHeight:                  chainHeight,
 		insertHeaders:                insertHeaders,
 		insertChain:                  insertChain,

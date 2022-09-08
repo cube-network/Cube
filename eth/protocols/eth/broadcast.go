@@ -36,11 +36,11 @@ type blockPropagation struct {
 	td    *big.Int
 }
 
-// blockAndHeaderPropagation is a block propagation event, waiting for its turn in the
+// blockAndCosmosVotesPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
-type blockAndHeaderPropagation struct {
-	blockAndHeader *types.BlockAndCosmosVotes
-	td             *big.Int
+type blockAndCosmosVotesPropagation struct {
+	blockAndCosmosVotes *types.BlockAndCosmosVotes
+	td                  *big.Int
 }
 
 // cosmosVotePropagation is a block propagation event, waiting for its turn in the
@@ -66,11 +66,11 @@ func (p *Peer) broadcastBlocks() {
 			}
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
-		case prop := <-p.queuedBlockAndHeaders:
-			if err := p.SendNewBlockAndHeader(prop.blockAndHeader, prop.td); err != nil {
+		case prop := <-p.queuedBlockAndCosmosVotes:
+			if err := p.SendNewBlockAndHeader(prop.blockAndCosmosVotes, prop.td); err != nil {
 				return
 			}
-			p.Log().Trace("Propagated block", "number", prop.blockAndHeader.Block.Number(), "hash", prop.blockAndHeader.Block.Hash(), "td", prop.td)
+			p.Log().Trace("Propagated block", "number", prop.blockAndCosmosVotes.Block.Number(), "hash", prop.blockAndCosmosVotes.Block.Hash(), "td", prop.td)
 
 		case block := <-p.queuedBlockAnns:
 			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {

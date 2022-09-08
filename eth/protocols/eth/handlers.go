@@ -434,10 +434,11 @@ func handleNewCosmosVote(backend Backend, msg Decoder, peer *Peer) error {
 	// Mark the peer as owning the block
 	peer.markCosmosVote(ann.Vote.Hash())
 
+	// todo: check error
 	return backend.Handle(peer, ann)
 }
 
-func handleNewCubeAndCosmosHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+func handleNewCubeAndCosmosVotes66(backend Backend, msg Decoder, peer *Peer) error {
 	// Retrieve and decode the propagated block
 	res := new(CubeAndCosmosVotesPacket66)
 	if err := msg.Decode(res); err != nil {

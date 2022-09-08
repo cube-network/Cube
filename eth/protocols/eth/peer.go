@@ -76,10 +76,10 @@ type Peer struct {
 	head common.Hash // Latest advertised head block hash
 	td   *big.Int    // Latest advertised head block total difficulty
 
-	knownBlocks           *knownCache                     // Set of block hashes known to be known by this peer
-	queuedBlocks          chan *blockPropagation          // Queue of blocks to broadcast to the peer
-	queuedBlockAndHeaders chan *blockAndHeaderPropagation // Queue of blocks to broadcast to the peer
-	queuedBlockAnns       chan *types.Block               // Queue of blocks to announce to the peer
+	knownBlocks               *knownCache                          // Set of block hashes known to be known by this peer
+	queuedBlocks              chan *blockPropagation               // Queue of blocks to broadcast to the peer
+	queuedBlockAndCosmosVotes chan *blockAndCosmosVotesPropagation // Queue of blocks and its cosmos votes to broadcast to the peer
+	queuedBlockAnns           chan *types.Block                    // Queue of blocks to announce to the peer
 
 	knownCosmosVotes     *knownCache                 // Set of cosmos headers known to be known by this peer
 	queuedCosmosVotes    chan *cosmosVotePropagation // Queue of cosmos headers to broadcast to the peer
@@ -98,22 +98,22 @@ type Peer struct {
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
 	peer := &Peer{
-		id:                    p.ID().String(),
-		Peer:                  p,
-		rw:                    rw,
-		version:               version,
-		knownTxs:              newKnownCache(maxKnownTxs),
-		knownBlocks:           newKnownCache(maxKnownBlocks),
-		knownCosmosVotes:      newKnownCache(maxKnownBlocks),
-		queuedBlocks:          make(chan *blockPropagation, maxQueuedBlocks),
-		queuedBlockAndHeaders: make(chan *blockAndHeaderPropagation, maxQueuedBlocks),
-		queuedBlockAnns:       make(chan *types.Block, maxQueuedBlockAnns),
-		queuedCosmosVotes:     make(chan *cosmosVotePropagation, maxQueuedBlocks),
-		queuedGetCosmosVotes:  make(chan *getCosmosVotesPropagation, maxQueuedBlocks),
-		txBroadcast:           make(chan []common.Hash),
-		txAnnounce:            make(chan []common.Hash),
-		txpool:                txpool,
-		term:                  make(chan struct{}),
+		id:                        p.ID().String(),
+		Peer:                      p,
+		rw:                        rw,
+		version:                   version,
+		knownTxs:                  newKnownCache(maxKnownTxs),
+		knownBlocks:               newKnownCache(maxKnownBlocks),
+		knownCosmosVotes:          newKnownCache(maxKnownBlocks),
+		queuedBlocks:              make(chan *blockPropagation, maxQueuedBlocks),
+		queuedBlockAndCosmosVotes: make(chan *blockAndCosmosVotesPropagation, maxQueuedBlocks),
+		queuedBlockAnns:           make(chan *types.Block, maxQueuedBlockAnns),
+		queuedCosmosVotes:         make(chan *cosmosVotePropagation, maxQueuedBlocks),
+		queuedGetCosmosVotes:      make(chan *getCosmosVotesPropagation, maxQueuedBlocks),
+		txBroadcast:               make(chan []common.Hash),
+		txAnnounce:                make(chan []common.Hash),
+		txpool:                    txpool,
+		term:                      make(chan struct{}),
 	}
 	// Start up all the broadcasters
 	go peer.broadcastBlocks()
@@ -326,10 +326,10 @@ func (p *Peer) SendNewBlockAndHeader(blockHeader *types.BlockAndCosmosVotes, td 
 
 // AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
 // the peer's broadcast queue is full, the event is silently dropped.
-func (p *Peer) AsyncSendNewBlockAndHeader(blockHeader *types.BlockAndCosmosVotes, td *big.Int) {
-	block := blockHeader.Block
+func (p *Peer) AsyncSendNewBlockAndCosmosVotes(blockAndVotes *types.BlockAndCosmosVotes, td *big.Int) {
+	block := blockAndVotes.Block
 	select {
-	case p.queuedBlockAndHeaders <- &blockAndHeaderPropagation{blockAndHeader: blockHeader, td: td}:
+	case p.queuedBlockAndCosmosVotes <- &blockAndCosmosVotesPropagation{blockAndCosmosVotes: blockAndVotes, td: td}:
 		// Mark all the block hash as known, but ensure we don't overflow our limits
 		p.knownBlocks.Add(block.Hash())
 		p.knownCosmosVotes.Add(block.Hash())

@@ -159,7 +159,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		Height:             h.Number.Int64(),
 		Time:               time.Unix(int64(h.Time), 0),
 		LastCommitHash:     make([]byte, 32),
-		LastBlockID:        lastBlockID, //c.blockID, // todo: need to get parent header's hash
+		LastBlockID:        lastBlockID, //c.blockID,
 		DataHash:           h.TxHash[:],
 		ValidatorsHash:     valsetHash,     //valset.Hash(),
 		NextValidatorsHash: nextValsetHash, //valset.Hash(),
@@ -167,7 +167,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		AppHash:            app_hash[:],
 		LastResultsHash:    make([]byte, 32),
 		EvidenceHash:       make([]byte, 32),
-		ProposerAddress:    addr, // todo: use coinbase's cosmos address
+		ProposerAddress:    addr, // use coinbase's cosmos address
 	}
 
 	psh := ct.PartSetHeader{Total: 1, Hash: header.Hash()}

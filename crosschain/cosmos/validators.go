@@ -132,7 +132,7 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 }
 
 func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
-	if height%200 != 199 {
+	if height%vmgr.config.Chaos.Epoch != vmgr.config.Chaos.Epoch-1 {
 		return vmgr.getValidators(height)
 	}
 
@@ -148,10 +148,10 @@ func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *
 func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
 	log.Debug("getValidators ", strconv.Itoa(int(height)))
 	var vheight uint64 = 0
-	if height < 400 {
+	if height < vmgr.config.Chaos.Epoch*2 {
 		vheight = 0
 	} else {
-		vheight = height - 200 - height%200
+		vheight = height - vmgr.config.Chaos.Epoch - height%vmgr.config.Chaos.Epoch
 	}
 	return vmgr.getValidatorsImpl(vheight)
 }
@@ -198,10 +198,10 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 
 func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address, header *et.Header) *types.Validator {
 	var vheight uint64 = 0
-	if header.Number.Uint64() < 400 {
+	if header.Number.Uint64() < vmgr.config.Chaos.Epoch*2 {
 		vheight = 0
 	} else {
-		vheight = header.Number.Uint64() - 200 - header.Number.Uint64()%200
+		vheight = header.Number.Uint64() - vmgr.config.Chaos.Epoch - header.Number.Uint64()%vmgr.config.Chaos.Epoch
 	}
 
 	vh := vmgr.getHeaderByNumber(vheight)
@@ -306,7 +306,7 @@ func (vmgr *ValidatorsMgr) getAddrValMapFromContract(h *et.Header) map[common.Ad
 }
 
 func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
-	if header.Number.Uint64()%200 != 0 {
+	if header.Number.Uint64()%vmgr.config.Chaos.Epoch != 0 {
 		return
 	}
 
@@ -361,7 +361,7 @@ func (vmgr *ValidatorsMgr) storeValidatorSet(header *et.Header) {
 	log.Debug("store validator number ", strconv.Itoa(int(header.Number.Int64())), " hash ", header.Hash().Hex(), " key ", string(key), " val ", hex.EncodeToString(bz))
 
 	// // // TODO prune validator set
-	// if header.Number.Int64() > 200*5+vmgr.config.CrosschainCosmosBlock.Int64() {
+	// if header.Number.Int64() > vmgr.config.Chaos.Epoch*5+vmgr.config.CrosschainCosmosBlock.Int64() {
 	// 	hd := vmgr.getHeaderByNumber(header.Number.Uint64() - 1000)
 	// 	if hd == nil {
 	// 		log.Warn("getAddrValMap header hd is nil ", header.Hash().Hex())

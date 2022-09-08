@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -228,8 +229,8 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 			return nil, vmError, err
 		}
 		context.AccessFilter = b.eth.chaosEngine.CreateEvmAccessFilter(header, parentState)
+		context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, parentState)
 	}
-	// TODO crosschain
 	env := vm.NewEVM(context, txContext, state, b.eth.blockchain.Config(), *vmConfig)
 	return env, vmError, nil
 }

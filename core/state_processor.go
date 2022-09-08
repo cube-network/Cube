@@ -94,10 +94,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		}
 		vmenv.Context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
-	// TODO
+
 	vmenv.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb)
 	defer crosschain.GetCrossChain().FreeExecutor(vmenv.Context.Crosschain)
-	// defer crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
 
 	// preload from and to of txs
 	signer := types.MakeSigner(p.config, header.Number)

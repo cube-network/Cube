@@ -97,11 +97,11 @@ func callContract(evm *vm.EVM, contract common.Address, method string, args ...i
 	//vmenv := vm.NewEVM(blockContext, core.NewEVMTxContext(msg), ctx.Statedb, ctx.ChainConfig, vm.Config{})
 
 	// Run evm call
-	if msg.To().String() == system.AddrToPubkeyMapContract.String() {
-		ret, _, err = evm.RunInterpreter(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
-	} else {
-		ret, _, err = evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
-	}
+	// if msg.To().String() == system.AddrToPubkeyMapContract.String() {
+	// 	ret, _, err = evm.RunInterpreter(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	// } else {
+	ret, _, err = evm.Call(vm.AccountRef(msg.From()), *msg.To(), msg.Data(), msg.Gas(), msg.Value())
+	// }
 
 	if err == vm.ErrExecutionReverted {
 		reason, errUnpack := abi.UnpackRevert(common.CopyBytes(ret))

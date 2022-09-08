@@ -136,7 +136,7 @@ func (c *Executor) RunCrossChainContract(evm *vm.EVM, input []byte, suppliedGas 
 		return nil, 0, vm.ErrOutOfGas
 	}
 	suppliedGas -= gasCost
-	output, err := c.Run(evm, input)
+	output, err := c.Run(evm, input, suppliedGas)
 	return output, suppliedGas, err
 }
 
@@ -267,10 +267,10 @@ func ackPacketQuery(channelID string, seq int) []string {
 
 func (app *Executor) RequiredGas(input []byte) uint64 {
 	// TODO fixed gas cost, change later
-	return 100000
+	return 40000
 }
 
-func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
+func (c *Executor) Run(evm *vm.EVM, input []byte, suppliedGas uint64) ([]byte, error) {
 	if evm.SimulateMode {
 		return nil, nil
 	} else {
@@ -308,7 +308,7 @@ func (c *Executor) Run(evm *vm.EVM, input []byte) ([]byte, error) {
 		if handler := c.app.MsgServiceRouter().Handler(msg); handler != nil {
 			eventMsgName := sdk.MsgTypeURL(msg)
 			log.Debug("process tx ", eventMsgName)
-			msgResult, err := handler(c.app.GetContextForTx(evm.SimulateMode).WithEvm(evm), msg) /*TODO statedb stateobject wrapper */
+			msgResult, err := handler(c.app.GetContextForTx(evm.SimulateMode).WithEvm(evm).WithGas(suppliedGas), msg) /*TODO statedb stateobject wrapper */
 			if err != nil {
 				log.Warn("process tx fail, eventMsgName ", eventMsgName, "run tx err ", err.Error())
 				return nil, vm.ErrExecutionReverted

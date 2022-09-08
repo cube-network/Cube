@@ -4,10 +4,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strconv"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crosschain/cosmos/systemcontract"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -83,23 +83,31 @@ func (cbk CubeBankKeeper) SendCoins(ctx sdk.Context, fromAddr sdk.AccAddress, to
 	if toAddr == nil {
 		toAddr = cbk.moduleAccs["transfer"]
 	}
-	balancefrom, errfrom := systemcontract.GetBalance(ctx, fromAddr, amt[0])
-	if errfrom == nil {
-		log.Debug("from bal ", strconv.Itoa(int(balancefrom.Int64())))
-	} else {
-		log.Debug("from bal err ", errfrom.Error())
-	}
-	balanceto, errto := systemcontract.GetBalance(ctx, toAddr, amt[0])
-	if errto == nil {
-		log.Debug("to bal ", strconv.Itoa(int(balanceto.Int64())))
-	} else {
-		log.Debug("to bal err ", errto.Error())
-	}
-	log.Debug("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
+	// balancefrom, errfrom := systemcontract.GetBalance(ctx, fromAddr, amt[0])
+	// if errfrom == nil {
+	// 	log.Debug("from bal ", strconv.Itoa(int(balancefrom.Int64())))
+	// } else {
+	// 	log.Debug("from bal err ", errfrom.Error())
+	// }
+	// balanceto, errto := systemcontract.GetBalance(ctx, toAddr, amt[0])
+	// if errto == nil {
+	// 	log.Debug("to bal ", strconv.Itoa(int(balanceto.Int64())))
+	// } else {
+	// 	log.Debug("to bal err ", errto.Error())
+	// }
+	// log.Debug("SendCoins fromAddr ", fromAddr.String(), " ", toAddr.String(), " ", amt.String())
 	if !ctx.EVM().Context.CanTransfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), amt[0].Amount.BigInt()) {
 		return errors.New("insufficient balance")
 	}
 	ctx.EVM().Context.Transfer(ctx.EVM().StateDB, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), amt[0].Amount.BigInt())
+	// Handle tracer events for entering and exiting a call frame
+	gas := ctx.Gas()
+	if ctx.EVM().Config.Debug {
+		ctx.EVM().Config.Tracer.CaptureEnter(vm.CALL, common.BytesToAddress(fromAddr), common.BytesToAddress(toAddr), []byte{}, gas, amt[0].Amount.BigInt())
+		defer func(startGas uint64) {
+			ctx.EVM().Config.Tracer.CaptureExit([]byte{}, 0, nil)
+		}(gas)
+	}
 
 	// if amt.Empty() {
 	// 	return fmt.Errorf("send coins failed as no coin's info provided")

@@ -250,7 +250,9 @@ func (evm *EVM) Call(caller ContractRef, addr common.Address, input []byte, gas 
 	if isPrecompile {
 		ret, gas, err = RunPrecompiledContract(p, input, gas)
 	} else if isCrossChain {
+		evm.depth++
 		ret, gas, err = evm.Context.Crosschain.RunCrossChainContract(evm, input, gas)
+		evm.depth--
 		// } else if isRegisterValidator {
 		// 	ret, gas, err = evm.Context.Crosschain.RunRegisterValidatorContract(evm, input, gas)
 	} else {

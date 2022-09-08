@@ -40,6 +40,7 @@ type Context struct {
 	consParams    *abci.ConsensusParams
 	eventManager  *EventManager
 	evm           *vm.EVM
+	gas           uint64
 }
 
 // Proposed rename, not done to avoid API breakage
@@ -61,6 +62,7 @@ func (c Context) IsReCheckTx() bool           { return c.recheckTx }
 func (c Context) MinGasPrices() DecCoins      { return c.minGasPrice }
 func (c Context) EventManager() *EventManager { return c.eventManager }
 func (c Context) EVM() *vm.EVM                { return c.evm }
+func (c Context) Gas() uint64                 { return c.gas }
 
 // clone the header before returning
 func (c Context) BlockHeader() tmproto.Header {
@@ -219,6 +221,11 @@ func (c Context) WithEventManager(em *EventManager) Context {
 
 func (c Context) WithEvm(evm *vm.EVM) Context {
 	c.evm = evm
+	return c
+}
+
+func (c Context) WithGas(gas uint64) Context {
+	c.gas = gas
 	return c
 }
 

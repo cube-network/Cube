@@ -193,13 +193,14 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 
 	executor := crosschain.GetCrossChain().NewExecutor(block.Header(), statedb)
 	defer crosschain.GetCrossChain().FreeExecutor(executor)
+	// No crosschain Seal
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
 		context.AccessFilter = accessFilter
-		context.Crosschain = executor
+		context.Crosschain = executor // NoSeal
 		if idx == txIndex {
 			// Notice: for a chaos system transaction, the `msg` and `context` should not be used
 			return msg, context, statedb, nil
@@ -233,6 +234,5 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 		// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
 		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
 	}
-	crosschain.GetCrossChain().Seal(executor)
 	return nil, vm.BlockContext{}, nil, fmt.Errorf("transaction index %d out of range for block %#x", txIndex, block.Hash())
 }

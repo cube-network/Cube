@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
@@ -283,6 +284,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 				if api.isChaosEngine {
 					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
 					blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
+					blockCtx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, task.statedb) // NoSeal
 				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
@@ -627,6 +629,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 		blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
+		blockCtx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb) // No Seal
 	}
 	blockHash := block.Hash()
 	for th := 0; th < threads; th++ {
@@ -660,7 +663,6 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 			}
 		}()
 	}
-	// TODO crosschain
 	// Feed the transactions into the tracers and return
 	var failed error
 	for i, tx := range txs {
@@ -760,6 +762,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
+		vmctx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb) // No Seal
 	}
 
 	// Check if there are any overrides: the caller may wish to enable a future
@@ -945,6 +948,7 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	vmctx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 	if api.isChaosEngine {
 		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(block.Header(), statedb)
+		vmctx.Crosschain = crosschain.GetCrossChain().NewExecutor(block.Header(), statedb)
 	}
 	var traceConfig *TraceConfig
 	if config != nil {
@@ -995,7 +999,6 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 	default:
 		tracer = vm.NewStructLogger(config.LogConfig)
 	}
-	// TODO crosschain
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
 	// Call Prepare to clear out the statedb access list

@@ -156,7 +156,7 @@ func (bc *BlockChain) GetBlockPredictStatus(hash common.Hash, number uint64) uin
 			if bc.HasBlock(hash, number) {
 				return types.BasFinalized
 			} else {
-				return types.BasUnknown
+				return types.BasReorged
 			}
 		}
 	}
@@ -426,6 +426,9 @@ func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) uint8 {
 	status, oldHash := bc.GetBlockStatusByNum(number)
 	if oldHash == hash {
 		return status
+	}
+	if status == types.BasFinalized {
+		return types.BasReorged
 	}
 	return types.BasUnknown
 }

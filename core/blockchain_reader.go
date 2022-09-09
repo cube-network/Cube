@@ -153,7 +153,8 @@ func (bc *BlockChain) GetBlockPredictStatus(hash common.Hash, number uint64) uin
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
 	if currentBlockNumber > unableSureBlockStateInterval {
 		if number < currentBlockNumber-unableSureBlockStateInterval {
-			if bc.HasBlock(hash, number) {
+			b := bc.GetBlockByNumber(number)
+			if b != nil && b.Hash() == hash {
 				return types.BasFinalized
 			} else {
 				return types.BasReorged

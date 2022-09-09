@@ -144,6 +144,7 @@ const (
 	BasUnknown   = uint8(0)
 	BasJustified = uint8(1)
 	BasFinalized = uint8(2)
+	BasReorged   = uint8(3)
 )
 
 type BlockStatus struct {

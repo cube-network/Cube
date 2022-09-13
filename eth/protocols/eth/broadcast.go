@@ -32,8 +32,26 @@ const (
 // blockPropagation is a block propagation event, waiting for its turn in the
 // broadcast queue.
 type blockPropagation struct {
-	block *types.Block
+	block *types.Block //core.BlockAndCosmosVotes
 	td    *big.Int
+}
+
+// blockAndCosmosVotesPropagation is a block propagation event, waiting for its turn in the
+// broadcast queue.
+type blockAndCosmosVotesPropagation struct {
+	blockAndCosmosVotes *types.BlockAndCosmosVotes
+	td                  *big.Int
+}
+
+// cosmosVotePropagation is a block propagation event, waiting for its turn in the
+// broadcast queue.
+type cosmosVotePropagation struct {
+	vote *types.CosmosVote
+	//td     *big.Int
+}
+
+type getCosmosVotesPropagation struct {
+	idxs *types.CosmosLackedVoteIndexs
 }
 
 // broadcastBlocks is a write loop that multiplexes blocks and block accouncements
@@ -48,11 +66,29 @@ func (p *Peer) broadcastBlocks() {
 			}
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
+		case prop := <-p.queuedBlockAndCosmosVotes:
+			if err := p.SendNewBlockAndHeader(prop.blockAndCosmosVotes, prop.td); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated block", "number", prop.blockAndCosmosVotes.Block.Number(), "hash", prop.blockAndCosmosVotes.Block.Hash(), "td", prop.td)
+
 		case block := <-p.queuedBlockAnns:
 			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
 				return
 			}
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
+
+		case prop := <-p.queuedCosmosVotes:
+			if err := p.SendNewCosmosVote(prop.vote); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated cosmos vote", "index", prop.vote.Index, "headerHash", prop.vote.HeaderHash)
+
+		case prop := <-p.queuedGetCosmosVotes:
+			if err := p.RequestCosmosVotes(prop.idxs); err != nil {
+				return
+			}
+			p.Log().Trace("Propagated get cosmos votes", "number", prop.idxs.Number, "hash", prop.idxs.Hash)
 
 		case <-p.term:
 			return

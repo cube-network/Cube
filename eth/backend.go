@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
@@ -199,6 +200,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	crosschain.GetCrossChain().Init(stack.DataDir(), chainDb, eth.blockchain.StateCache(), chainConfig, core.NewEVMBlockContext(eth.blockchain.CurrentBlock().Header(), eth.blockchain, nil), eth.blockchain.StateAt, eth.blockchain.GetHeaderByNumber, eth.blockchain.GetHeaderByHash, eth.blockchain.GetLastFinalizedBlockNumber, eth.blockchain.CurrentBlock().Header())
+
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
@@ -305,6 +309,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 				"age", common.PrettyAge(t))
 		}
 	}
+
 	return eth, nil
 }
 
@@ -372,6 +377,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// Append any APIs exposed explicitly by the consensus engine
 	apis = append(apis, s.engine.APIs(s.BlockChain())...)
+	apis = append(apis, crosschain.GetCrossChain().APIs()...)
 
 	// Append all the local APIs and return
 	return append(apis, []rpc.API{
@@ -552,6 +558,7 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			clique.Authorize(eb, wallet.SignData)
 		}
+
 		if chaos, ok := s.engine.(*chaos.Chaos); ok {
 			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
 			if wallet == nil || err != nil {
@@ -560,6 +567,8 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 			chaos.Authorize(eb, wallet.SignData, wallet.SignTx)
 		}
+		crosschain.GetCrossChain().SetCoinbase(eb)
+
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
 		atomic.StoreUint32(&s.handler.acceptTxs, 1)

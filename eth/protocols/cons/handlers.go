@@ -19,10 +19,11 @@ package cons
 import (
 	"errors"
 	"fmt"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
-	"math/big"
 )
 
 // TODO In case of DDoS attack, the corresponding peer will be disconnected automatically
@@ -62,7 +63,8 @@ func handleNewJustifiedOrFinalizedBlock(backend Backend, msg Decoder, peer *Peer
 		if block == nil {
 			return fmt.Errorf("block not found %d", bs.BlockNumber.Uint64())
 		}
-		return p2p.Send(peer.rw, GetAttestationsMsg, &types.RequestAttestation{BlockNumber: new(big.Int).Set(block.Number()), Hash: block.Hash()})
+		err := p2p.Send(peer.rw, GetAttestationsMsg, &types.RequestAttestation{BlockNumber: new(big.Int).Set(block.Number()), Hash: block.Hash()})
+		return err
 	}
 	// Ignore bs.Status == BasJustified, status == BasFinalized
 	// bs.Status == BasJustified, status == BasJustified

@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -59,6 +60,7 @@ func (b *EthAPIBackend) CurrentBlock() *types.Block {
 }
 
 func (b *EthAPIBackend) SetHead(number uint64) {
+	log.Debug("sethead cancel")
 	b.eth.handler.downloader.Cancel()
 	b.eth.blockchain.SetHead(number)
 }
@@ -228,6 +230,7 @@ func (b *EthAPIBackend) GetEVM(ctx context.Context, msg core.Message, state *sta
 			return nil, vmError, err
 		}
 		context.AccessFilter = b.eth.chaosEngine.CreateEvmAccessFilter(header, parentState)
+		// context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, parentState, false)
 	}
 	return vm.NewEVM(context, txContext, state, b.eth.blockchain.Config(), *vmConfig), vmError, nil
 }

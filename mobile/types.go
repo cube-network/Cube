@@ -329,6 +329,10 @@ type Receipt struct {
 	receipt *types.Receipt
 }
 
+type ReceiptExt struct {
+	receipt *types.ReceiptExt
+}
+
 // NewReceiptFromRLP parses a transaction receipt from an RLP data dump.
 func NewReceiptFromRLP(data []byte) (*Receipt, error) {
 	r := &Receipt{

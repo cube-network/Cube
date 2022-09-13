@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/light"
 )
 
@@ -51,6 +52,8 @@ func (leth *LightEthereum) stateAtTransaction(ctx context.Context, block *types.
 	if txIndex == 0 && len(block.Transactions()) == 0 {
 		return nil, vm.BlockContext{}, statedb, nil
 	}
+	executor := crosschain.GetCrossChain().NewExecutor(block.Header(), statedb, false)
+	defer crosschain.GetCrossChain().FreeExecutor(executor)
 	// Recompute transactions up to the target index.
 	signer := types.MakeSigner(leth.blockchain.Config(), block.Number())
 	for idx, tx := range block.Transactions() {
@@ -58,6 +61,7 @@ func (leth *LightEthereum) stateAtTransaction(ctx context.Context, block *types.
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), leth.blockchain, nil)
+		context.Crosschain = executor
 		statedb.Prepare(tx.Hash(), idx)
 		if idx == txIndex {
 			return msg, context, statedb, nil

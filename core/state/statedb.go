@@ -64,11 +64,12 @@ func (n *proofList) Delete(key []byte) error {
 // * Contracts
 // * Accounts
 type StateDB struct {
-	db           Database
-	prefetcher   *triePrefetcher
-	originalRoot common.Hash // The pre-state root, before any changes were made
-	trie         Trie
-	hasher       crypto.KeccakState
+	db             Database
+	prefetcher     *triePrefetcher
+	originalRoot   common.Hash // The pre-state root, before any changes were made
+	trie           Trie
+	hasher         crypto.KeccakState
+	dirtyTrieNodes *trie.HashCache // use to cache <hash, trieNode> inside a block
 
 	snaps         *snapshot.Tree
 	snap          snapshot.Snapshot
@@ -128,13 +129,16 @@ type StateDB struct {
 
 // New creates a new state from a given trie.
 func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) {
-	tr, err := db.OpenTrie(root)
+	dirtyHashCache := trie.NewHashCache()
+	tr, err := db.OpenTrieWithCache(root, dirtyHashCache)
+
 	if err != nil {
 		return nil, err
 	}
 	sdb := &StateDB{
 		db:                  db,
 		trie:                tr,
+		dirtyTrieNodes:      dirtyHashCache,
 		originalRoot:        root,
 		snaps:               snaps,
 		stateObjects:        make(map[common.Address]*stateObject),
@@ -536,7 +540,7 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	return nil
 }
 
-// preload accounts from Transactions
+// preload accounts from TransactionsX
 func (s *StateDB) PreloadAccounts(block *types.Block, signer types.Signer) {
 	if s.snap == nil {
 		return
@@ -758,6 +762,7 @@ func (s *StateDB) Copy() *StateDB {
 	state := &StateDB{
 		db:                  s.db,
 		trie:                s.db.CopyTrie(s.trie),
+		dirtyTrieNodes:      s.dirtyTrieNodes,
 		stateObjects:        make(map[common.Address]*stateObject, len(s.journal.dirties)),
 		stateObjectsPending: make(map[common.Address]struct{}, len(s.stateObjectsPending)),
 		stateObjectsDirty:   make(map[common.Address]struct{}, len(s.journal.dirties)),
@@ -919,6 +924,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		// the commit-phase will be a lot faster
 		addressesToPrefetch = append(addressesToPrefetch, common.CopyBytes(addr[:])) // Copy needed for closure
 	}
+
 	if s.prefetcher != nil && len(addressesToPrefetch) > 0 {
 		s.prefetcher.prefetch(s.originalRoot, addressesToPrefetch)
 	}
@@ -980,7 +986,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// _untouched_. We can check with the prefetcher, if it can give us a trie
 	// which has the same root, but also has some content loaded into it.
 	if prefetcher != nil {
-		if trie := prefetcher.trie(s.originalRoot); trie != nil {
+		if trie := prefetcher.trieWithCache(s.originalRoot, s.dirtyTrieNodes); trie != nil {
 			s.trie = trie
 		}
 	}
@@ -1124,7 +1130,6 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 func (s *StateDB) PrepareAccessList(sender common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
 	// Clear out any leftover from previous executions
 	s.accessList = newAccessList()
-	
 	s.AddAddressToAccessList(sender)
 	if dst != nil {
 		s.AddAddressToAccessList(*dst)
@@ -1232,14 +1237,13 @@ func (s *StateDB) AsyncCommit(deleteEmptyObjects bool, afterCommit func(common.H
 		}
 	}
 
-	s.db.TrieDB().WaitAndPrepareNextCommit()
+	s.db.TrieDB().WaitAndPrepareNextCommit(s.dirtyTrieNodes)
 	go func(s *StateDB) {
 		defer s.db.TrieDB().DoneAsyncCommit()
 		// Commit objects to the trie, measuring the elapsed time
 		var storageCommitted int
 		for addr := range s.stateObjectsDirty {
 			if obj := s.stateObjects[addr]; !obj.deleted {
-
 				// Write any storage changes in the state object to its storage trie
 				committed, err := obj.CommitTrie(s.db)
 				if err != nil {

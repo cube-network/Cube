@@ -40,6 +40,10 @@ func newstack() *Stack {
 	return stackPool.Get().(*Stack)
 }
 
+func NewStack() *Stack {
+	return newstack()
+}
+
 func returnStack(s *Stack) {
 	s.data = s.data[:0]
 	stackPool.Put(s)

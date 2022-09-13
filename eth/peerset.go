@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/cons"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -201,8 +202,39 @@ func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {
 	defer ps.lock.RUnlock()
 
 	list := make([]*ethPeer, 0, len(ps.peers))
+	log.Debug("peersWithoutBlock total peers", "count", len(ps.peers))
 	for _, p := range ps.peers {
 		if !p.KnownBlock(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+func (ps *peerSet) peersWithBlock(hash common.Hash) []*ethPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*ethPeer, 0, len(ps.peers))
+	log.Debug("peersWithBlock total peers", "count", len(ps.peers))
+	for _, p := range ps.peers {
+		if p.KnownBlock(hash) {
+			list = append(list, p)
+		}
+	}
+	return list
+}
+
+// peersWithoutCosmosVote retrieves a list of peers that do not have a given cosmos-header in
+// their set of known hashes so it might be propagated to them.
+func (ps *peerSet) peersWithoutCosmosVote(headerHash common.Hash, voteHash common.Hash) []*ethPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*ethPeer, 0, len(ps.peers))
+	log.Debug("peersWithoutCosmosVote total peers", "count", len(ps.peers))
+	for _, p := range ps.peers {
+		if !p.KnownCosmosVote(voteHash) && p.KnownBlock(headerHash) {
 			list = append(list, p)
 		}
 	}

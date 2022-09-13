@@ -72,7 +72,9 @@ type peerConnection struct {
 type LightPeer interface {
 	Head() (common.Hash, *big.Int)
 	RequestHeadersByHash(common.Hash, int, int, bool) error
+	RequestTwoHeadersByHash(common.Hash, int, int, bool) error
 	RequestHeadersByNumber(uint64, int, int, bool) error
+	RequestTwoHeadersByNumber(uint64, int, int, bool) error
 }
 
 // Peer encapsulates the methods required to synchronise with a remote full peer.
@@ -92,8 +94,14 @@ func (w *lightPeerWrapper) Head() (common.Hash, *big.Int) { return w.peer.Head()
 func (w *lightPeerWrapper) RequestHeadersByHash(h common.Hash, amount int, skip int, reverse bool) error {
 	return w.peer.RequestHeadersByHash(h, amount, skip, reverse)
 }
+func (w *lightPeerWrapper) RequestTwoHeadersByHash(h common.Hash, amount int, skip int, reverse bool) error {
+	return w.peer.RequestTwoHeadersByHash(h, amount, skip, reverse)
+}
 func (w *lightPeerWrapper) RequestHeadersByNumber(i uint64, amount int, skip int, reverse bool) error {
 	return w.peer.RequestHeadersByNumber(i, amount, skip, reverse)
+}
+func (w *lightPeerWrapper) RequestTwoHeadersByNumber(i uint64, amount int, skip int, reverse bool) error {
+	return w.peer.RequestTwoHeadersByNumber(i, amount, skip, reverse)
 }
 func (w *lightPeerWrapper) RequestBodies([]common.Hash) error {
 	panic("RequestBodies not supported in light client mode sync")
@@ -138,7 +146,8 @@ func (p *peerConnection) FetchHeaders(from uint64, count int) error {
 	p.headerStarted = time.Now()
 
 	// Issue the header retrieval request (absolute upwards without gaps)
-	go p.peer.RequestHeadersByNumber(from, count, 0, false)
+	//go p.peer.RequestHeadersByNumber(from, count, 0, false)
+	go p.peer.RequestTwoHeadersByNumber(from, count, 0, false)
 
 	return nil
 }

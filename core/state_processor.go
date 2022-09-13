@@ -21,6 +21,8 @@ import (
 	"math/big"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/crosschain"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/gopool"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -92,6 +94,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		vmenv.Context.AccessFilter = chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
 
+	vmenv.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb, false)
+	defer crosschain.GetCrossChain().FreeExecutor(vmenv.Context.Crosschain)
+
 	// preload from and to of txs
 	signer := types.MakeSigner(p.config, header.Number)
 	statedb.PreloadAccounts(block, signer)
@@ -149,11 +154,12 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	bloomWg.Wait()
 	returnErrBeforeWaitGroup = false
 
+	crosschain.GetCrossChain().Seal(vmenv.Context.Crosschain)
+
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	if err := p.engine.Finalize(p.bc, header, statedb, &commonTxs, block.Uncles(), &receipts, punishTxs, proposalTxs); err != nil {
 		return nil, nil, 0, err
 	}
-
 	return receipts, allLogs, *usedGas, nil
 }
 
@@ -227,7 +233,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, accessFilter vm.EvmAccessFilter) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, accessFilter vm.EvmAccessFilter, crosschain vm.CrossChain) (*types.Receipt, error) {
 	msg, err := tx.AsMessage(types.MakeSigner(config, header.Number), header.BaseFee)
 	if err != nil {
 		return nil, err
@@ -235,6 +241,7 @@ func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *commo
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
 	blockContext.AccessFilter = accessFilter
+	blockContext.Crosschain = crosschain
 
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
 	return applyTransaction(msg, config, bc, author, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv)

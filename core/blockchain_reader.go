@@ -153,10 +153,11 @@ func (bc *BlockChain) GetBlockPredictStatus(hash common.Hash, number uint64) uin
 	currentBlockNumber := bc.CurrentBlock().NumberU64()
 	if currentBlockNumber > unableSureBlockStateInterval {
 		if number < currentBlockNumber-unableSureBlockStateInterval {
-			if bc.HasBlock(hash, number) {
+			b := bc.GetBlockByNumber(number)
+			if b != nil && b.Hash() == hash {
 				return types.BasFinalized
 			} else {
-				return types.BasUnknown
+				return types.BasReorged
 			}
 		}
 	}
@@ -421,11 +422,22 @@ func (bc *BlockChain) SubscribeNewJustifiedOrFinalizedBlockEvent(ch chan<- NewJu
 	return bc.scope.Track(bc.newJustifiedOrFinalizedBlockFeed.Subscribe(ch))
 }
 
+func (bc *BlockChain) SubscribeRequestCosmosVotesEvent(ch chan<- RequestCosmosVotesEvent) event.Subscription {
+	return bc.scope.Track(bc.requestCosmosVotesFeed.Subscribe(ch))
+}
+
+func (bc *BlockChain) SubscribeNewCosmosVotesEvent(ch chan<- NewCosmosVoteEvent) event.Subscription {
+	return bc.scope.Track(bc.newCosmosVoteFeed.Subscribe(ch))
+}
+
 func (bc *BlockChain) GetBlockStatus(number uint64, hash common.Hash) uint8 {
 	// Short circuit if the status's already in the cache, retrieve otherwise
 	status, oldHash := bc.GetBlockStatusByNum(number)
 	if oldHash == hash {
 		return status
+	}
+	if status == types.BasFinalized {
+		return types.BasReorged
 	}
 	return types.BasUnknown
 }
@@ -439,6 +451,16 @@ func (bc *BlockChain) GetBlockStatusByNum(number uint64) (uint8, common.Hash) {
 	status, hash := rawdb.ReadBlockStatusByNum(bc.db, new(big.Int).SetUint64(number))
 	// Cache the found status for next time and return
 	// Only deterministic data is saved, and data tracking is required only at the beginning of startup
+
+	if status != types.BasFinalized {
+		lastFinalizedBlockNumber := bc.GetLastFinalizedBlockNumber()
+		if number < lastFinalizedBlockNumber {
+			currentBlock := bc.GetBlockByNumber(number)
+			status = types.BasFinalized
+			hash = currentBlock.Hash()
+		}
+	}
+
 	if status == types.BasFinalized {
 		bc.BlockStatusCache.Add(number, &types.BlockStatus{
 			BlockNumber: new(big.Int).SetUint64(number),

@@ -145,7 +145,8 @@ func (s *Snapshot) apply(headers []*types.Header, chain consensus.ChainHeaderRea
 			delete(snap.Recents, number-limit)
 		}
 		// Resolve the authorization key and check against validators
-		validator, err := ecrecover(header, s.sigcache)
+		is_crosschain_cosmos := chain.Config().IsCrosschainCosmos(header.Number)
+		validator, err := ecrecover(header, s.sigcache, is_crosschain_cosmos)
 		if err != nil {
 			return nil, err
 		}
@@ -181,16 +182,19 @@ func (s *Snapshot) apply(headers []*types.Header, chain consensus.ChainHeaderRea
 			}
 
 			// get validators from headers and use that for new validator set
-			validators := make([]common.Address, (len(checkpointHeader.Extra)-extraVanity-extraSeal)/common.AddressLength)
+			var extraSuffix int = 0
+			if chain.Config().IsCrosschainCosmos(checkpointHeader.Number) {
+				extraSuffix = extraCrosschainCosmos
+			}
+			validators := make([]common.Address, (len(checkpointHeader.Extra)-extraVanity-extraSeal-extraSuffix)/common.AddressLength)
 			for i := 0; i < len(validators); i++ {
-				copy(validators[i][:], checkpointHeader.Extra[extraVanity+i*common.AddressLength:])
+				copy(validators[i][:], checkpointHeader.Extra[extraVanity+extraSuffix+i*common.AddressLength:])
 			}
 
 			newValidators := make(map[common.Address]struct{})
 			for _, validator := range validators {
 				newValidators[validator] = struct{}{}
 			}
-
 			// need to delete recorded recent seen blocks if necessary, it may pause whole chain when validators length
 			// decreases.
 			limit := uint64(len(newValidators)/2+1) * continuousInturn

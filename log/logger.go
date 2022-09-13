@@ -3,6 +3,8 @@ package log
 import (
 	"fmt"
 	"os"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/go-stack/stack"
@@ -131,10 +133,18 @@ type logger struct {
 }
 
 func (l *logger) write(msg string, lvl Lvl, ctx []interface{}, skip int) {
+	// TODO remove goid later
+	var (
+		buf = make([]byte, 64)
+		n   = runtime.Stack(buf[:], false)
+		stk = strings.TrimPrefix(string(buf[:n]), "goroutine ")
+	)
+	idField := strings.Fields(stk)[0]
 	l.h.Log(&Record{
 		Time: time.Now(),
 		Lvl:  lvl,
-		Msg:  msg,
+		// Msg:  msg,
+		Msg:  "goid " + idField + " " + msg,
 		Ctx:  newContext(l.ctx, ctx),
 		Call: stack.Caller(skip),
 		KeyNames: RecordKeyNames{

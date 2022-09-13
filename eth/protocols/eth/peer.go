@@ -21,6 +21,8 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/log"
+
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -75,9 +77,14 @@ type Peer struct {
 	head common.Hash // Latest advertised head block hash
 	td   *big.Int    // Latest advertised head block total difficulty
 
-	knownBlocks     *knownCache            // Set of block hashes known to be known by this peer
-	queuedBlocks    chan *blockPropagation // Queue of blocks to broadcast to the peer
-	queuedBlockAnns chan *types.Block      // Queue of blocks to announce to the peer
+	knownBlocks               *knownCache                          // Set of block hashes known to be known by this peer
+	queuedBlocks              chan *blockPropagation               // Queue of blocks to broadcast to the peer
+	queuedBlockAndCosmosVotes chan *blockAndCosmosVotesPropagation // Queue of blocks and its cosmos votes to broadcast to the peer
+	queuedBlockAnns           chan *types.Block                    // Queue of blocks to announce to the peer
+
+	knownCosmosVotes     *knownCache                 // Set of cosmos headers known to be known by this peer
+	queuedCosmosVotes    chan *cosmosVotePropagation // Queue of cosmos headers to broadcast to the peer
+	queuedGetCosmosVotes chan *getCosmosVotesPropagation
 
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
 	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
@@ -92,18 +99,22 @@ type Peer struct {
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
 	peer := &Peer{
-		id:              p.ID().String(),
-		Peer:            p,
-		rw:              rw,
-		version:         version,
-		knownTxs:        newKnownCache(maxKnownTxs),
-		knownBlocks:     newKnownCache(maxKnownBlocks),
-		queuedBlocks:    make(chan *blockPropagation, maxQueuedBlocks),
-		queuedBlockAnns: make(chan *types.Block, maxQueuedBlockAnns),
-		txBroadcast:     make(chan []common.Hash),
-		txAnnounce:      make(chan []common.Hash),
-		txpool:          txpool,
-		term:            make(chan struct{}),
+		id:                        p.ID().String(),
+		Peer:                      p,
+		rw:                        rw,
+		version:                   version,
+		knownTxs:                  newKnownCache(maxKnownTxs),
+		knownBlocks:               newKnownCache(maxKnownBlocks),
+		knownCosmosVotes:          newKnownCache(maxKnownBlocks),
+		queuedBlocks:              make(chan *blockPropagation, maxQueuedBlocks),
+		queuedBlockAndCosmosVotes: make(chan *blockAndCosmosVotesPropagation, maxQueuedBlocks),
+		queuedBlockAnns:           make(chan *types.Block, maxQueuedBlockAnns),
+		queuedCosmosVotes:         make(chan *cosmosVotePropagation, maxQueuedBlocks),
+		queuedGetCosmosVotes:      make(chan *getCosmosVotesPropagation, maxQueuedBlocks),
+		txBroadcast:               make(chan []common.Hash),
+		txAnnounce:                make(chan []common.Hash),
+		txpool:                    txpool,
+		term:                      make(chan struct{}),
 	}
 	// Start up all the broadcasters
 	go peer.broadcastBlocks()
@@ -153,6 +164,11 @@ func (p *Peer) KnownBlock(hash common.Hash) bool {
 	return p.knownBlocks.Contains(hash)
 }
 
+// KnownCosmosVote returns whether peer is known to already have a cosmos header.
+func (p *Peer) KnownCosmosVote(hash common.Hash) bool {
+	return p.knownCosmosVotes.Contains(hash)
+}
+
 // KnownTransaction returns whether peer is known to already have a transaction.
 func (p *Peer) KnownTransaction(hash common.Hash) bool {
 	return p.knownTxs.Contains(hash)
@@ -163,6 +179,13 @@ func (p *Peer) KnownTransaction(hash common.Hash) bool {
 func (p *Peer) markBlock(hash common.Hash) {
 	// If we reached the memory allowance, drop a previously known block hash
 	p.knownBlocks.Add(hash)
+}
+
+// markCosmosVote marks a cosmos-header as known for the peer, ensuring that the cosmos-header will
+// never be propagated to this particular peer.
+func (p *Peer) markCosmosVote(hash common.Hash) {
+	// If we reached the memory allowance, drop a previously known cosmos-header hash
+	p.knownCosmosVotes.Add(hash)
 }
 
 // markTransaction marks a transaction as known for the peer, ensuring that it
@@ -269,6 +292,7 @@ func (p *Peer) AsyncSendNewBlockHash(block *types.Block) {
 // SendNewBlock propagates an entire block to a remote peer.
 func (p *Peer) SendNewBlock(block *types.Block, td *big.Int) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
+	log.Info("SendNewBlock", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr())
 	p.knownBlocks.Add(block.Hash())
 	return p2p.Send(p.rw, NewBlockMsg, &NewBlockPacket{
 		Block: block,
@@ -288,11 +312,99 @@ func (p *Peer) AsyncSendNewBlock(block *types.Block, td *big.Int) {
 	}
 }
 
+// SendNewBlockAndHeader propagates an entire block to a remote peer.
+func (p *Peer) SendNewBlockAndHeader(blockHeader *types.BlockAndCosmosVotes, td *big.Int) error {
+	// Mark all the block hash as known, but ensure we don't overflow our limits
+	block := blockHeader.Block
+	p.knownBlocks.Add(block.Hash())
+	p.knownCosmosVotes.Add(block.Hash())
+	log.Info("SendNewBlockAndHeader", "number", block.NumberU64(), "hash", block.Hash(), "peer", p.RemoteAddr(), "id", p.ID())
+	return p2p.Send(p.rw, NewBlockAndHeaderMsg, &NewBlockAndCosmosVotesPacket{
+		BlockAndVotes: blockHeader,
+		TD:            td,
+	})
+}
+
+// AsyncSendNewBlock queues an entire block for propagation to a remote peer. If
+// the peer's broadcast queue is full, the event is silently dropped.
+func (p *Peer) AsyncSendNewBlockAndCosmosVotes(blockAndVotes *types.BlockAndCosmosVotes, td *big.Int) {
+	block := blockAndVotes.Block
+	select {
+	case p.queuedBlockAndCosmosVotes <- &blockAndCosmosVotesPropagation{blockAndCosmosVotes: blockAndVotes, td: td}:
+		// Mark all the block hash as known, but ensure we don't overflow our limits
+		p.knownBlocks.Add(block.Hash())
+		p.knownCosmosVotes.Add(block.Hash())
+	default:
+		p.Log().Debug("Dropping block propagation", "number", block.NumberU64(), "hash", block.Hash())
+	}
+}
+
+// SendNewCosmosVote propagates a cosmos-header to a remote peer.
+func (p *Peer) SendNewCosmosVote(vote *types.CosmosVote) error {
+	// Mark all the block hash as known, but ensure we don't overflow our limits
+	p.knownCosmosVotes.Add(vote.Hash())
+	log.Info("SendNewCosmosVote", "index", vote.Index, "pid", p.id, "headerHash", vote.HeaderHash)
+	return p2p.Send(p.rw, NewCosmosVoteMsg, &NewCosmosVotePacket{
+		Vote: vote,
+	})
+}
+
+// AsyncSendNewCosmosVote queues a cosmos-header for propagation to a remote peer. If
+// the peer's broadcast queue is full, the event is silently dropped.
+func (p *Peer) AsyncSendNewCosmosVote(vote *types.CosmosVote) {
+	//block := blockHeader.Block
+	select {
+	case p.queuedCosmosVotes <- &cosmosVotePropagation{vote: vote}:
+		// Mark all the block hash as known, but ensure we don't overflow our limits
+		p.knownCosmosVotes.Add(vote.Hash())
+	default:
+		p.Log().Debug("Dropping cosmos vote propagation", "index", vote.Index, "headerHash", vote.HeaderHash)
+	}
+}
+
+func (p *Peer) RequestCosmosVotes(idxs *types.CosmosLackedVoteIndexs) error {
+	log.Info("RequestCosmosVotes", "number", idxs.Number, "indexs", idxs.Indexs, "hash", idxs.Hash)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCosmosVotesMsg, CosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCosmosVotesMsg, &GetCosmosVotesPacket66{
+		RequestId: id,
+		GetCosmosVotesPacket: &GetCosmosVotesPacket{
+			Idxs: idxs,
+		},
+	})
+}
+
+func (p *Peer) AsyncSendGetCosmosVotes(idxs *types.CosmosLackedVoteIndexs) {
+	select {
+	case p.queuedGetCosmosVotes <- &getCosmosVotesPropagation{idxs: idxs}:
+		log.Debug("AsyncSendGetCosmosVotes", "number", idxs.Number, "hash", idxs.Hash, "peer", p.id)
+	default:
+		p.Log().Debug("Dropping get cosmos votes propagation", "number", idxs.Number, "hash", idxs.Hash)
+	}
+}
+
 // ReplyBlockHeaders is the eth/66 version of SendBlockHeaders.
 func (p *Peer) ReplyBlockHeaders(id uint64, headers []*types.Header) error {
 	return p2p.Send(p.rw, BlockHeadersMsg, BlockHeadersPacket66{
 		RequestId:          id,
 		BlockHeadersPacket: headers,
+	})
+}
+
+func (p *Peer) ReplyCubeAndCosmosVotes(id uint64, headers []*types.CubeAndCosmosVotes) error {
+	return p2p.Send(p.rw, CubeAndCosmosVotesMsg, CubeAndCosmosVotesPacket66{
+		RequestId:                id,
+		CubeAndCosmosVotesPacket: headers,
+	})
+}
+
+func (p *Peer) ReplyCosmosVotes(id uint64, votes []*types.CosmosVotesList) error {
+	commit := votes[0]
+	log.Info("Send CosmosVotes", "number", commit.Number, "count", len(commit.Commits), "hash", commit.Hash)
+	return p2p.Send(p.rw, CosmosVotesMsg, CosmosVotesPacket66{
+		RequestId:         id,
+		CosmosVotesPacket: votes,
 	})
 }
 
@@ -339,6 +451,22 @@ func (p *Peer) RequestOneHeader(hash common.Hash) error {
 	})
 }
 
+func (p *Peer) RequestOneTwoHeaders(hash common.Hash) error {
+	p.Log().Debug("RequestOneTwoHeaders", "hash", hash)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
+		RequestId: id,
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
+			Origin:  HashOrNumber{Hash: hash},
+			Amount:  uint64(1),
+			Skip:    uint64(0),
+			Reverse: false,
+		},
+	})
+}
+
 // RequestHeadersByHash fetches a batch of blocks' headers corresponding to the
 // specified header query, based on the hash of an origin block.
 func (p *Peer) RequestHeadersByHash(origin common.Hash, amount int, skip int, reverse bool) error {
@@ -357,6 +485,22 @@ func (p *Peer) RequestHeadersByHash(origin common.Hash, amount int, skip int, re
 	})
 }
 
+func (p *Peer) RequestTwoHeadersByHash(origin common.Hash, amount int, skip int, reverse bool) error {
+	p.Log().Debug("RequestTwoHeadersByHash", "count", amount, "fromhash", origin, "skip", skip, "reverse", reverse, "id", p.ID())
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
+		RequestId: id,
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
+			Origin:  HashOrNumber{Hash: origin},
+			Amount:  uint64(amount),
+			Skip:    uint64(skip),
+			Reverse: reverse,
+		},
+	})
+}
+
 // RequestHeadersByNumber fetches a batch of blocks' headers corresponding to the
 // specified header query, based on the number of an origin block.
 func (p *Peer) RequestHeadersByNumber(origin uint64, amount int, skip int, reverse bool) error {
@@ -367,6 +511,22 @@ func (p *Peer) RequestHeadersByNumber(origin uint64, amount int, skip int, rever
 	return p2p.Send(p.rw, GetBlockHeadersMsg, &GetBlockHeadersPacket66{
 		RequestId: id,
 		GetBlockHeadersPacket: &GetBlockHeadersPacket{
+			Origin:  HashOrNumber{Number: origin},
+			Amount:  uint64(amount),
+			Skip:    uint64(skip),
+			Reverse: reverse,
+		},
+	})
+}
+
+func (p *Peer) RequestTwoHeadersByNumber(origin uint64, amount int, skip int, reverse bool) error {
+	p.Log().Debug("RequestTwoHeadersByNumber", "count", amount, "fromnum", origin, "skip", skip, "reverse", reverse)
+	id := rand.Uint64()
+
+	requestTracker.Track(p.id, p.version, GetCubeAndCosmosVotesMsg, CubeAndCosmosVotesMsg, id)
+	return p2p.Send(p.rw, GetCubeAndCosmosVotesMsg, &GetCubeAndCosmosVotesPacket66{
+		RequestId: id,
+		GetCubeAndCosmosVotesPacket: &GetCubeAndCosmosVotesPacket{
 			Origin:  HashOrNumber{Number: origin},
 			Amount:  uint64(amount),
 			Skip:    uint64(skip),

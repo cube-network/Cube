@@ -123,7 +123,10 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 	if currentNeedHandleHeight <= latestAttestedNum { // Prevent multiple signups due to block rollback
 		return nil, errors.New("the current block height does not reach the range")
 	}
-	re := bc.LastValidJustifiedOrFinalized()
+	re, err := bc.LastValidJustifiedOrFinalized()
+	if err != nil {
+		return nil, err
+	}
 	block := bc.GetBlockByNumber(currentNeedHandleHeight)
 	target := &types.RangeEdge{
 		Hash:   block.Hash(),
@@ -219,16 +222,19 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 }
 
 // LastValidJustifiedOrFinalized Get the last valid block status information after the specified block
-func (bc *BlockChain) LastValidJustifiedOrFinalized() *types.RangeEdge {
+func (bc *BlockChain) LastValidJustifiedOrFinalized() (*types.RangeEdge, error) {
 	last := bc.currentBlockStatusNumber.Load().(*big.Int)
 	if last.Uint64() == 0 {
-		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
+		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}, nil
 	}
 	block := bc.GetBlockByNumber(last.Uint64())
+	if block == nil {
+		return nil, errors.New("current height block not found")
+	}
 	return &types.RangeEdge{
 		Hash:   block.Hash(),
 		Number: block.Number(),
-	}
+	}, nil
 }
 
 // StoreLastAttested Stores the height of the last processed block
@@ -548,6 +554,14 @@ func (bc *BlockChain) BroadcastNewAttestationToOtherNodes(a *types.Attestation) 
 
 func (bc *BlockChain) BroadcastNewJustifiedOrFinalizedBlockToOtherNodes(bs *types.BlockStatus) {
 	bc.newJustifiedOrFinalizedBlockFeed.Send(NewJustifiedOrFinalizedBlockEvent{bs})
+}
+
+func (bc *BlockChain) BroadcastGetCosmosVotesFromOtherNodes(idxs *types.CosmosLackedVoteIndexs) {
+	bc.requestCosmosVotesFeed.Send(RequestCosmosVotesEvent{idxs})
+}
+
+func (bc *BlockChain) BroadcastCosmosVotesToOtherNodes(vote *types.CosmosVote) {
+	bc.newCosmosVoteFeed.Send(NewCosmosVoteEvent{CosmosVote: vote})
 }
 
 func (bc *BlockChain) CalculateCurrentEpochIndex(number uint64) uint64 {

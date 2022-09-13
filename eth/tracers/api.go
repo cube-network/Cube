@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
@@ -283,6 +284,7 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 				if api.isChaosEngine {
 					_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, task.statedb)
 					blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, task.statedb)
+					blockCtx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, task.statedb, false) // NoSeal
 				}
 				// Trace all the transactions contained within
 				for i, tx := range task.block.Transactions() {
@@ -318,6 +320,10 @@ func (api *API) traceChain(ctx context.Context, start, end *types.Block, config 
 					// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
 					task.statedb.Finalise(api.backend.ChainConfig().IsEIP158(task.block.Number()))
 					task.results[i] = &txTraceResult{Result: res}
+				}
+
+				if blockCtx.Crosschain != nil {
+					crosschain.GetCrossChain().FreeExecutor(blockCtx.Crosschain)
 				}
 				// Stream the result back to the user or abort on teardown
 				select {
@@ -553,6 +559,9 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 		vmctx              = core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 		deleteEmptyObjects = chainConfig.IsEIP158(block.Number())
 	)
+	executor := crosschain.GetCrossChain().NewExecutor(block.Header(), statedb, false)
+	vmctx.Crosschain = executor
+	defer crosschain.GetCrossChain().FreeExecutor(executor)
 	for i, tx := range block.Transactions() {
 		var (
 			msg, _    = tx.AsMessage(signer, block.BaseFee())
@@ -626,6 +635,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 		blockCtx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
+		blockCtx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb, false) // No Seal
 	}
 	blockHash := block.Hash()
 	for th := 0; th < threads; th++ {
@@ -700,6 +710,10 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
 		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
 	}
+	if blockCtx.Crosschain != nil {
+		crosschain.GetCrossChain().FreeExecutor(blockCtx.Crosschain)
+	}
+
 	close(jobs)
 	pend.Wait()
 
@@ -758,6 +772,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 	if api.isChaosEngine {
 		_ = api.chaosEngine.PreHandle(api.backend.ChainHeaderReader(), header, statedb)
 		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(header, statedb)
+		vmctx.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb, false) // No Seal
 	}
 
 	// Check if there are any overrides: the caller may wish to enable a future
@@ -844,6 +859,10 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		if tx.Hash() == txHash {
 			break
 		}
+	}
+
+	if vmctx.Crosschain != nil {
+		crosschain.GetCrossChain().FreeExecutor(vmctx.Crosschain)
 	}
 	return dumps, nil
 }
@@ -942,6 +961,7 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	vmctx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 	if api.isChaosEngine {
 		vmctx.AccessFilter = api.chaosEngine.CreateEvmAccessFilter(block.Header(), statedb)
+		vmctx.Crosschain = crosschain.GetCrossChain().NewExecutor(block.Header(), statedb, false)
 	}
 	var traceConfig *TraceConfig
 	if config != nil {
@@ -994,7 +1014,6 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 	}
 	// Run the transaction with tracing enabled.
 	vmenv := vm.NewEVM(vmctx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
-
 	// Call Prepare to clear out the statedb access list
 	statedb.Prepare(txctx.TxHash, txctx.TxIndex)
 

@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -89,6 +90,21 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 
 	case *eth.NewBlockPacket:
 		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
+
+	case *eth.NewBlockAndCosmosVotesPacket:
+		return h.handleBlockAndCosmosVotesBroadcast(peer, packet.BlockAndVotes, packet.TD)
+
+	case *eth.CubeAndCosmosVotesPacket:
+		return h.handleCubeHeaderAndCosmosVotes(peer, *packet)
+
+	case *eth.NewCosmosVotePacket:
+		return h.handleCosmosVoteBroadcast(peer, packet.Vote)
+
+	//case *eth.GetCosmosVotesPacket:
+	//	return h.handleGetCosmosVotesBroadcast(peer, packet.Idxs)
+
+	case *eth.CosmosVotesPacket:
+		return h.handleCosmosVotes(peer, *packet)
 
 	case *eth.NewPooledTransactionHashesPacket:
 		return h.txFetcher.Notify(peer.ID(), *packet)
@@ -157,6 +173,83 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			log.Debug("Failed to deliver headers", "err", err)
 		}
 	}
+
+	return nil
+}
+
+// handleHeaders is invoked from a peer's message handler when it transmits a batch
+// of headers for the local node to process.
+func (h *ethHandler) handleCubeHeaderAndCosmosVotes(peer *eth.Peer, headers []*types.CubeAndCosmosVotes) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+	// If no headers were received, but we're expencting a checkpoint header, consider it that
+	if len(headers) == 0 && p.syncDrop != nil {
+		// Stop the timer either way, decide later to drop or not
+		p.syncDrop.Stop()
+		p.syncDrop = nil
+
+		// If we're doing a fast (or snap) sync, we must enforce the checkpoint block to avoid
+		// eclipse attacks. Unsynced nodes are welcome to connect after we're done
+		// joining the network
+		if atomic.LoadUint32(&h.fastSync) == 1 {
+			peer.Log().Warn("Dropping unsynced node during sync", "addr", peer.RemoteAddr(), "type", peer.Name())
+			return errors.New("unsynced node cannot serve sync")
+		}
+	}
+	// Filter out any explicitly requested headers, deliver the rest to the downloader
+	//var chs []*types.Header
+	log.Info("handleCubeHeaderAndCosmosVotes", "count", len(headers))
+	chs := make([]*types.Header, len(headers))
+	for i, th := range headers {
+		log.Info("handleCubeHeaderAndCosmosVotes", "index", i, "count", len(chs))
+		//chs = append(chs, th.Header)
+		chs[i] = th.Header
+		if h.chain.Config().IsCrosschainCosmos(th.Header.Number) && crosschain.GetCrossChain() != nil {
+			err := crosschain.GetCrossChain().HandleSignatures(th.Header, th.Signatures)
+			if err != nil {
+				log.Error("HandleHeader failed", "peer", p.ID(), "err", err)
+				return err
+			}
+		}
+	}
+	filter := len(headers) == 1
+	if filter {
+		// If it's a potential sync progress check, validate the content and advertised chain weight
+		th := headers[0]
+		if p.syncDrop != nil && th.Header.Number.Uint64() == h.checkpointNumber {
+			// Disable the sync drop timer
+			p.syncDrop.Stop()
+			p.syncDrop = nil
+
+			// Validate the header and either drop the peer or continue
+			if th.Header.Hash() != h.checkpointHash {
+				log.Error("checkpoint hash mismatch", "peer", p.ID())
+				return errors.New("checkpoint hash mismatch")
+			}
+			log.Error("syncDrop Stop", "peer", p.ID())
+			return nil
+		}
+		// Otherwise if it's a whitelisted block, validate against the set
+		if want, ok := h.whitelist[th.Header.Number.Uint64()]; ok {
+			if hash := th.Header.Hash(); want != hash {
+				peer.Log().Info("Whitelist mismatch, dropping peer", "number", th.Header.Number.Uint64(), "hash", hash, "want", want)
+				return errors.New("whitelist block mismatch")
+			}
+			peer.Log().Debug("Whitelist block verified", "number", th.Header.Number.Uint64(), "hash", want)
+		}
+
+		// Irrelevant of the fork checks, send the header to the fetcher just in case
+		chs = h.blockFetcher.FilterHeaders(peer.ID(), chs, time.Now())
+	}
+	log.Info("handleCubeHeaderAndCosmosVotes after filter", "count", len(chs))
+	if len(chs) > 0 || !filter {
+		err := h.downloader.DeliverHeaders(peer.ID(), chs)
+		if err != nil {
+			log.Debug("Failed to deliver headers", "err", err)
+		}
+	}
 	return nil
 }
 
@@ -192,7 +285,8 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		}
 	}
 	for i := 0; i < len(unknownHashes); i++ {
-		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+		//h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+		h.blockFetcher.NotifyTwoHeaders(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneTwoHeaders, peer.RequestBodies)
 	}
 	return nil
 }
@@ -200,6 +294,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
+	log.Info("handleBlockBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
 
@@ -214,5 +309,85 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 		peer.SetHead(trueHead, trueTD)
 		h.chainSync.handlePeerEvent(peer)
 	}
+
+	return nil
+}
+
+// handleBlockBroadcast is invoked from a peer's message handler when it transmits a
+// block broadcast for the local node to process.
+func (h *ethHandler) handleBlockAndCosmosVotesBroadcast(peer *eth.Peer, blockAndVotes *types.BlockAndCosmosVotes, td *big.Int) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
+	block := blockAndVotes.Block
+	log.Info("handleBlockAndCosmosVotesBroadcast", "number", block.NumberU64(), "hash", block.Hash(), "peer", peer.RemoteAddr())
+
+	// todo: deal with cosmos header
+	if h.chain.Config().IsCrosschainCosmos(block.Number()) && crosschain.GetCrossChain() != nil {
+		err := crosschain.GetCrossChain().HandleSignatures(block.Header(), blockAndVotes.Signatures)
+		if err != nil {
+			log.Error("handle cosmos header failed", "err", err)
+			// return err
+		}
+	}
+
+	// Schedule the block for import
+	h.blockFetcher.Enqueue(peer.ID(), block)
+
+	// Assuming the block is importable by the peer, but possibly not yet done so,
+	// calculate the head hash and TD that the peer truly must have.
+	var (
+		trueHead = block.ParentHash()
+		trueTD   = new(big.Int).Sub(td, block.Difficulty())
+	)
+	// Update the peer's total difficulty if better than the previous
+	if _, td := peer.Head(); trueTD.Cmp(td) > 0 {
+		peer.SetHead(trueHead, trueTD)
+		h.chainSync.handlePeerEvent(peer)
+	}
+
+	return nil
+}
+
+func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.CosmosVote) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
+	if crosschain.GetCrossChain() != nil {
+		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		err := crosschain.GetCrossChain().HandleVote(vote)
+		if err == types.ErrHandledVote {
+			log.Info("handleCosmosVoteBroadcast ErrHandledVote ")
+			return nil
+		} else if err != nil {
+			log.Info("handleCosmosVoteBroadcast err ", err.Error())
+			return err
+		}
+		// log.Debug("BroadcastCosmosVote 3", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
+	}
+
+	return nil
+}
+
+func (h *ethHandler) handleCosmosVotes(peer *eth.Peer, votes []*types.CosmosVotesList) error {
+	p := h.peers.peer(peer.ID())
+	if p == nil {
+		return errors.New("unregistered during callback")
+	}
+
+	if crosschain.GetCrossChain() != nil && len(votes) > 0 {
+		commit := votes[0]
+		log.Info("handleCosmosVotes", "number", commit.Number, "count", len(commit.Commits), "hash", commit.Hash)
+		if err := crosschain.GetCrossChain().HandleVotesList(commit); err != nil {
+			log.Info("HandleVotesList err ", err.Error())
+			return err
+		}
+	}
+
 	return nil
 }

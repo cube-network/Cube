@@ -26,10 +26,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/accounts/scwallet"
 	"github.com/ethereum/go-ethereum/common"
@@ -43,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -1073,6 +1073,11 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	if err != nil {
 		return nil, err
 	}
+
+	evm.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, state, true)
+	defer crosschain.GetCrossChain().FreeExecutor(evm.Context.Crosschain)
+	evm.EstimateMode = true
+
 	// Wait for the context to be done and cancel the evm. Even if the
 	// EVM has finished, cancelling may be done (repeatedly)
 	go func() {
@@ -1638,6 +1643,9 @@ func AccessList(ctx context.Context, b Backend, blockNrOrHash rpc.BlockNumberOrH
 		if err != nil {
 			return nil, 0, nil, err
 		}
+		vmenv.Context.Crosschain = crosschain.GetCrossChain().NewExecutor(header, statedb, false)
+		defer crosschain.GetCrossChain().FreeExecutor(vmenv.Context.Crosschain)
+
 		res, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("failed to apply transaction: %v err: %v", args.toTransaction().Hash(), err)
@@ -1831,6 +1839,24 @@ func (s *PublicTransactionPoolAPI) GetTransactionReceipt(ctx context.Context, ha
 	if receipt.ContractAddress != (common.Address{}) {
 		fields["contractAddress"] = receipt.ContractAddress
 	}
+	return fields, nil
+}
+
+func (s *PublicTransactionPoolAPI) GetTransactionReceiptExt(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
+	fields, err := s.GetTransactionReceipt(ctx, hash)
+	if err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, nil
+	}
+	blockHash := fields["blockHash"].(common.Hash)
+	blockNumber := rpc.BlockNumber(fields["blockNumber"].(hexutil.Uint64))
+	status, err := s.b.BlockPredictStatus(ctx, blockHash, blockNumber)
+	if err != nil {
+		return nil, err
+	}
+	fields["predictStatus"] = status
 	return fields, nil
 }
 

@@ -16,6 +16,8 @@
 
 package params
 
+import "math/big"
+
 // These are the multipliers for ether denominations.
 // Example: To get the wei value of an amount in 'gwei', use
 //
@@ -25,4 +27,21 @@ const (
 	Wei   = 1
 	GWei  = 1e9
 	Ether = 1e18
+
+	WeiDenom   = "wei"
+	GWeiDenom  = "gwei"
+	EtherDenom = "ether"
 )
+
+func AmountAfterConvert(denom string, amount *big.Int) (bool, string, *big.Int) {
+	switch denom {
+	case WeiDenom:
+		return true, denom, amount
+	case GWeiDenom:
+		return true, WeiDenom, new(big.Int).Mul(amount, big.NewInt(GWei))
+	case EtherDenom:
+		return true, WeiDenom, new(big.Int).Mul(amount, big.NewInt(Ether))
+	default:
+		return false, denom, amount
+	}
+}

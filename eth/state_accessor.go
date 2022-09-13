@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -189,12 +190,17 @@ func (eth *Ethereum) stateAtTransaction(block *types.Block, txIndex int, reexec 
 	if eth.isChaosEngine {
 		accessFilter = eth.chaosEngine.CreateEvmAccessFilter(header, statedb)
 	}
+
+	executor := crosschain.GetCrossChain().NewExecutor(block.Header(), statedb, false)
+	defer crosschain.GetCrossChain().FreeExecutor(executor)
+	// No crosschain Seal
 	for idx, tx := range block.Transactions() {
 		// Assemble the transaction call message and return if the requested offset
 		msg, _ := tx.AsMessage(signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(msg)
 		context := core.NewEVMBlockContext(block.Header(), eth.blockchain, nil)
 		context.AccessFilter = accessFilter
+		context.Crosschain = executor // NoSeal
 		if idx == txIndex {
 			// Notice: for a chaos system transaction, the `msg` and `context` should not be used
 			return msg, context, statedb, nil

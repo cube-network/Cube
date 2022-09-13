@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crosschain"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/syncx"
@@ -183,6 +184,8 @@ type BlockChain struct {
 	blockProcFeed                    event.Feed
 	newAttestationFeed               event.Feed
 	newJustifiedOrFinalizedBlockFeed event.Feed
+	requestCosmosVotesFeed           event.Feed
+	newCosmosVoteFeed                event.Feed
 	scope                            event.SubscriptionScope
 	genesisBlock                     *types.Block
 
@@ -1412,11 +1415,17 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		status = SideStatTy
 	}
-	// Set new head.
+
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
 	}
 	bc.futureBlocks.Remove(block.Hash())
+
+	vote := crosschain.GetCrossChain().EventHeader(block.Header())
+	if vote != nil {
+		// broadcast crosschain cosmos vote
+		bc.BroadcastCosmosVotesToOtherNodes(vote)
+	}
 
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
@@ -1432,8 +1441,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 		}
 	} else {
+		log.Debug("writeBlockWithState send ChainSideEvent")
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
 	}
+
 	return status, nil
 }
 
@@ -1460,6 +1471,8 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	if len(chain) == 0 {
 		return 0, nil
 	}
+
+	log.Debug("insert chain...")
 
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
@@ -1678,6 +1691,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 			continue
 		}
 
+		log.Info("start insert block ", block.Hash())
+
 		// Retrieve the parent block and it's state to execute on top
 		start := time.Now()
 		parent := it.previous()
@@ -1714,12 +1729,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 		// Process block using the parent state as reference point
 		substart := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them
@@ -2107,6 +2122,7 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 	if len(oldChain) > 0 {
 		for i := len(oldChain) - 1; i >= 0; i-- {
+			log.Debug("reorg send ChainSideEvent")
 			bc.chainSideFeed.Send(ChainSideEvent{Block: oldChain[i]})
 		}
 	}

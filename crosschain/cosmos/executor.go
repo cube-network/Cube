@@ -164,7 +164,7 @@ func (c *Executor) BeginBlock(header *types.Header, statedb *state.StateDB) {
 		c.Load(header.Number.Int64())
 	} else {
 		if header.Number.Cmp(c.config.CrosschainCosmosBlock) == 0 {
-			c.InitGenesis(ctx)
+			c.InitGenesis(ctx, c.config.CosmosValidators)
 		} else {
 			c.Load(header.Number.Int64() - 1)
 		}
@@ -205,7 +205,7 @@ func (c *Executor) SetState(statedb vm.StateDB, app_hash common.Hash, block_numb
 	statedb.SetState(system.CrossChainCosmosContract, state_block_number, cn)
 }
 
-func (c *Executor) InitGenesis(evm *vm.EVM) {
+func (c *Executor) InitGenesis(evm *vm.EVM, vals []params.CosmosValidator) {
 	init_block_height := evm.Context.BlockNumber.Int64()
 	c.SetState(evm.StateDB, common.Hash{}, init_block_height)
 
@@ -241,7 +241,7 @@ func (c *Executor) InitGenesis(evm *vm.EVM) {
 	c.app.InitChain(abci.RequestInitChain{Time: time.Time{}, ChainId: c.config.ChainID.String(), InitialHeight: init_block_height})
 	c.app.mm.InitGenesis(c.app.GetContextForDeliverTx([]byte{}), c.codec.Marshaler, genesisState)
 
-	c.chain.valsMgr.initGenesisValidators(evm, init_block_height)
+	c.chain.valsMgr.initGenesisValidators(evm, vals)
 
 	// c.chain.generateRegisterValidatorTx(c.header)
 }

@@ -2,6 +2,7 @@ package cosmos
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"strconv"
 
@@ -24,11 +25,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type Validator struct {
-	CubeAddr common.Address `json:"address"`
-	//CosmosAddr  types.Address   `json:"cosmos_address"`
-	PubKey      tmcrypto.PubKey `json:"pub_key"`
-	VotingPower int64           `json:"voting_power"`
+type ValidatorPubkey struct {
+	//CubeAddr    common.Address  `json:"address"`
+	PubKey tmcrypto.PubKey `json:"pub_key"`
+	//VotingPower int64           `json:"voting_power"`
 }
 
 type SimplifiedValidator struct {
@@ -79,26 +79,40 @@ func NewValidatorsMgr(ethdb ethdb.Database, blockContext vm.BlockContext, config
 	return valMgr
 }
 
-func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) error {
-	var ValidatorsConfig string
-	if vmgr.config.ChainID.Cmp(params.MainnetChainConfig.ChainID) == 0 {
-		ValidatorsConfig = MainNetValidatorsConfig
-	} else if vmgr.config.ChainID.Cmp(params.TestnetChainConfig.ChainID) == 0 {
-		ValidatorsConfig = TestNetValidatorsConfig
-	} else {
-		ValidatorsConfig = TestFourValidatorsConfig
-	}
+func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, vals []params.CosmosValidator) error {
+	//keyJSONBytes, err := ioutil.ReadFile(vmgr.addrPubkeyFile)
+	//if err != nil {
+	//	//panic(err)
+	//	log.Warn("get addrPubkey config from file failed", "err", err)
+	//	if vmgr.config.ChainID.Cmp(params.MainnetChainConfig.ChainID) == 0 {
+	//		keyJSONBytes = []byte(MainNetValidatorsConfig)
+	//	} else if vmgr.config.ChainID.Cmp(params.TestnetChainConfig.ChainID) == 0 {
+	//		keyJSONBytes = []byte(TestNetValidatorsConfig)
+	//	} else {
+	//		keyJSONBytes = []byte(TestFourValidatorsConfig)
+	//	}
+	//}
+	//
+	//var vals []Validator
+	//if err := tmjson.Unmarshal(keyJSONBytes, &vals); err != nil {
+	//	panic(err)
+	//}
 
-	var vals []Validator
-	if err := tmjson.Unmarshal([]byte(ValidatorsConfig), &vals); err != nil {
-		panic(err)
+	if len(vals) == 0 {
+		log.Warn("vals is empty")
+		return nil
 	}
 
 	validators := make([]*types.Validator, len(vals))
 	AddrValMap := make(map[common.Address]*types.Validator, len(vals))
 	//ctx := sdk.Context{}.WithEvm(evm)
 	for i, val := range vals {
-		sVal := &SimplifiedValidator{PubKey: val.PubKey, VotingPower: val.VotingPower}
+		var valPubkey ValidatorPubkey
+		pubkeyStr := fmt.Sprintf("{\n    \"pub_key\":{\n        \"type\":\"tendermint/PubKeyEd25519\",\n        \"value\":\"%s\"\n    }\n}", val.PubKey)
+		if err := tmjson.Unmarshal([]byte(pubkeyStr), &valPubkey); err != nil {
+			panic(err)
+		}
+		sVal := &SimplifiedValidator{PubKey: valPubkey.PubKey, VotingPower: val.VotingPower.Int64()}
 		valBytes, err := tmjson.Marshal(sVal)
 		if err != nil {
 			panic("Marshal validator failed")
@@ -119,11 +133,11 @@ func (vmgr *ValidatorsMgr) initGenesisValidators(evm *vm.EVM, height int64) erro
 		if err != nil {
 			panic("Unmarshal validator failed")
 		}
-		if !tmpVal.PubKey.Equals(val.PubKey) {
+		if !tmpVal.PubKey.Equals(valPubkey.PubKey) {
 			panic("Conversion failed")
 		}
 
-		tVal := types.NewValidator(val.PubKey, val.VotingPower)
+		tVal := types.NewValidator(valPubkey.PubKey, val.VotingPower.Int64())
 		validators[i] = tVal
 		AddrValMap[val.CubeAddr] = tVal
 	}

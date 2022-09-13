@@ -161,7 +161,6 @@ func (b *testBackend) GetBlockByNumber(number uint64) *types.Block {
 }
 
 func TestSuggestTipCap(t *testing.T) {
-	t.Skip("EIP 1559 is not supported")
 	config := Config{
 		Blocks:     3,
 		Percentile: 60,

@@ -550,6 +550,7 @@ func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig) error 
 		}
 		sig.Timestamp = header.Time
 		commit.Signatures[i] = sig
+		log.Debug("UpdateVote", "index", i)
 	}
 
 	//c.valsMgr.storeValidatorSet(h)

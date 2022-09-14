@@ -254,7 +254,10 @@ func (c *CosmosChain) voteSignedHeader(header *ct.SignedHeader, valset *ct.Valid
 	addr := pubkey.Address()
 	idx, _ := valset.GetByAddress(addr)
 	if idx < 0 {
-		log.Error("getValidatorIndex failed", "cubeAddr", c.cubeAddr)
+		log.Error("getValidatorIndex failed", "cubeAddr", c.cubeAddr, "cosmosAddr", addr)
+		for i := 0; i < valset.Size(); i++ {
+			log.Error("getValidatorIndex valset", "index", i, "addr", valset.Validators[i].Address.String())
+		}
 		return -1, ct.CommitSig{}, errors.New("getValidatorIndex failed")
 	}
 	if int(idx) >= len(header.Commit.Signatures) {

@@ -5,7 +5,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/tendermint/tendermint/libs/tempfile"
 	"math/big"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -69,11 +72,8 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	c.sigs_cache, _ = lru.NewARC(4096)
 	// c.signedHeader = make(map[common.Hash]*ct.SignedHeader)
 	c.signedHeader, _ = lru.NewARC(4096)
-	c.privValidator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
-	c.privValidator.Save()
 
-	pubkey, _ := c.privValidator.GetPubKey()
-	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.privValidator.GetAddress().String())
+	c.initPrivValAndState(priv_validator_key_file, priv_validator_state_file)
 
 	c.getHeaderByNumber = headerfn
 	c.getHeaderByHash = headerhashfn
@@ -87,6 +87,32 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	c.best_block_height = 0
 
 	return c
+}
+
+func (c *CosmosChain) initPrivValAndState(priv_validator_key_file, priv_validator_state_file string) {
+	_, err := os.Stat(priv_validator_state_file)
+	if err != nil && !os.IsExist(err) {
+		fp, err := os.Create(priv_validator_state_file)
+		if err != nil {
+			panic(err)
+		}
+		fp.Close()
+
+		initState := privval.FilePVLastSignState{}
+		jsonBytes, err := tmjson.MarshalIndent(&initState, "", "  ")
+		if err != nil {
+			panic(err)
+		}
+		err = tempfile.WriteFileAtomic(priv_validator_state_file, jsonBytes, 0600)
+		if err != nil {
+			panic(err)
+		}
+	}
+	c.privValidator = privval.LoadOrGenFilePV(priv_validator_key_file, priv_validator_state_file) //privval.GenFilePV(priv_validator_key_file, priv_validator_state_file /*"secp256k1"*/)
+	c.privValidator.Save()
+
+	pubkey, _ := c.privValidator.GetPubKey()
+	log.Info("init validator", "pubAddr", pubkey.Address().String(), "privAddr", c.privValidator.GetAddress().String())
 }
 
 // func (c *CosmosChain) generateRegisterValidatorTx(header *et.Header) {

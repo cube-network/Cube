@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	sdkerrors "github.com/cosmos/cosmos-sdk/types/errors"
 
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -48,6 +49,11 @@ func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAd
 		log.Debug("Failed to perform SendCoin", "coin", amt.String(), "module account not exist", recipientModule)
 		return fmt.Errorf("SendCoinsFromAccountToModule failed as module account %s does not exist", recipientModule)
 	}
+
+	if err := cbk.checkBalance(ctx, senderAddr, amt); err != nil {
+		log.Debug("SendCoinsFromAccountToModule failed", "coin", amt.String(), "err", err.Error())
+		return err
+	}
 	cbk.DumpCoins(ctx, senderAddr, recipientAcc, amt)
 	if _, err := systemcontract.SendCoin(ctx, senderAddr, recipientAcc, amt[0]); err != nil {
 		log.Debug("Failed to perform SendCoin", "coin", amt.String(), "err", err.Error())
@@ -58,6 +64,22 @@ func (cbk CubeBankKeeper) SendCoinsFromAccountToModule(ctx sdk.Context, senderAd
 	return nil
 }
 
+func (cbk CubeBankKeeper) checkBalance(ctx sdk.Context, senderAddr sdk.AccAddress, amt sdk.Coins) error {
+	bal, err := systemcontract.GetBalance(ctx, senderAddr, amt[0])
+	if err != nil {
+		log.Debug("DumpCoins sender err ", err.Error(), " addr ", hex.EncodeToString(senderAddr.Bytes()))
+		return err
+	}
+	coin := amt[0]
+	balAmt := sdk.NewCoin(coin.Denom, sdk.NewIntFromBigInt(bal))
+
+	_, hasNeg := sdk.Coins{balAmt}.SafeSub(amt)
+	if hasNeg {
+		return sdkerrors.Wrapf(sdkerrors.ErrInsufficientFunds, "%s is smaller than %s", balAmt, amt)
+	}
+	return nil
+}
+
 func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderModule string, recipientAddr sdk.AccAddress, amt sdk.Coins) error {
 	log.Debug("SendCoinsFromModuleToAccount ", senderModule, " ", hex.EncodeToString(recipientAddr[2:]), " ", amt.String())
 	senderAcc := cbk.moduleAccs[senderModule]
@@ -65,6 +87,10 @@ func (cbk CubeBankKeeper) SendCoinsFromModuleToAccount(ctx sdk.Context, senderMo
 	if senderAcc.Empty() {
 		log.Debug("Failed to perform SendCoin", "coin", amt.String(), "module account not exist", senderAcc)
 		return fmt.Errorf("SendCoinsFromModuleToAccount failed as module account %s does not exist", senderAcc)
+	}
+	if err := cbk.checkBalance(ctx, senderAcc, amt); err != nil {
+		log.Debug("SendCoinsFromAccountToModule failed", "coin", amt.String(), "err", err.Error())
+		return err
 	}
 	cbk.DumpCoins(ctx, senderAcc, recipientAddr, amt)
 	if _, err := systemcontract.SendCoin(ctx, senderAcc, recipientAddr, amt[0]); err != nil {

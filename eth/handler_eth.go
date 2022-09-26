@@ -395,11 +395,13 @@ func (h *ethHandler) handleCosmosVoteBroadcast(peer *eth.Peer, vote *types.Cosmo
 
 	if crosschain.GetCrossChain() != nil {
 		log.Info("handleCosmosVoteBroadcast", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
-		// todo: do some basic validation
-		if err := crosschain.GetCrossChain().HandleVote(vote); err != nil {
+		err := crosschain.GetCrossChain().HandleVote(vote)
+		if err == types.ErrHandledVote {
+			return nil
+		} else if err != nil {
 			return err
 		}
-		log.Info("BroadcastCosmosVote 3", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
+		log.Debug("BroadcastCosmosVote 3", "number", vote.Number, "index", vote.Index, "headerHash", vote.HeaderHash)
 		h.eventMux.Post(core.NewCosmosVoteEvent{CosmosVote: vote})
 	}
 

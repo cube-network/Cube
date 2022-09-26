@@ -47,6 +47,7 @@ type CosmosChain struct {
 	statefn           cccommon.StateFn
 	vote_cache        *lru.ARCCache
 	sigs_cache        *lru.ARCCache
+	handledVotesCache *lru.ARCCache
 }
 
 // priv_validator_addr: chaos.validator
@@ -58,9 +59,10 @@ func MakeCosmosChain(config *params.ChainConfig, priv_validator_key_file, priv_v
 	c.ChainID = config.ChainID.String()
 	c.blockContext = blockContext
 	c.statefn = statefn
-	c.vote_cache, _ = lru.NewARC(4096)
-	c.sigs_cache, _ = lru.NewARC(4096)
-	c.signedHeader, _ = lru.NewARC(4096)
+	c.vote_cache, _ = lru.NewARC(1024)
+	c.sigs_cache, _ = lru.NewARC(1024)
+	c.handledVotesCache, _ = lru.NewARC(1024)
+	c.signedHeader, _ = lru.NewARC(1024)
 
 	c.initPrivValAndState(priv_validator_key_file, priv_validator_state_file)
 
@@ -188,9 +190,6 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		}
 	}
 
-	// store header
-	c.storeSignedHeader(h.Hash(), signedHeader)
-
 	var vote_cache []*et.CosmosVote = nil
 	{
 		c.mu.Lock()
@@ -203,7 +202,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 
 	if vote_cache != nil {
 		for i := 0; i < len(vote_cache); i++ {
-			c.handleVote(vote_cache[i])
+			c.handleVote(vote_cache[i], signedHeader)
 		}
 	}
 
@@ -217,8 +216,11 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 		c.mu.Unlock()
 	}
 	if len(sigs_cache) > 0 {
-		c.handleSignatures(h, sigs_cache)
+		c.handleSignatures(h, sigs_cache, signedHeader)
 	}
+
+	// store header
+	c.storeSignedHeader(h.Hash(), signedHeader)
 
 	return signedHeader, cv //, index, vote
 }
@@ -315,7 +317,16 @@ func (c *CosmosChain) getSignatures(hash common.Hash) []ct.CommitSig {
 	return sh.Commit.Signatures
 }
 
-func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig) error { //(*et.CosmosVote, error) {
+func (c *CosmosChain) handleSignaturesFromBroadcast(h *et.Header, sigs []ct.CommitSig) error {
+	header := c.getSignedHeader(h.Hash())
+	err := c.handleSignatures(h, sigs, header)
+	if err != nil {
+		c.storeSignedHeader(h.Hash(), header)
+	}
+	return err
+}
+
+func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig, header *types.SignedHeader) error { //(*et.CosmosVote, error) {
 	log.Info("handleSignatures", "height", h.Number, "hash", h.Hash())
 
 	cacheSigsFn := func() {
@@ -353,7 +364,6 @@ func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig) error 
 		c.mu.Unlock()
 	}
 
-	header := c.getSignedHeader(h.Hash())
 	_, valset := c.valsMgr.getValidators(h.Number.Uint64())
 	if valset == nil || header == nil {
 		cacheSigsFn()
@@ -389,9 +399,10 @@ func (c *CosmosChain) handleSignatures(h *et.Header, sigs []ct.CommitSig) error 
 		log.Debug("UpdateVote", "index", i)
 	}
 
-	//c.valsMgr.storeValidatorSet(h)
-	// store header
-	c.storeSignedHeader(h.Hash(), header)
+	//// store header
+	//if updated && fromBroadcast {
+	//	c.storeSignedHeader(h.Hash(), header)
+	//}
 	return nil
 }
 
@@ -436,7 +447,6 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 	}
 
 	log.Info("storeSignedHeader", "vote", strconv.Itoa(counter), "number", strconv.Itoa(int(header.Height)), "hash", hash, "header", header.Hash(), "validatorHash", hex.EncodeToString(header.ValidatorsHash), "nextValHash", hex.EncodeToString(header.NextValidatorsHash))
-
 }
 
 func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
@@ -542,27 +552,44 @@ func (c *CosmosChain) IsLightBlockValid(light_block *ct.LightBlock, vals []commo
 	return talliedVotingPower > votingPowerNeeded
 }
 
-// TODO voting power check
-func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
-	log.Info("handleVote", "number", vote.Number, "headerHash", vote.HeaderHash)
-	header := c.getSignedHeader(vote.HeaderHash)
-	if header == nil {
-		c.mu.Lock()
-		if !c.vote_cache.Contains(vote.HeaderHash) {
-			vc := make([]*et.CosmosVote, 1)
-			vc[0] = vote
-			c.vote_cache.Add(vote.HeaderHash, vc)
-		} else {
-			vci, _ := c.vote_cache.Get(vote.HeaderHash)
-			vc := vci.([]*et.CosmosVote)
-			vc = append(vc, vote)
-			c.vote_cache.Add(vote.HeaderHash, vc)
-		}
-		c.mu.Unlock()
-
-		log.Error("get signed header failed, cache vote, ", "number", vote.Number, "hash", vote.HeaderHash.Hex())
-		return nil //errors.New("get signed header failed")
+func (c *CosmosChain) handleVoteFromBroadcast(vote *et.CosmosVote) error {
+	if _, ok := c.handledVotesCache.Get(vote.Hash()); ok {
+		return et.ErrHandledVote
 	}
+	c.handledVotesCache.Add(vote.Hash(), true)
+
+	header := c.getSignedHeader(vote.HeaderHash)
+	err := c.handleVote(vote, header)
+	if header != nil && err == nil {
+		c.storeSignedHeader(vote.HeaderHash, header)
+	}
+	return err
+}
+
+// TODO voting power check
+func (c *CosmosChain) handleVote(vote *et.CosmosVote, header *types.SignedHeader) error {
+	log.Info("handleVote", "number", vote.Number, "headerHash", vote.HeaderHash)
+	if header == nil {
+		header = c.getSignedHeader(vote.HeaderHash)
+		if header == nil {
+			c.mu.Lock()
+			if !c.vote_cache.Contains(vote.HeaderHash) {
+				vc := make([]*et.CosmosVote, 1)
+				vc[0] = vote
+				c.vote_cache.Add(vote.HeaderHash, vc)
+			} else {
+				vci, _ := c.vote_cache.Get(vote.HeaderHash)
+				vc := vci.([]*et.CosmosVote)
+				vc = append(vc, vote)
+				c.vote_cache.Add(vote.HeaderHash, vc)
+			}
+			c.mu.Unlock()
+
+			log.Error("get signed header failed, cache vote, ", "number", vote.Number, "hash", vote.HeaderHash.Hex())
+			return nil //errors.New("get signed header failed")
+		}
+	}
+
 	if len(header.Commit.Signatures) <= int(vote.Index) {
 		log.Error("signatures' count is wrong", "origin", len(header.Commit.Signatures), "index", vote.Index)
 		log.Error("P2P ERROR!!!!", "func", "handleVote")
@@ -616,8 +643,9 @@ func (c *CosmosChain) handleVote(vote *et.CosmosVote) error {
 	}
 	vote.Vote.Timestamp = realVote.Timestamp
 	header.Commit.Signatures[vote.Index] = vote.Vote
-	log.Debug("try storeSignedHeader", "index", strconv.Itoa(int(vote.Index)), "number", vote.Number, "hash", vote.HeaderHash.Hex())
-	c.storeSignedHeader(vote.HeaderHash, header)
+
+	//log.Debug("try storeSignedHeader", "index", strconv.Itoa(int(vote.Index)), "number", vote.Number, "hash", vote.HeaderHash.Hex())
+	//c.storeSignedHeader(vote.HeaderHash, header)
 
 	return nil
 }
@@ -712,6 +740,11 @@ func (c *CosmosChain) handleVotesQuery(idxs *et.CosmosLackedVoteIndexs) (*et.Cos
 }
 
 func (c *CosmosChain) handleVotesList(votes *et.CosmosVotesList) error {
+	if len(votes.Commits) == 0 {
+		return nil
+	}
+	header := c.getSignedHeader(votes.Hash)
+	var err error
 	for _, v := range votes.Commits {
 		nv := &et.CosmosVote{
 			Number:     votes.Number,
@@ -720,10 +753,14 @@ func (c *CosmosChain) handleVotesList(votes *et.CosmosVotesList) error {
 			Vote:       v.Vote,
 		}
 		log.Info("handleVotesList", "number", votes.Number, "index", v.Index.Int64(), "hash", votes.Hash)
-		if err := c.handleVote(nv); err != nil {
+		if err = c.handleVote(nv, header); err != nil {
 			log.Error("P2P ERROR!!!!", "func", "handleVotesList")
 			return err
 		}
+	}
+	if header != nil {
+		log.Debug("try storeSignedHeader", "number", votes.Number, "hash", votes.Hash.Hex())
+		c.storeSignedHeader(votes.Hash, header)
 	}
 
 	return nil

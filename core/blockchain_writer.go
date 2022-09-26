@@ -12,6 +12,7 @@ import (
 // Maximize performance, space for time
 
 func (bc *BlockChain) UpdateBlockStatus(num *big.Int, hash common.Hash, status uint8) error {
+	log.Debug("UpdateBlockStatus", "number", num.Uint64(), "status", status, "hash", hash)
 	if status == types.BasJustified {
 		idxs := crosschain.GetCrossChain().CheckVotes(num.Uint64(), hash)
 		if idxs != nil {

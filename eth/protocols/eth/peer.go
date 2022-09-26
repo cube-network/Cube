@@ -342,7 +342,7 @@ func (p *Peer) AsyncSendNewBlockAndCosmosVotes(blockAndVotes *types.BlockAndCosm
 func (p *Peer) SendNewCosmosVote(vote *types.CosmosVote) error {
 	// Mark all the block hash as known, but ensure we don't overflow our limits
 	p.knownCosmosVotes.Add(vote.Hash())
-	log.Info("=====SendNewCosmosVote", "index", vote.Index, "headerHash", vote.HeaderHash)
+	log.Info("SendNewCosmosVote", "index", vote.Index, "pid", p.id, "headerHash", vote.HeaderHash)
 	return p2p.Send(p.rw, NewCosmosVoteMsg, &NewCosmosVotePacket{
 		Vote: vote,
 	})

@@ -279,7 +279,7 @@ func (c *Cosmos) HandleSignatures(h *types.Header, sigs []ct.CommitSig) error { 
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	return c.chain.handleSignatures(h, sigs)
+	return c.chain.handleSignaturesFromBroadcast(h, sigs)
 }
 
 //func (c *Cosmos) SignHeader(h *types.Header) (*types.CosmosVote, error) {
@@ -297,10 +297,10 @@ func (c *Cosmos) HandleVote(vote *et.CosmosVote) error {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	return c.chain.handleVote(vote)
+	return c.chain.handleVoteFromBroadcast(vote)
 }
 
-func (c *Cosmos) CheckVotes(height uint64, hash common.Hash) *types.CosmosLackedVoteIndexs { // (*types.CosmosVotesList, *types.CosmosLackedVoteIndexs) {
+func (c *Cosmos) CheckVotes(height uint64, hash common.Hash) *types.CosmosLackedVoteIndexs {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 

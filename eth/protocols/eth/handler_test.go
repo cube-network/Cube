@@ -434,8 +434,8 @@ func TestGetCubeAndCosmosHeaders(t *testing.T) {
 		var headers []*types.CubeAndCosmosVotes
 		for _, hash := range tt.expect {
 			tmp := &types.CubeAndCosmosVotes{
-				Header:       backend.chain.GetBlockByHash(hash).Header(),
-				CosmosHeader: &types.CosmosHeaderForP2P{},
+				Header: backend.chain.GetBlockByHash(hash).Header(),
+				//CosmosHeader: &types.CosmosHeaderForP2P{},
 			}
 			headers = append(headers, tmp)
 		}

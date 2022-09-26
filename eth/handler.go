@@ -597,10 +597,10 @@ func (h *handler) BroadcastCosmosVote(vote *types.CosmosVote) {
 	// Send the block to a subset of our peers
 	transfer := peers //[:int(math.Sqrt(float64(len(peers))))]
 	for _, peer := range transfer {
-		log.Info("metric", "method", "BroadcastCosmosVote", "peer", peer.ID(), "index", vote.Index, "headerHash", vote.HeaderHash)
+		//log.Info("metric", "method", "BroadcastCosmosVote", "peer", peer.ID(), "index", vote.Index, "headerHash", vote.HeaderHash)
 		peer.AsyncSendNewCosmosVote(vote)
 	}
-	log.Trace("Propagated cosmos vote", "index", vote.Index, "headerHash", vote.HeaderHash, "recipients", len(transfer))
+	//log.Trace("Propagated cosmos vote", "index", vote.Index, "headerHash", vote.HeaderHash, "recipients", len(transfer))
 	return
 }
 

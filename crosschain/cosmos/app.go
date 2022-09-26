@@ -114,8 +114,6 @@ type CosmosApp struct {
 	ICAControllerKeeper icacontrollerkeeper.Keeper
 	ICAHostKeeper       icahostkeeper.Keeper
 	//ICAAuthKeeper       icaauthkeeper.Keeper
-
-	anteHandler *CubeAnteHandler
 }
 
 // datadir string, chainID *big.Int, ethdb ethdb.Database, header *types.Header,
@@ -140,7 +138,6 @@ func NewCosmosApp(
 
 	// IBC Keepers
 	app.setupIBCKeeper()
-	app.anteHandler = NewCubeAnteHandler(app.IBCKeeper)
 
 	app.setupMockModule(ibcRouter)
 

@@ -419,12 +419,13 @@ func makeValidatorKey(hash common.Hash) []byte {
 }
 
 func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeader) {
-	// c.mu.Lock()
-	// defer c.mu.Unlock()
 	if header == nil {
 		log.Warn("nil header for hash ", hash.Hex())
 		return
 	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	ph := header.ToProto()
 	bz, _ := ph.Marshal()
@@ -443,17 +444,16 @@ func (c *CosmosChain) storeSignedHeader(hash common.Hash, header *ct.SignedHeade
 		}
 	}
 	if counter == len(header.Commit.Signatures) {
-		log.Info("CosmosVotesAllCollected", "number", header.Height, "hash", hash)
+		log.Debug("CosmosVotesAllCollected", "number", header.Height, "hash", hash)
 	}
 
 	log.Info("storeSignedHeader", "vote", strconv.Itoa(counter), "number", strconv.Itoa(int(header.Height)), "hash", hash, "header", header.Hash(), "validatorHash", hex.EncodeToString(header.ValidatorsHash), "nextValHash", hex.EncodeToString(header.NextValidatorsHash))
 }
 
 func (c *CosmosChain) getSignedHeader(hash common.Hash) *ct.SignedHeader {
-	// c.mu.Lock()
-	// defer c.mu.Unlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
-	// h := c.signedHeader[hash]
 	h, ok := c.signedHeader.Get(hash)
 
 	if !ok {

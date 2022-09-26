@@ -50,6 +50,7 @@ type ValidatorsMgr struct {
 	statefn      cccommon.StateFn
 	// AddrValMap        map[common.Address]*types.Validator // cube address => cosmos validator
 	AddrValMapCache   *lru.ARCCache
+	valsetCache       *lru.ARCCache
 	config            *params.ChainConfig
 	getHeaderByNumber cccommon.GetHeaderByNumberFn
 	getHeaderByHash   cccommon.GetHeaderByHashFn
@@ -75,6 +76,7 @@ func NewValidatorsMgr(ethdb ethdb.Database, blockContext vm.BlockContext, config
 	}
 
 	valMgr.AddrValMapCache, _ = lru.NewARC(32)
+	valMgr.valsetCache, _ = lru.NewARC(16)
 
 	return valMgr
 }
@@ -160,7 +162,7 @@ func (vmgr *ValidatorsMgr) getNextValidators(height uint64) ([]common.Address, *
 }
 
 func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *types.ValidatorSet) {
-	log.Debug("getValidators", "height", strconv.Itoa(int(height)))
+	//log.Debug("getValidators", "height", strconv.Itoa(int(height)))
 	var vheight uint64 = 0
 	if height < vmgr.config.Chaos.Epoch*2 {
 		vheight = 0
@@ -171,7 +173,7 @@ func (vmgr *ValidatorsMgr) getValidators(height uint64) ([]common.Address, *type
 }
 
 func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, *types.ValidatorSet) {
-	log.Debug("getValidatorsImpl", "height", strconv.Itoa(int(vheight)))
+	//log.Debug("getValidatorsImpl", "height", strconv.Itoa(int(vheight)))
 	vh := vmgr.getHeaderByNumber(vheight)
 	if vh == nil {
 		log.Warn("getValidatorsImpl get header is nil ", "height", strconv.Itoa(int(vheight)))
@@ -182,8 +184,11 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 		log.Warn("getValidatorsImpl getAddrValMap is nil", "height", strconv.Itoa(int(vheight)))
 		return []common.Address{}, nil
 	}
-
 	addrs := getAddressesFromHeader(vh, IsEnable(vmgr.config, big.NewInt(int64(vheight)))) // make([]common.Address, 1) //
+	if m, ok := vmgr.valsetCache.Get(vheight); ok {
+		return addrs, m.(*types.ValidatorSet)
+	}
+
 	count := len(addrs)
 	validators := make([]*types.Validator, count)
 	for i := 0; i < count; i++ {
@@ -207,6 +212,7 @@ func (vmgr *ValidatorsMgr) getValidatorsImpl(vheight uint64) ([]common.Address, 
 	vs := &types.ValidatorSet{}
 	vs.Validators = validators
 	vs.Proposer = validators[0]
+	vmgr.valsetCache.Add(vheight, vs)
 	return addrs, vs
 }
 

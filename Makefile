@@ -56,5 +56,7 @@ build_docker:
 get_submodule:
 	@git submodule init
 	@git submodule update
-	@cd ./crosschain/cosmos/cosmos-sdk && git checkout -b cube_support origin/feature_cube_support
-	@cd ./crosschain/cosmos/ibc && git checkout -b cube_support origin/feature_cube_support
+	@rm -rf ./crosschain/cosmos/cosmos-sdk
+	@git clone --branch feature_cube_support --depth=1 https://github.com/cube-network/cosmos-sdk.git ./crosschain/cosmos/cosmos-sdk
+	@rm -rf ./crosschain/cosmos/ibc
+	@git clone --branch feature_cube_support --depth=1 https://github.com/cube-network/ibc.git ./crosschain/cosmos/ibc

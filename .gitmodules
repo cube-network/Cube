@@ -4,9 +4,9 @@
 	shallow = true
 [submodule "crosschain/cosmos/cosmos-sdk"]
 	path = crosschain/cosmos/cosmos-sdk
-	url = https://github.com/cube-network/cosmos-sdk
+	url = git@github.com:cube-network/cosmos-sdk.git
 	branch = feature_cube_support
 [submodule "crosschain/cosmos/ibc"]
 	path = crosschain/cosmos/ibc
-	url = https://github.com/cube-network/ibc
+	url = git@github.com:cube-network/ibc.git
 	branch = feature_cube_support

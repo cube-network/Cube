@@ -127,6 +127,9 @@ func (c *Cosmos) FreeExecutor(exec vm.CrossChain) {
 	c.callmu.Lock()
 	defer c.callmu.Unlock()
 
+	c.querymu.Lock()
+	defer c.querymu.Unlock()
+
 	c.freeExecutorWithoutLock(exec)
 }
 
@@ -152,7 +155,7 @@ func (c *Cosmos) freeExecutorWithoutLock(exec vm.CrossChain) {
 		log.Debug("freeExecutor ", " block height ", executor.header.Number.String(), fmt.Sprintf("%p", executor), " return key ", executor.header.Root.Hex(), " val ", fmt.Sprintf("%p", executor.app))
 	}
 
-	log.Debug("freeExecutor ", fmt.Sprintf("%p", executor), " return key ", executor.header.Root.Hex(), " val ", fmt.Sprintf("%p", executor.app))
+	// log.Debug("freeExecutor ", fmt.Sprintf("%p", executor), " return key ", executor.header.Root.Hex(), " val ", fmt.Sprintf("%p", executor.app))
 }
 
 func (c *Cosmos) Seal(exec vm.CrossChain) {
@@ -200,7 +203,7 @@ func (c *Cosmos) getQueryExecutorByHeaderAndStatedb(header *types.Header, stated
 	v, ok := c.queryExecutors.Get(header.Number.Int64())
 	if ok {
 		executors := v.(*list.List)
-		for it := executors.Front(); it != nil; it.Next() {
+		for it := executors.Front(); it != nil; it = it.Next() {
 			executor := it.Value.(*Executor)
 			if executor.header.Hash() == header.Hash() {
 				executors.Remove(it)
@@ -259,7 +262,9 @@ func (c *Cosmos) getQueryExecutor(height int64, mode ExecutorMode) (*Executor, b
 		height = fh
 	}
 
-	return c.getQueryExecutorByHeight(height, mode)
+	executor, _ := c.getQueryExecutorByHeight(height, mode)
+	log.Debug("get executor height ", executor.header.Number.String(), " hash ", executor.header.Hash().Hex())
+	return executor, true
 }
 
 func (c *Cosmos) EventHeader(header *types.Header) *types.CosmosVote {
@@ -363,8 +368,16 @@ func (c *Cosmos) CosmosLightBlock(height *int64) ([]byte, error) {
 	c.chainmu.Lock()
 	defer c.chainmu.Unlock()
 
+	if c.finalizeblockfn != nil {
+		fh := int64(c.finalizeblockfn())
+		if *height > fh {
+			return nil, errors.New("invalid height")
+		}
+	}
+
 	lb := c.chain.GetLightBlock(*height)
 	if lb != nil {
+		// log.Debug("get cosmos ligth block ", strconv.FormatInt(lb.Height, 10), " apphash ", lb.Header.AppHash.String())
 		tlb, _ := lb.ToProto()
 		return tlb.Marshal()
 	} else {

@@ -618,9 +618,9 @@ func (ec *Client) CosmosLightBlock(ctx context.Context, height *int64) ([]byte, 
 	return q, nil
 }
 
-func (ec *Client) CosmosTxsSearch(ctx context.Context, page, limit int, events []string) (*tt.ResultTxSearch, error) {
+func (ec *Client) CosmosTxsSearch(ctx context.Context, height uint64, page, limit int, events []string) (*tt.ResultTxSearch, error) {
 	q := &tt.ResultTxSearch{}
-	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosTxsSearch", page, limit, events)
+	err := ec.c.CallContext(ctx, &q, "crosschain_cosmosTxsSearch", height, page, limit, events)
 	if err != nil {
 		return q, err
 	}

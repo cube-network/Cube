@@ -18,9 +18,10 @@ package eth
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/log"
 	"math/big"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -204,7 +205,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := peer.rw.ReadMsg()
 	if err != nil {
-		log.Error("eth handleMessage failed", "err", err)
+		log.Error("eth handleMessage failed", "err", err, " peer ", peer.id)
 		return err
 	}
 	if msg.Size > maxMessageSize {

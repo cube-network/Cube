@@ -973,7 +973,7 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'cosmosTxsSearch',
 			call: 'crosschain_cosmosTxsSearch',
-			params: 3
+			params: 4
 		}),
 	]
 });

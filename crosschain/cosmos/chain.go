@@ -120,12 +120,12 @@ func (c *CosmosChain) initPrivValAndState(priv_validator_key_file, priv_validato
 }
 
 func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *et.CosmosVote) {
-	log.Info("makeCosmosSignedHeader", "height", strconv.Itoa(int(h.Number.Int64())), "hash", h.Hash().Hex(), " parent ", h.ParentHash.Hex())
-
-	c.valsMgr.storeValidatorSet(h)
-
 	var app_hash common.Hash
 	app_hash.SetBytes(h.Extra[32:64])
+
+	log.Info("makeCosmosSignedHeader", "height", strconv.Itoa(int(h.Number.Int64())), " app_hash ", app_hash.String(), "hash", h.Hash().Hex(), " parent ", h.ParentHash.Hex())
+
+	c.valsMgr.storeValidatorSet(h)
 
 	val := c.valsMgr.getValidator(h.Coinbase, h)
 	if val == nil {

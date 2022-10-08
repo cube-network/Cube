@@ -2,6 +2,7 @@ package cosmos
 
 import (
 	"errors"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/log"
 
@@ -38,18 +39,18 @@ func (c *Cosmos) CosmosABCIQuery(path string, data bytes.HexBytes, opts tc.ABCIQ
 		Data: data, Path: path, Height: opts.Height, Prove: opts.Prove,
 	}
 
-	log.Debug("query height ", executor.header.Number.String(), " path ", path)
+	log.Debug("query height ", strconv.FormatInt(q.Height, 10), " executor height ", executor.header.Number.String(), " hash ", executor.header.Hash().Hex(), " path ", path)
 
 	r := executor.app.BaseApp.Query(q)
 	resp := &ct.ResultABCIQuery{Response: r}
 	return resp, nil
 }
 
-func (c *Cosmos) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTxSearch, error) {
+func (c *Cosmos) CosmosTxsSearch(height uint64, page, limit int, events []string) (*tt.ResultTxSearch, error) {
 	c.querymu.Lock()
 	defer c.querymu.Unlock()
 
-	executor, ok := c.getQueryExecutor(0, ExecutorModeQuery)
+	executor, ok := c.getQueryExecutor(int64(height), ExecutorModeQuery)
 	if !ok {
 		return nil, errors.New("not support crosschain")
 	}
@@ -61,7 +62,7 @@ func (c *Cosmos) CosmosTxsSearch(page, limit int, events []string) (*tt.ResultTx
 		log.Debug("tx seach packet fail ", key, " ", err.Error())
 		return nil, err
 	}
-	log.Debug("tx seach packet success ", key)
+	log.Debug("tx seach packet success ", key, " height ", strconv.FormatInt(int64(height), 10), " executor height ", executor.header.Number.String(), " hash ", executor.header.Hash().Hex())
 
 	var rdt abci.ResponseDeliverTx
 	rdt.Unmarshal(data)

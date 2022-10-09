@@ -110,7 +110,7 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 		log.Info("Send new block succeed")
 	}
 	if msgcode == /*eth.GetCubeAndCosmosVotesMsg*/ 0x16 {
-		log.Error("Send GetCubeAndCosmosHeadersMsg", "size", uint32(size))
+		log.Debug("Send GetCubeAndCosmosHeadersMsg", "size", uint32(size))
 	}
 	err = w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
 	if err != nil {
@@ -119,7 +119,7 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 		}
 		log.Error("Send message failed", "code", msgcode, "err", err)
 	}
-	log.Info("send message", "code", msgcode)
+	log.Debug("send message", "code", msgcode)
 	return err
 }
 

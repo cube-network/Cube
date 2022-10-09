@@ -129,8 +129,7 @@ func (c *CosmosChain) makeCosmosSignedHeader(h *et.Header) (*ct.SignedHeader, *e
 
 	val := c.valsMgr.getValidator(h.Coinbase, h)
 	if val == nil {
-		log.Warn("makeCosmosSignedHeader getValidator is nil")
-		return nil, nil //, -1, ct.CommitSig{}
+		return nil, nil
 	}
 
 	addr := val.Address

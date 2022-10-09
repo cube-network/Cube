@@ -194,6 +194,7 @@ func (vmgr *ValidatorsMgr) getValidator(cubeAddr common.Address, header *et.Head
 	var vheight uint64 = 0
 	if header.Number.Uint64() < vmgr.config.Chaos.Epoch*2 {
 		vheight = 0
+		return nil
 	} else {
 		vheight = header.Number.Uint64() - vmgr.config.Chaos.Epoch - header.Number.Uint64()%vmgr.config.Chaos.Epoch
 	}

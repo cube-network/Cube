@@ -285,7 +285,7 @@ func (cf CasperFFGHistoryList) Swap(i, j int) { cf[i], cf[j] = cf[j], cf[i] }
 
 const (
 	AttestationPending = uint8(0)
-	AttestationStart   = uint8(1)
+	AttestationStart   = uint8(1) // todo:
 	AttestationStop    = uint8(2)
 )
 

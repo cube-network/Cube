@@ -1429,7 +1429,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		// we will fire an accumulated ChainHeadEvent and disable fire
 		// event here.
 		if emitHeadEvent {
-			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
+			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block}) // todo:
 		}
 	} else {
 		bc.chainSideFeed.Send(ChainSideEvent{Block: block})
@@ -1526,7 +1526,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, er
 	// Fire a single chain head event if we've progressed the chain
 	defer func() {
 		if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
-			bc.chainHeadFeed.Send(ChainHeadEvent{lastCanon})
+			bc.chainHeadFeed.Send(ChainHeadEvent{lastCanon}) //todo:
 		}
 	}()
 	// Start the parallel header verifier

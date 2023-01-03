@@ -84,7 +84,7 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 func (bc *BlockChain) attestationHandleLoop() {
 	defer bc.wg.Done()
 	chainHeadCh := make(chan ChainHeadEvent)
-	sub := bc.SubscribeChainHeadEvent(chainHeadCh)
+	sub := bc.SubscribeChainHeadEvent(chainHeadCh) //todo:
 	defer sub.Unsubscribe()
 	for {
 		select {
@@ -146,6 +146,7 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 		if status == types.BasJustified || status == types.BasFinalized {
 			b := bc.GetBlockByNumber(latestAttestedNum)
 			source := &types.RangeEdge{Number: new(big.Int).Set(b.Number()), Hash: b.Hash()}
+			// todo: Attest 返回 []*types.Attestation
 			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
 		}
 		return nil, errors.New("the current block height does not reach the range")
@@ -186,7 +187,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 	if bc.ChaosEngine.IsReadyAttest() {
 		// From the perspective of the current node itself, all it can do is create
 		// attestation in turn, and it cannot initiate across heights
-		a, err := bc.bestAttestationToProcessed(head.Number)
+		a, err := bc.bestAttestationToProcessed(head.Number) // todo: 返回[]*types.Attestation
 		if err != nil {
 			log.Warn(err.Error())
 			return
@@ -205,6 +206,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 			log.Error(err.Error())
 			return
 		}
+		// todo: 对 bestAttestationToProcessed 返回的Attestation数组均调用一次 AddOneValidAttestationToRecentCache
 		err = bc.AddOneValidAttestationToRecentCache(a, threshold, bc.ChaosEngine.CurrentValidator())
 		if err != nil {
 			log.Error(err.Error())
@@ -319,7 +321,7 @@ func (bc *BlockChain) AddOneValidAttestationToRecentCache(a *types.Attestation, 
 			if status == types.BasJustified || status == types.BasFinalized {
 				bc.BroadcastNewJustifiedOrFinalizedBlockToOtherNodes(
 					&types.BlockStatus{BlockNumber: treNumber, Hash: treHash,
-						Status: status})
+						Status: status}) // todo:广播一次就可以吗？
 			}
 		}
 	}

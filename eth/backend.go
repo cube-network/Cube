@@ -93,7 +93,7 @@ type Ethereum struct {
 
 	miner     *miner.Miner
 	gasPrice  *big.Int
-	etherbase common.Address
+	etherbase common.Address // todo: 改为 []common.Address，数组中存储该节点拥有的所有validators地址
 
 	networkID     uint64
 	netRPCService *ethapi.PublicNetAPI
@@ -155,7 +155,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		closeBloomHandler: make(chan struct{}),
 		networkID:         config.NetworkId,
 		gasPrice:          config.Miner.GasPrice,
-		etherbase:         config.Miner.Etherbase,
+		etherbase:         config.Miner.Etherbase, // todo:不应该用 config.Miner.Etherbase 来进行初始化，应该用 AccountsManager.wallets
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
@@ -434,6 +434,7 @@ func (s *Ethereum) Etherbase() (eb common.Address, err error) {
 	if etherbase != (common.Address{}) {
 		return etherbase, nil
 	}
+	// todo: 默认将第一个账户设为签发出块的validator
 	if wallets := s.AccountManager().Wallets(); len(wallets) > 0 {
 		if accounts := wallets[0].Accounts(); len(accounts) > 0 {
 			etherbase := accounts[0].Address
@@ -553,6 +554,7 @@ func (s *Ethereum) StartMining(threads int) error {
 			clique.Authorize(eb, wallet.SignData)
 		}
 		if chaos, ok := s.engine.(*chaos.Chaos); ok {
+			// todo: 此处使用矿工地址来设置签发出块的validator
 			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
 			if wallet == nil || err != nil {
 				log.Error("Etherbase account unavailable locally", "err", err)

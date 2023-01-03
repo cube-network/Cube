@@ -58,7 +58,7 @@ type Config struct {
 type Miner struct {
 	mux      *event.TypeMux
 	worker   *worker
-	coinbase common.Address
+	coinbase common.Address // todo: 改为 []common.Address
 	eth      Backend
 	engine   consensus.Engine
 	exitCh   chan struct{}
@@ -121,20 +121,20 @@ func (miner *Miner) update() {
 			case downloader.FailedEvent:
 				canStart = true
 				if shouldStart {
-					miner.SetEtherbase(miner.coinbase)
+					miner.SetEtherbase(miner.coinbase) // 开始挖矿
 					miner.worker.start()
 				}
 			case downloader.DoneEvent:
 				canStart = true
 				if shouldStart {
-					miner.SetEtherbase(miner.coinbase)
+					miner.SetEtherbase(miner.coinbase) // 开始挖矿
 					miner.worker.start()
 				}
 				// Stop reacting to downloader events
 				events.Unsubscribe()
 			}
 		case addr := <-miner.startCh:
-			miner.SetEtherbase(addr)
+			miner.SetEtherbase(addr) // 开始挖矿
 			if canStart {
 				miner.worker.start()
 			}

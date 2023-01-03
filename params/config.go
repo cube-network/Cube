@@ -61,7 +61,7 @@ var (
 		Chaos: &ChaosConfig{
 			Period:                3,
 			Epoch:                 200,
-			AttestationDelay:      2,
+			AttestationDelay:      2, // 延后进行attestation投票的区块数
 			EnableDevVerification: true,
 		},
 	}

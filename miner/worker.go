@@ -164,8 +164,8 @@ type worker struct {
 	remoteUncles map[common.Hash]*types.Block // A set of side blocks as the possible uncle blocks.
 	unconfirmed  *unconfirmedBlocks           // A set of locally mined blocks pending canonicalness confirmations.
 
-	mu       sync.RWMutex // The lock used to protect the coinbase and extra fields
-	coinbase common.Address
+	mu       sync.RWMutex   // The lock used to protect the coinbase and extra fields
+	coinbase common.Address // todo: 改为 []common.Address
 	extra    []byte
 
 	pendingMu    sync.RWMutex
@@ -227,7 +227,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
-	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
+	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh) // todo:
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
 	// Sanitize recommit interval if the user-specified one is too short.
@@ -482,7 +482,7 @@ func (w *worker) mainLoop() {
 				continue
 			}
 			// Add side block to possible uncle block set depending on the author.
-			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block) {
+			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block) { // 需要修改 isLocalBlock 方法的实现
 				w.localUncles[ev.Block.Hash()] = ev.Block
 			} else {
 				w.remoteUncles[ev.Block.Hash()] = ev.Block

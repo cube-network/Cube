@@ -88,8 +88,6 @@ type Database struct {
 	childrenSize  common.StorageSize // Storage size of the external children tracking
 	preimagesSize common.StorageSize // Storage size of the preimages cache
 
-	dirtyHashCache *HashCache // Cache hash and nodes while hashing the trie
-
 	// Cache derived from `dirtyHashCache` when begin async committing,
 	// used as database when processing block while its parent block's state is still commtting
 	flushedHashCache *HashCache
@@ -102,6 +100,19 @@ type Database struct {
 type HashCache struct {
 	inner map[common.Hash]node
 	lock  sync.RWMutex
+}
+
+// NewHashCache creates HashCache
+func NewHashCache() *HashCache {
+	return &HashCache{inner: make(map[common.Hash]node)}
+}
+
+// Contains checks whether the key was cached
+func (c *HashCache) Contains(key []byte) bool {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	_, exist := c.inner[common.BytesToHash(key)]
+	return exist
 }
 
 // Put writes <key, value> to cache with lock protection
@@ -410,7 +421,6 @@ func NewDatabaseWithConfig(diskdb ethdb.KeyValueStore, config *Config) *Database
 		dirties: map[common.Hash]*cachedNode{{}: {
 			children: make(map[common.Hash]uint16),
 		}},
-		dirtyHashCache: &HashCache{inner: make(map[common.Hash]node)},
 	}
 	if config == nil || config.Preimages { // TODO(karalabe): Flip to default off in the future
 		db.preimages = make(map[common.Hash][]byte)
@@ -1009,16 +1019,15 @@ func (db *Database) SaveCachePeriodically(dir string, interval time.Duration, st
 }
 
 // WaitAndPrepareNextCommit waits for the last async state committing to finish, and move data
-// from dirtyHashCache to flushedHashCache, preparing for the next async state committing
+// from trieNode hashCache of trie to flushedHashCache, preparing for the next async state committing
 // note that async state committing must be revoked after calling this method, or it will
 // be blocked forever
-func (db *Database) WaitAndPrepareNextCommit() {
+func (db *Database) WaitAndPrepareNextCommit(dirties *HashCache) {
 	db.flushLatch.Wait()
 	db.flushLatch.Add(1)
 	db.lock.Lock()
 	defer db.lock.Unlock()
-	db.flushedHashCache = db.dirtyHashCache
-	db.dirtyHashCache = &HashCache{inner: make(map[common.Hash]node)}
+	db.flushedHashCache = dirties
 }
 
 // WaitAsyncCommit waits for the async state committing to finish
@@ -1036,11 +1045,4 @@ func (db *Database) GetFlushedHashCache() *HashCache {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 	return db.flushedHashCache
-}
-
-// GetDirtyHashCache returns dirtyHashCache with lock protection
-func (db *Database) GetDirtyHashCache() *HashCache {
-	db.lock.RLock()
-	defer db.lock.RUnlock()
-	return db.dirtyHashCache
 }

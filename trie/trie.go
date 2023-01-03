@@ -66,6 +66,9 @@ type Trie struct {
 	// hashing operation. This number will not directly map to the number of
 	// actually unhashed nodes
 	unhashed int
+	// cache <hash, trieNode> when calculate hash,
+	// use to support read when async commit statedb
+	dirtyNodeCache *HashCache
 }
 
 // newFlag returns the cache flag value for a newly created node.
@@ -80,11 +83,17 @@ func (t *Trie) newFlag() nodeFlag {
 // New will panic if db is nil and returns a MissingNodeError if root does
 // not exist in the database. Accessing the trie loads nodes from db on demand.
 func New(root common.Hash, db *Database) (*Trie, error) {
+	return NewWithCache(root, db, nil)
+}
+
+// New creates a trie with an existing root node from db with dirty trie node hash cache
+func NewWithCache(root common.Hash, db *Database, dirtyNodeCache *HashCache) (*Trie, error) {
 	if db == nil {
 		panic("trie.New called without a database")
 	}
 	trie := &Trie{
-		db: db,
+		db:             db,
+		dirtyNodeCache: dirtyNodeCache,
 	}
 	if root != (common.Hash{}) && root != emptyRoot {
 		rootnode, err := trie.resolveHash(root[:], nil)
@@ -575,12 +584,7 @@ func (t *Trie) hashRoot() (node, node, error) {
 		return hashNode(emptyRoot.Bytes()), nil, nil
 	}
 	// If the number of changes is below 100, we let one thread handle it
-	var h *hasher
-	if t.db == nil {
-		h = newHasher(t.unhashed >= 100)
-	} else {
-		h = newHasherWithCache(t.unhashed >= 100, t.db.GetDirtyHashCache())
-	}
+	h := newHasherWithCache(t.unhashed >= 100, t.dirtyNodeCache)
 	defer returnHasherToPool(h)
 	hashed, cached := h.hash(t.root, true)
 	t.unhashed = 0

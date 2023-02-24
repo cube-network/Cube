@@ -496,6 +496,486 @@ const (
 			"type": "function"
 		}
 	]`
+	// ERC20FactoryABI contains methods to interactive with ERC20Factory contract.
+	ERC20FactoryABI = `[
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "allBalances",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "tokens_",
+          "type": "string[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "balances_",
+          "type": "uint256[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "allTokens",
+      "outputs": [
+        {
+          "internalType": "string[]",
+          "name": "outArray_",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "burnCoin",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        }
+      ],
+      "name": "decreaseAllowance",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "name": "destroyCoin",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        }
+      ],
+      "name": "getAllowance",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "getBalance",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "_name",
+          "type": "string"
+        }
+      ],
+      "name": "getERC20Info",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "exist_",
+          "type": "bool"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalsupply_",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "spender",
+          "type": "address"
+        }
+      ],
+      "name": "increaseAllowance",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "symbol",
+          "type": "string"
+        }
+      ],
+      "name": "mintCoin",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        }
+      ],
+      "name": "totalSupply",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "string",
+          "name": "name",
+          "type": "string"
+        },
+        {
+          "internalType": "address",
+          "name": "sender",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "transferFrom",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]`
+
+	CrossChainCosmosABI = `[
+	{
+		"inputs": [
+			{
+				"internalType": "string",
+				"name": "selector",
+				"type": "string"
+			},
+			{
+				"internalType": "string",
+				"name": "args",
+				"type": "string"
+			}
+		],
+		"name": "submit",
+		"outputs": [
+			{
+				"internalType": "string",
+				"name": "",
+				"type": "string"
+			}
+		],
+		"stateMutability": "",
+		"type": "function"
+	}
+]`
+	CrossChainCosmosStateABI = `[
+		{
+			"inputs": [
+			  {
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
+			  },
+			  {
+				"internalType": "bytes",
+				"name": "val",
+				"type": "bytes"
+			  },
+			  {
+				"internalType": "uint64",
+				"name": "block_number",
+				"type": "uint64"
+			  },
+			  {
+				"internalType": "string",
+				"name": "prefix",
+				"type": "string"
+			  }
+			],
+			"name": "set",
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
+			  }
+			],
+			"name": "get",
+			"outputs": [
+				{
+					"internalType": "bool",
+					"name": "",
+					"type": "bool"
+				  },
+			  {
+				"internalType": "bytes",
+				"name": "",
+				"type": "bytes"
+			  }
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "string",
+				"name": "prefix",
+				"type": "string"
+			  }
+			],
+			"name": "getroot",
+			"outputs": [
+				{
+					"internalType": "bytes[]",
+					"name": "",
+					"type": "bytes[]"
+				  },
+			  {
+				"internalType": "bytes[]",
+				"name": "",
+				"type": "bytes[]"
+			  }
+			],
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  },
+		  {
+			"inputs": [
+			  {
+				"internalType": "bytes",
+				"name": "key",
+				"type": "bytes"
+			  }
+			],
+			"name": "del",
+			"stateMutability": "nonpayable",
+			"type": "function"
+		  }
+	]`
+
+	AddrToPubkeyMapABI = `[
+    {
+      "inputs": [],
+      "name": "getAllValidators",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "addresses_",
+          "type": "address[]"
+        },
+        {
+          "internalType": "string[]",
+          "name": "pubkeys_",
+          "type": "string[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        }
+      ],
+      "name": "getValidator",
+      "outputs": [
+        {
+          "internalType": "string",
+          "name": "pubkey",
+          "type": "string"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_addr",
+          "type": "address"
+        },
+        {
+          "internalType": "string",
+          "name": "_pubkey",
+          "type": "string"
+        }
+      ],
+      "name": "registerValidator",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ]`
 )
 
 // DevMappingPosition is the position of the state variable `devs`.
@@ -531,12 +1011,17 @@ var (
 )
 
 var (
-	StakingContract       = common.HexToAddress("0x000000000000000000000000000000000000F000")
-	CommunityPoolContract = common.HexToAddress("0x000000000000000000000000000000000000F001")
-	BonusPoolContract     = common.HexToAddress("0x000000000000000000000000000000000000F002")
-	GenesisLockContract   = common.HexToAddress("0x000000000000000000000000000000000000F003")
-	AddressListContract   = common.HexToAddress("0x000000000000000000000000000000000000F004")
-	OnChainDaoContract    = common.HexToAddress("0x000000000000000000000000000000000000F005")
+	StakingContract               = common.HexToAddress("0x000000000000000000000000000000000000F000")
+	CommunityPoolContract         = common.HexToAddress("0x000000000000000000000000000000000000F001")
+	BonusPoolContract             = common.HexToAddress("0x000000000000000000000000000000000000F002")
+	GenesisLockContract           = common.HexToAddress("0x000000000000000000000000000000000000F003")
+	AddressListContract           = common.HexToAddress("0x000000000000000000000000000000000000F004")
+	OnChainDaoContract            = common.HexToAddress("0x000000000000000000000000000000000000F005")
+	ERC20FactoryContract          = common.HexToAddress("0x000000000000000000000000000000000000F008")
+	CrossChainCosmosContract      = common.HexToAddress("0x000000000000000000000000000000000000F009")
+	CrossChainCosmosStateContract = common.HexToAddress("0x000000000000000000000000000000000000F00A")
+	CrossChainCosmosModuleAccount = "000000000000000000000000000000000000F00B"
+	AddrToPubkeyMapContract       = common.HexToAddress("0x000000000000000000000000000000000000F00C")
 
 	abiMap map[common.Address]abi.ABI
 )
@@ -544,14 +1029,17 @@ var (
 // init the abiMap
 func init() {
 	abiMap = make(map[common.Address]abi.ABI, 0)
-
 	for addr, rawAbi := range map[common.Address]string{
-		StakingContract:       StakingABI,
-		CommunityPoolContract: CommunityPoolABI,
-		BonusPoolContract:     BonusPoolABI,
-		GenesisLockContract:   GenesisLockABI,
-		AddressListContract:   AddressListABI,
-		OnChainDaoContract:    OnChainDaoABI,
+		StakingContract:               StakingABI,
+		CommunityPoolContract:         CommunityPoolABI,
+		BonusPoolContract:             BonusPoolABI,
+		GenesisLockContract:           GenesisLockABI,
+		AddressListContract:           AddressListABI,
+		OnChainDaoContract:            OnChainDaoABI,
+		ERC20FactoryContract:          ERC20FactoryABI,
+		CrossChainCosmosContract:      CrossChainCosmosABI,
+		CrossChainCosmosStateContract: CrossChainCosmosStateABI,
+		AddrToPubkeyMapContract:       AddrToPubkeyMapABI,
 	} {
 		if abi, err := abi.JSON(strings.NewReader(rawAbi)); err != nil {
 			panic(err)
@@ -573,4 +1061,8 @@ func ABI(contract common.Address) abi.ABI {
 // ABIPack generates the data field for given contract calling
 func ABIPack(contract common.Address, method string, args ...interface{}) ([]byte, error) {
 	return ABI(contract).Pack(method, args...)
+}
+
+func ABIUnpack(contract common.Address, method string, data []byte) ([]interface{}, error) {
+	return ABI(contract).Unpack(method, data)
 }

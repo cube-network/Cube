@@ -27,6 +27,8 @@ type NewTxsEvent struct{ Txs []*types.Transaction }
 // NewMinedBlockEvent is posted when a block has been imported.
 type NewMinedBlockEvent struct{ Block *types.Block }
 
+type NewCosmosVoteEvent struct{ CosmosVote *types.CosmosVote }
+
 // RemovedLogsEvent is posted when a reorg happens
 type RemovedLogsEvent struct{ Logs []*types.Log }
 
@@ -46,4 +48,8 @@ type NewAttestationEvent struct{ A *types.Attestation }
 
 type NewJustifiedOrFinalizedBlockEvent struct {
 	JF *types.BlockStatus
+}
+
+type RequestCosmosVotesEvent struct {
+	Idxs *types.CosmosLackedVoteIndexs
 }

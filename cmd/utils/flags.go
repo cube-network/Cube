@@ -1086,7 +1086,7 @@ func setEtherbase(ctx *cli.Context, ks *keystore.KeyStore, cfg *ethconfig.Config
 			if err != nil {
 				Fatalf("Invalid miner etherbase: %v", err)
 			}
-			cfg.Miner.Etherbase = account.Address // 从配置字段 miner.etherbase 中获取矿工地址
+			cfg.Miner.Etherbase = account.Address
 		} else {
 			Fatalf("No etherbase configured")
 		}

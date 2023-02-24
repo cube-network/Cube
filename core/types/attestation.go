@@ -144,6 +144,7 @@ const (
 	BasUnknown   = uint8(0)
 	BasJustified = uint8(1)
 	BasFinalized = uint8(2)
+	BasReorged   = uint8(3)
 )
 
 type BlockStatus struct {
@@ -285,7 +286,7 @@ func (cf CasperFFGHistoryList) Swap(i, j int) { cf[i], cf[j] = cf[j], cf[i] }
 
 const (
 	AttestationPending = uint8(0)
-	AttestationStart   = uint8(1) // todo:
+	AttestationStart   = uint8(1)
 	AttestationStop    = uint8(2)
 )
 

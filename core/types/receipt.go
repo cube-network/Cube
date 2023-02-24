@@ -18,6 +18,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -70,6 +71,31 @@ type Receipt struct {
 	BlockHash        common.Hash `json:"blockHash,omitempty"`
 	BlockNumber      *big.Int    `json:"blockNumber,omitempty"`
 	TransactionIndex uint        `json:"transactionIndex"`
+}
+
+type ReceiptExt struct {
+	Receipt
+	PredictStatus uint8 `json:"predictStatus"`
+}
+
+func (r *ReceiptExt) UnmarshalJSON(data []byte) error {
+	tmpPart1 := struct {
+		Receipt
+	}{}
+	tmpPart2 := struct {
+		PredictStatus uint8 `json:"predictStatus"`
+	}{}
+	if err := json.Unmarshal(data, &tmpPart1); err != nil {
+		fmt.Printf("failed to parse object: %v", err)
+		return err
+	}
+	if err := json.Unmarshal(data, &tmpPart2); err != nil {
+		fmt.Printf("failed to parse object: %v", err)
+		return err
+	}
+	(r).Receipt = tmpPart1.Receipt
+	(r).PredictStatus = tmpPart2.PredictStatus
+	return nil
 }
 
 type receiptMarshaling struct {

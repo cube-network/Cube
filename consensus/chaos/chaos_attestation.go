@@ -136,7 +136,7 @@ func attestationThreshold(valsCnt int) int {
 }
 
 func (c *Chaos) CurrentValidator() common.Address {
-	return c.validator // todo: 返回当前区块number的签发出块validator，即 c.proposer
+	return c.validator
 }
 
 func (c *Chaos) MaxValidators() uint8 {
@@ -147,7 +147,6 @@ func (c *Chaos) Attest(chain consensus.ChainHeaderReader, headerNum *big.Int, so
 	if !c.IsReadyAttest() {
 		return nil, errIsNotReadyAttest
 	}
-	// todo: 遍历所有 validators，让所有的validators都生成一个Attestation，然后返回 []*types.Attestation
 	if !c.IsAuthorizedAtHeight(chain, c.validator, target.Number.Uint64()) {
 		return nil, errIsNotAuthorizedAtHeight
 	}
@@ -158,7 +157,7 @@ func (c *Chaos) Attest(chain consensus.ChainHeaderReader, headerNum *big.Int, so
 //t is the hash of the current block to vote, and h(s) h(T) are the corresponding block numbers respectively.
 func (c *Chaos) makeNewAttestation(sourceRangeEdge *types.RangeEdge, targetRangeEdge *types.RangeEdge) (*types.Attestation, error) {
 	// because the sign function is `Wallet.SignData`，so we should pass the data to it, not the hash.
-	sig, err := c.signFn(accounts.Account{Address: c.validator}, "", types.AttestationData(sourceRangeEdge, targetRangeEdge)) // todo:
+	sig, err := c.signFn(accounts.Account{Address: c.validator}, "", types.AttestationData(sourceRangeEdge, targetRangeEdge))
 	if err != nil {
 		return nil, errSignFailed
 	}
@@ -206,7 +205,7 @@ func (c *Chaos) IsReadyAttest() bool {
 	return c.isReady && c.attestationStatus == types.AttestationStart
 }
 
-func (c *Chaos) AttestationThreshold(chain consensus.ChainHeaderReader, hash common.Hash, number uint64) (int, error) { // todo:
+func (c *Chaos) AttestationThreshold(chain consensus.ChainHeaderReader, hash common.Hash, number uint64) (int, error) {
 	header := chain.GetHeader(hash, number)
 	if header == nil {
 		return 0, errUnknownBlock

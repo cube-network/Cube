@@ -212,7 +212,7 @@ func (ac *accountCache) maybeReload() {
 	ac.watcher.start()
 	ac.throttle.Reset(minReloadInterval)
 	ac.mu.Unlock()
-	ac.scanAccounts() // 获取到所有的 validators' account
+	ac.scanAccounts()
 }
 
 func (ac *accountCache) close() {

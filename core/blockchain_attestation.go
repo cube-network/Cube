@@ -84,7 +84,7 @@ func (bc *BlockChain) HandleAttestation(a *types.Attestation) error {
 func (bc *BlockChain) attestationHandleLoop() {
 	defer bc.wg.Done()
 	chainHeadCh := make(chan ChainHeadEvent)
-	sub := bc.SubscribeChainHeadEvent(chainHeadCh) //todo:
+	sub := bc.SubscribeChainHeadEvent(chainHeadCh)
 	defer sub.Unsubscribe()
 	for {
 		select {
@@ -123,7 +123,10 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 	if currentNeedHandleHeight <= latestAttestedNum { // Prevent multiple signups due to block rollback
 		return nil, errors.New("the current block height does not reach the range")
 	}
-	re := bc.LastValidJustifiedOrFinalized()
+	re, err := bc.LastValidJustifiedOrFinalized()
+	if err != nil {
+		return nil, err
+	}
 	block := bc.GetBlockByNumber(currentNeedHandleHeight)
 	target := &types.RangeEdge{
 		Hash:   block.Hash(),
@@ -146,7 +149,6 @@ func (bc *BlockChain) bestAttestationToProcessed(headNum *big.Int) (*types.Attes
 		if status == types.BasJustified || status == types.BasFinalized {
 			b := bc.GetBlockByNumber(latestAttestedNum)
 			source := &types.RangeEdge{Number: new(big.Int).Set(b.Number()), Hash: b.Hash()}
-			// todo: Attest 返回 []*types.Attestation
 			return bc.ChaosEngine.Attest(bc, new(big.Int).SetUint64(currentNeedHandleHeight), source, target)
 		}
 		return nil, errors.New("the current block height does not reach the range")
@@ -187,7 +189,7 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 	if bc.ChaosEngine.IsReadyAttest() {
 		// From the perspective of the current node itself, all it can do is create
 		// attestation in turn, and it cannot initiate across heights
-		a, err := bc.bestAttestationToProcessed(head.Number) // todo: 返回[]*types.Attestation
+		a, err := bc.bestAttestationToProcessed(head.Number)
 		if err != nil {
 			log.Warn(err.Error())
 			return
@@ -206,7 +208,6 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 			log.Error(err.Error())
 			return
 		}
-		// todo: 对 bestAttestationToProcessed 返回的Attestation数组均调用一次 AddOneValidAttestationToRecentCache
 		err = bc.AddOneValidAttestationToRecentCache(a, threshold, bc.ChaosEngine.CurrentValidator())
 		if err != nil {
 			log.Error(err.Error())
@@ -221,16 +222,19 @@ func (bc *BlockChain) processAttestationOnHead(head *types.Header) {
 }
 
 // LastValidJustifiedOrFinalized Get the last valid block status information after the specified block
-func (bc *BlockChain) LastValidJustifiedOrFinalized() *types.RangeEdge {
+func (bc *BlockChain) LastValidJustifiedOrFinalized() (*types.RangeEdge, error) {
 	last := bc.currentBlockStatusNumber.Load().(*big.Int)
 	if last.Uint64() == 0 {
-		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}
+		return &types.RangeEdge{Number: new(big.Int).SetUint64(0), Hash: common.Hash{}}, nil
 	}
 	block := bc.GetBlockByNumber(last.Uint64())
+	if block == nil {
+		return nil, errors.New("current height block not found")
+	}
 	return &types.RangeEdge{
 		Hash:   block.Hash(),
 		Number: block.Number(),
-	}
+	}, nil
 }
 
 // StoreLastAttested Stores the height of the last processed block
@@ -321,7 +325,7 @@ func (bc *BlockChain) AddOneValidAttestationToRecentCache(a *types.Attestation, 
 			if status == types.BasJustified || status == types.BasFinalized {
 				bc.BroadcastNewJustifiedOrFinalizedBlockToOtherNodes(
 					&types.BlockStatus{BlockNumber: treNumber, Hash: treHash,
-						Status: status}) // todo:广播一次就可以吗？
+						Status: status})
 			}
 		}
 	}
@@ -550,6 +554,14 @@ func (bc *BlockChain) BroadcastNewAttestationToOtherNodes(a *types.Attestation) 
 
 func (bc *BlockChain) BroadcastNewJustifiedOrFinalizedBlockToOtherNodes(bs *types.BlockStatus) {
 	bc.newJustifiedOrFinalizedBlockFeed.Send(NewJustifiedOrFinalizedBlockEvent{bs})
+}
+
+func (bc *BlockChain) BroadcastGetCosmosVotesFromOtherNodes(idxs *types.CosmosLackedVoteIndexs) {
+	bc.requestCosmosVotesFeed.Send(RequestCosmosVotesEvent{idxs})
+}
+
+func (bc *BlockChain) BroadcastCosmosVotesToOtherNodes(vote *types.CosmosVote) {
+	bc.newCosmosVoteFeed.Send(NewCosmosVoteEvent{CosmosVote: vote})
 }
 
 func (bc *BlockChain) CalculateCurrentEpochIndex(number uint64) uint64 {

@@ -270,7 +270,6 @@ func deprecated(field string) bool {
 	}
 }
 
-//  配置validators
 func setAccountManagerBackends(stack *node.Node) error {
 	conf := stack.Config()
 	am := stack.AccountManager()
@@ -297,7 +296,7 @@ func setAccountManagerBackends(stack *node.Node) error {
 	// If/when we implement some form of lockfile for USB and keystore wallets,
 	// we can have both, but it's very confusing for the user to see the same
 	// accounts in both externally and locally, plus very racey.
-	am.AddBackend(keystore.NewKeyStore(keydir, scryptN, scryptP)) // 初始化 KeyStore 时，会从 /data/keystore 目录下解析所有的账号，从而添加到 am.Wallets 数组
+	am.AddBackend(keystore.NewKeyStore(keydir, scryptN, scryptP))
 	if conf.USB {
 		// Start a USB hub for Ledger hardware wallets
 		if ledgerhub, err := usbwallet.NewLedgerHub(); err != nil {

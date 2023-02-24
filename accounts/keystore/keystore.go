@@ -112,7 +112,7 @@ func (ks *KeyStore) init(keydir string) {
 		m.cache.close()
 	})
 	// Create the initial list of wallets from the cache
-	accs := ks.cache.accounts() // 从keystore目录下解析获得账户
+	accs := ks.cache.accounts()
 	ks.wallets = make([]accounts.Wallet, len(accs))
 	for i := 0; i < len(accs); i++ {
 		ks.wallets[i] = &keystoreWallet{account: accs[i], keystore: ks}

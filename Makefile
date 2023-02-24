@@ -8,7 +8,7 @@ GOBIN = ./build/bin
 GO ?= latest
 GORUN = env GO111MODULE=on go run
 
-geth:
+geth: get_submodule
 	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
@@ -52,3 +52,11 @@ devtools:
 
 build_docker:
 	docker build -t cubenetwork/cube-client .
+
+get_submodule:
+	@git submodule init
+	@git submodule update
+	@rm -rf ./crosschain/cosmos/cosmos-sdk
+	@git clone --branch feature_cube_support --depth=1 https://github.com/cube-network/cosmos-sdk.git ./crosschain/cosmos/cosmos-sdk
+	@rm -rf ./crosschain/cosmos/ibc
+	@git clone --branch feature_cube_support --depth=1 https://github.com/cube-network/ibc.git ./crosschain/cosmos/ibc
